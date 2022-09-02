@@ -1,0 +1,11 @@
+__pycache__
+.DS_Store
+
+test.py
+debug.txt
+
+habitat-sim
+habitat-lab
+data
+build
+sound-spaces/scripts/AmbisonicBinauralizer
