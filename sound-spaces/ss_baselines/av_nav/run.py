@@ -98,4 +98,7 @@ def main():
 
 
 if __name__ == "__main__":
+    f = open("debug.txt", "w")
+    f.write("start run.py !\n")
+    f.close()
     main()

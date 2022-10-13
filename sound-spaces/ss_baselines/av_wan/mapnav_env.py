@@ -142,7 +142,7 @@ class MapNavEnv(habitat.RLEnv):
                 self._env.task.is_stop_called
                 # and self._distance_target() < self._success_distance
                 and self._env.sim.reaching_goal
-        ):
+        ): # TODO ? マルチゴールに対応させる必要ある？
             return True
         return False
 

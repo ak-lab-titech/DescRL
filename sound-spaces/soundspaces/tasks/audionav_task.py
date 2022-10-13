@@ -36,8 +36,9 @@ def merge_sim_episode_config(
         agent_cfg.defrost()
         agent_cfg.START_POSITION = episode.start_position
         agent_cfg.START_ROTATION = episode.start_rotation
-        agent_cfg.GOAL_POSITION = episode.goals[0].position
-        agent_cfg.SOUND_ID = episode.info['sound'] + '.wav'
+        agent_cfg.GOAL_POSITIONs = [goal.position for goal in episode.goals]
+        agent_cfg.SOUND_IDs = [sound + '.wav' for sound in episode.info['sounds']]
+        # agent_cfg.SOUND_IDs = [sound + '.wav' for sound in [episode.info['sound']]]
         agent_cfg.IS_SET_START_STATE = True
         agent_cfg.freeze()
     return sim_config

@@ -77,6 +77,9 @@ def interactive_demo(config, env):
                         elif event.key == pygame.K_f:  # f
                             action = HabitatSimActions.STOP
                             keys.append('f')
+                        elif event.key == pygame.K_g:  # g
+                            action = HabitatSimActions.FOUND
+                            keys.append('g')
                         if action is not None:
                             return action
 
@@ -145,6 +148,8 @@ def following(config, env, keys):
             action = HabitatSimActions.TURN_RIGHT
         elif key == 'f':  # f
             action = HabitatSimActions.STOP
+        elif key == 'g':  # g
+            action = HabitatSimActions.FOUND
 
         # --- Game logic should go here
         observation, reward, done, info = env.step(**{'action': action})
@@ -241,4 +246,8 @@ def main():
 
 
 if __name__ == '__main__':
+    f = open("debug.txt", mode="w")
+    f.write("Start interactive_demo.py !! \n\n\n")
+    f.close()
+    
     main()

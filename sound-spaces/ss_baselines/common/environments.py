@@ -16,6 +16,7 @@ in habitat. Customized environments should be registered using
 from typing import Optional, Type
 import logging
 import math
+import time
 
 import habitat
 from habitat import Config, Dataset
@@ -37,6 +38,11 @@ def get_env_class(env_name: str) -> Type[habitat.RLEnv]:
 @baseline_registry.register_env(name="AudioNavRLEnv")
 class AudioNavRLEnv(habitat.RLEnv):
     def __init__(self, config: Config, dataset: Optional[Dataset] = None):
+        # import pprint
+        # f = open("debug.txt", mode="a")
+        # f.write("config in __init__ of AudioNavRLEnv\n")
+        # pprint.pprint(config, f)
+        # f.close()
         self._rl_config = config.RL
         self._core_env_config = config.TASK_CONFIG
         self._continuous = config.CONTINUOUS
@@ -48,6 +54,16 @@ class AudioNavRLEnv(habitat.RLEnv):
         super().__init__(self._core_env_config, dataset)
 
     def reset(self):
+        # f = open("debug.txt", mode="a")
+        # f.write("RESET AudioNavRLEnv\n")
+        # f.close()
+
+        # f = open("debug.txt", "a")
+        # f.write("---------------- reset in AudioRLEnv -----------------\n")
+        # f.close()
+        
+        s = time.time()
+
         self._previous_action = None
 
         observations = super().reset()
@@ -59,11 +75,24 @@ class AudioNavRLEnv(habitat.RLEnv):
             self._previous_target_distance = self.habitat_env.current_episode.info[
                 "geodesic_distance"
             ]
+        
+        # f = open("debug.txt", "a")
+        # f.write(f"FIN reset: {time.time() - s}[s]\n")
+        # f.close()
         return observations
 
     def step(self, *args, **kwargs):
+        # f = open("debug.txt", "a")
+        # f.write("--- start step in AudioNavRL ---\n")
+        # f.write(f"action: {kwargs['action']}\n")
+        # f.close()
+        # s = time.time()
         self._previous_action = kwargs["action"]
-        return super().step(*args, **kwargs)
+        step_return =  super().step(*args, **kwargs)
+        # f = open("debug.txt", "a")
+        # f.write(f"FIN step in AudioNavRL: {time.time() - s}[s]\n")
+        # f.close()
+        return step_return
 
     def get_reward_range(self):
         return (
@@ -72,6 +101,11 @@ class AudioNavRLEnv(habitat.RLEnv):
         )
 
     def get_reward(self, observations):
+        """
+        報酬の計算を行う。
+
+        reward = slack_reward + (previous_distance - current_distance) * scale + success_reward
+        """
         reward = 0
 
         if self._rl_config.WITH_TIME_PENALTY:
@@ -81,9 +115,23 @@ class AudioNavRLEnv(habitat.RLEnv):
             current_target_distance = self._distance_target()
             reward += (self._previous_target_distance - current_target_distance) * self._rl_config.DISTANCE_REWARD_SCALE
             self._previous_target_distance = current_target_distance
+        
+
+        if self._found():
+            # f = open("debug.txt", "a")
+            # f.write(f"self._rl_config.FOUND_REWARD: {self._rl_config.FOUND_REWARD}\n")
+            # f.write("success FOUND in get_reward\n")
+            # f.close()
+
+            reward += self._env.get_metrics()['success'] * self._rl_config.FOUND_REWARD
+            self._env.sim.update_goals()
+            logging.debug('Found goal!')
 
         if self._episode_success():
-            reward += self._rl_config.SUCCESS_REWARD
+            # f = open("debug.txt", "a")
+            # f.write("success SUCCESS in get_reward\n")
+            # f.close()
+            reward += self._env.get_metrics()['success'] * self._rl_config.SUCCESS_REWARD
             logging.debug('Reaching goal!')
 
         assert not math.isnan(reward)
@@ -94,9 +142,28 @@ class AudioNavRLEnv(habitat.RLEnv):
         return self._env.get_metrics()['distance_to_goal']
 
     def _episode_success(self):
-        if self._env.task.is_stop_called and \
-                ((self._continuous and self._distance_target() < self._success_distance) or
-                 (not self._continuous and self._env.sim.reaching_goal)):
+        _, distance_to_closest_target = self._env.sim.closest_goal_id_and_dis()
+        if (
+            self._env.task.is_stop_called
+            and (
+                (self._continuous and distance_to_closest_target < self._success_distance) # 連続用
+                or (not self._continuous and self._env.sim.reaching_goal) # 離散用
+            )
+            and len(self._env.sim.not_found_goals) == 1
+        ):
+            return True
+        return False
+    
+    def _found(self):
+        """
+        FoundActionが呼ばれて成功したかどうか
+        """
+        _, distance_to_closest_target = self._env.sim.closest_goal_id_and_dis()
+        if (
+            self._env.task.is_found_called
+            and self._continuous and distance_to_closest_target < self._success_distance
+            and len(self._env.sim.not_found_goals) > 1
+        ):
             return True
         return False
 

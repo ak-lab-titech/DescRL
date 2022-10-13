@@ -1045,7 +1045,7 @@ def compute_distance_to_pred(pred, sim):
     try:
         if sim.position_encoding(pred_goal_location) not in sim._position_to_index_mapping:
             pred_goal_location = sim.find_nearest_graph_node(pred_goal_location)
-        distance_to_target = sim.geodesic_distance(current_position, [pred_goal_location])
+        distance_to_target = sim.geodesic_distance(current_position, [pred_goal_location]) # TODO ? ここはマルチゴール用に対応させる必要あるかも？
     except nx.exception.NetworkXNoPath:
         distance_to_target = -1
     return distance_to_target

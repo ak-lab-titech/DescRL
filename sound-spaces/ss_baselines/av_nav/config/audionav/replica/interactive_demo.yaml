@@ -41,5 +41,6 @@ RL:
     reward_window_size: 50
 
 EVAL:
-  SPLIT: "val_telephone"
+  # SPLIT: "val_telephone"
+  SPLIT: "train_multi_goal_telephone_birds1_bell"
   USE_CKPT_CONFIG: True

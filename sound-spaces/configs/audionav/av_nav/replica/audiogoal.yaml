@@ -16,6 +16,7 @@ SIMULATOR:
   SCENE_DATASET: "replica"
   AUDIO:
     RIR_SAMPLING_RATE: 44100
+    NUM: 1
 
 TASK:
   TYPE: AudioNav

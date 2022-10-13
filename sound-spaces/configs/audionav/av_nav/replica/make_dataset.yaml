@@ -1,0 +1,28 @@
+episode:
+  "n_episode": 4
+  "n_sound": 3
+  "sounds":
+    - "telephone"
+    - "birds1"
+    - "bell"
+  "scene": apartment_0
+  # "scene": frl_apartment_0
+  # "scene": frl_apartment_1
+  # "scene": frl_apartment_2
+  # "scene": frl_apartment_3
+  # "scene": hotel_0
+  # "scene": office_0
+  # "scene": office_4
+  # "scene": room_0
+  "seed": 0
+  "save_dir_path": "test"
+  "step_size": 0.25
+  "start_episode_id": 1
+  # "start_episode_id": 40001
+  # "start_episode_id": 80001
+  # "start_episode_id": 120001
+  # "start_episode_id": 160001
+  # "start_episode_id": 200001
+  # "start_episode_id": 240001
+  # "start_episode_id": 280001
+  # "start_episode_id": 320001

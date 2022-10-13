@@ -42,5 +42,6 @@ class MoveOnlySpaceConfiguration(ActionSpaceConfiguration):
                 habitat_sim.ActuationSpec(
                     amount=self.config.FORWARD_STEP_SIZE
                 ),
-            )
+            ),
+            HabitatSimActions.FOUND: habitat_sim.ActionSpec("found"),
         }

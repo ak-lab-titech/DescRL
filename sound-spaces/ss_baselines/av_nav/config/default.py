@@ -64,6 +64,7 @@ _C.EVAL.USE_CKPT_CONFIG = True
 # -----------------------------------------------------------------------------
 _C.RL = CN()
 _C.RL.SUCCESS_REWARD = 10.0
+_C.RL.FOUND_REWARD = 5.0
 _C.RL.SLACK_REWARD = -0.01
 _C.RL.WITH_TIME_PENALTY = True
 _C.RL.WITH_DISTANCE_REWARD = True

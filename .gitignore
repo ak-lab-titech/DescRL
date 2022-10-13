@@ -2,7 +2,8 @@ __pycache__
 .DS_Store
 
 test.py
-debug.txt
+debug*.txt
+test
 
 habitat-sim
 habitat-lab

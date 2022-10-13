@@ -8,6 +8,7 @@ import gzip
 import json
 import os
 import logging
+import pprint
 from typing import List, Optional
 
 from habitat.config import Config
@@ -83,6 +84,10 @@ class AudioNavDataset(Dataset):
             return
 
         datasetfile_path = config.DATA_PATH.format(version=config.VERSION, split=config.SPLIT)
+        # f = open("debug.txt", "a")
+        # f.write("--------------------- __init__ in AudioNavDataset --------------------\n\n")
+        # f.write(f"datasetfile_path: {datasetfile_path}\n")
+        # f.close()
         with gzip.open(datasetfile_path, "rt") as f:
             self.from_json(f.read(), scenes_dir=config.SCENES_DIR, scene_filename=datasetfile_path)
 
@@ -94,12 +99,19 @@ class AudioNavDataset(Dataset):
                 content_scenes_path=self.content_scenes_path,
                 dataset_dir=dataset_dir,
             )
+        
+        # f = open("debug.txt", "a")
+        # f.write(f"scenes: {scenes}\n")
+        # f.close()
 
         last_episode_cnt = 0
         for scene in scenes:
             scene_filename = self.content_scenes_path.format(
                 data_path=dataset_dir, scene=scene
             )
+            # f = open("debug.txt", "a")
+            # f.write(f"scene_filename: {scene_filename}\n")
+            # f.close()
             with gzip.open(scene_filename, "rt") as f:
                 self.from_json(f.read(), scenes_dir=config.SCENES_DIR, scene_filename=scene_filename)
 
@@ -133,6 +145,16 @@ class AudioNavDataset(Dataset):
         self, json_str: str, scenes_dir: Optional[str] = None, scene_filename: Optional[str] = None
     ) -> None:
         deserialized = json.loads(json_str)
+        # f = open("debug.txt", "a")
+        # f.write("\n---------------- from_json in AudioNavDataset -------------------------\n")
+        # # f.write(f"json_str: {json_str}\n\n")
+        # f.write(f"scenes_dir: {scenes_dir}\n\n")
+        # f.write(f"deserialized:\n")
+        # # pprint.pprint(deserialized, f)
+        # for k, v in deserialized.items():
+        #     f.write(f"k={k}, len(v)={len(v)}, type(v)={type(v)}\n")
+        # f.close()
+
         if CONTENT_SCENES_PATH_FIELD in deserialized:
             self.content_scenes_path = deserialized[CONTENT_SCENES_PATH_FIELD]
 
@@ -157,7 +179,8 @@ class AudioNavDataset(Dataset):
 
             if hasattr(self._config, 'CONTINUOUS') and self._config.CONTINUOUS:
                 # TODO: fix
-                episode.goals[0].position[1] += 0.1
+                for i in range(len(episode.goals)):
+                    episode.goals[i].position[1] += 0.1
 
             self.episodes.append(episode)
             episode_cnt += 1
