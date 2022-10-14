@@ -9,6 +9,8 @@
 import argparse
 import logging
 import os
+import sys
+sys.path.insert(0, "/home/hkondo/av-nav/myss/sound-spaces")
 
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
