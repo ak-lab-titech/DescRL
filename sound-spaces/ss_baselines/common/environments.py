@@ -126,7 +126,7 @@ class AudioNavRLEnv(habitat.RLEnv):
             # f.write("success FOUND in get_reward\n")
             # f.close()
 
-            reward += self._env.get_metrics()['success'] * self._rl_config.FOUND_REWARD
+            reward += 1 * self._rl_config.FOUND_REWARD
             self._env.sim.update_goals()
             logging.debug('Found goal!')
 
