@@ -122,8 +122,12 @@ class NormalizedDistanceToGoal(Measure):
     def _get_uuid(self, *args: Any, **kwargs: Any):
         return "normalized_distance_to_goal"
 
-    def reset_metric(self, *args: Any, episode, **kwargs: Any):
-        self._start_end_episode_distance = episode.info["geodesic_distance"]
+    def reset_metric(self, episode, task, *args: Any, **kwargs: Any):
+        # self._start_end_episode_distance = episode.info["geodesic_distance"]
+        self._start_end_episode_distance = task.measurements.measures[
+            DistanceToGoal.cls_uuid
+        ].get_metric()
+
         self._metric = None
 
     def update_metric(

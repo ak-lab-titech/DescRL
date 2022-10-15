@@ -11,16 +11,20 @@ SIMULATOR:
     HEIGHT: 128
 #    NOISE_MODEL: RedwoodDepthNoiseModel
 
+  FORWARD_STEP_SIZE: 1.0
+  STEP_TIME: 1.0
+  TURN_ANGLE: 45
+
   TYPE: "SoundSpacesSim"
   ACTION_SPACE_CONFIG: "v0"
   SCENE_DATASET: "replica"
   AUDIO:
     RIR_SAMPLING_RATE: 44100
-    NUM: 3 # the number of sound source
+    NUM: 2 # the number of sound source
 
 TASK:
   TYPE: AudioNav
-  SUCCESS_DISTANCE: 1.0
+  SUCCESS_DISTANCE: 2.0
 
   SENSORS: ['SPECTROGRAM_SENSOR']
   GOAL_SENSOR_UUID: spectrogram
@@ -28,9 +32,9 @@ TASK:
   # MEASUREMENTS: ['DISTANCE_TO_GOAL', 'NORMALIZED_DISTANCE_TO_GOAL', 'SUCCESS', 'SPL', 'SOFT_SPL', 'NUM_ACTION', 'SUCCESS_WEIGHTED_BY_NUM_ACTION']
   MEASUREMENTS: ['DISTANCE_TO_GOAL', 'NORMALIZED_DISTANCE_TO_GOAL', 'SUCCESS', 'NUM_SOFT_SUCCESS', 'SPL', 'NUM_SOFT_SPL', 'SOFT_SPL', 'NUM_ACTION']
   SUCCESS:
-    SUCCESS_DISTANCE: 1.0
+    SUCCESS_DISTANCE: 2.0
   NUM_SOFT_SUCCESS:
-    SUCESS_DISTANCE: 1.0
+    SUCESS_DISTANCE: 2.0
 
   TOP_DOWN_MAP:
     MAP_RESOLUTION: 500
@@ -40,7 +44,7 @@ TASK:
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "train_multi_goal_telephone_birds1_bell"
+  SPLIT: "train_telephone_bell"
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/replica"
