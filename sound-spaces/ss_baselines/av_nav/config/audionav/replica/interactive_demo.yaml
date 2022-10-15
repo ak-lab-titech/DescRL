@@ -42,5 +42,6 @@ RL:
 
 EVAL:
   # SPLIT: "val_telephone"
-  SPLIT: "train_multi_goal_telephone_birds1_bell"
+  SPLIT: "train_telephone_bell"
+  # SPLIT: "train_multi_goal_telephone_birds1_bell"
   USE_CKPT_CONFIG: True

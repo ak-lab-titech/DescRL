@@ -53,16 +53,19 @@ class AudioNavRLEnv(habitat.RLEnv):
         self._success_distance = self._core_env_config.TASK.SUCCESS.SUCCESS_DISTANCE
         super().__init__(self._core_env_config, dataset)
 
+        # self.episode_start_time = time.time()
+
     def reset(self):
         # f = open("debug.txt", mode="a")
         # f.write("RESET AudioNavRLEnv\n")
         # f.close()
 
         # f = open("debug.txt", "a")
-        # f.write("---------------- reset in AudioRLEnv -----------------\n")
+        # f.write(f"Reset in AudioNavRL: {time.time() - self.episode_start_time} [s]\n")
         # f.close()
+        # self.episode_start_time = time.time()
         
-        s = time.time()
+        # s = time.time()
 
         self._previous_action = None
 

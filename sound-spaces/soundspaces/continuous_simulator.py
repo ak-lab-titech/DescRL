@@ -454,24 +454,34 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         return min_geo_dis
 
     def reset(self):
+        # f = open("debug.txt", "a")
+        # f.write("-------- reset in continuous_simulator ------\n")
+        # f.close()
         # s = time.time()
 
         logging.debug('Reset simulation')
         sim_obs = self._sim.reset()
+
+        # obs_s = time.time()
         if self._update_agents_state():
             sim_obs = self._sim.get_sensor_observations()
+        # obs_time = time.time() - obs_s
 
+        # observations_s = time.time()
         self._is_episode_active = True
         self._prev_sim_obs = sim_obs
         self._previous_step_collided = False
         # Encapsule data under Observations class
         observations = self._sensor_suite.get_observations(sim_obs)
+        # observations_time = time.time() - observations_s
 
+        # goal_s = time.time()
         goals = self.config.AGENT_0.GOAL_POSITIONs
         self.not_found_goals = [f"goal_{i}" for i in range(len(goals))]
         self.goals_dict = {f"goal_{i}": goal for i, goal in enumerate(goals)}
         geo_dis_from_goals = self.calc_geo_dis_from_goals(goals)
         self.distance_from_goals = {f"goal_{i}": geo_dis_from_goals[i] for i in range(len(geo_dis_from_goals))} # 各ゴールから、すべてのゴールに到達するときの最短距離
+        # goal_time = time.time() - goal_s
 
         # f = open("debug.txt", "a")
         # f.write(f"not_found_goals: {self.not_found_goals}\n")
@@ -480,6 +490,9 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         # f.close()
 
         # f = open("debug.txt", "a")
+        # f.write(f"obs_time: {obs_time}\n")
+        # f.write(f"observations_time: {observations_time}\n")
+        # f.write(f"goal_time: {goal_time}\n")
         # f.write(f"FIN reset in ContinuousSimulator: {time.time() - s}[s]\n")
         # f.close()
 

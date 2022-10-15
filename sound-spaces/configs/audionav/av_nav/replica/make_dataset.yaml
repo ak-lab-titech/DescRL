@@ -1,28 +1,37 @@
 episode:
-  "n_episode": 4
-  "n_sound": 3
+  # "n_episode": 40748
+  # "n_episode": 13670
+  # "n_episode": 13882
+  # "n_episode": 13132
+  # "n_episode": 17220
+  # "n_episode": 388
+  # "n_episode": 4360
+  # "n_episode": 1526
+  "n_episode": 1892
+  "n_sound": 2
   "sounds":
     - "telephone"
-    - "birds1"
+    # - "birds1"
     - "bell"
-  "scene": apartment_0
+  # "scene": apartment_0
   # "scene": frl_apartment_0
   # "scene": frl_apartment_1
   # "scene": frl_apartment_2
   # "scene": frl_apartment_3
-  # "scene": hotel_0
   # "scene": office_0
   # "scene": office_4
-  # "scene": room_0
+  # "scene": hotel_0
+  "scene": room_0
   "seed": 0
-  "save_dir_path": "test"
+  "save_dir_path": "data/my_datasets/train_telephone_bell" # my_datasetに作成したらdata/datasets/audionav/replica/v1 に移動させる必要がある
   "step_size": 0.25
-  "start_episode_id": 1
-  # "start_episode_id": 40001
-  # "start_episode_id": 80001
-  # "start_episode_id": 120001
-  # "start_episode_id": 160001
-  # "start_episode_id": 200001
-  # "start_episode_id": 240001
-  # "start_episode_id": 280001
-  # "start_episode_id": 320001
+  # "start_episode_id": 1
+  # "start_episode_id": 40749
+  # "start_episode_id": 54419
+  # "start_episode_id": 68301
+  # "start_episode_id": 81433
+  # "start_episode_id": 98653
+  # "start_episode_id": 99041
+  # "start_episode_id": 103401
+  "start_episode_id": 104927
+  "is_train": True

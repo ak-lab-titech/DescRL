@@ -359,8 +359,19 @@ if __name__=="__main__":
     dataset_json_str = json.dumps(dataset)
 
     os.makedirs(config["episode"]["save_dir_path"], exist_ok=True)
-    with gzip.open(f"{config['episode']['save_dir_path']}/{config['episode']['scene']}.json.gz", mode="wt") as f:
-        f.write(dataset_json_str)
 
+    if config["episode"]["is_train"]:
+        os.makedirs(f"{config['episode']['save_dir_path']}/content", exist_ok=True)
+        with gzip.open(f"{config['episode']['save_dir_path']}/content/{config['episode']['scene']}.json.gz", mode="wt") as f:
+            f.write(dataset_json_str)
+        
+        file_name = config['episode']['save_dir_path'].split("/")[-1]
+        with gzip.open(f"{config['episode']['save_dir_path']}/{file_name}.json.gz", mode="wt") as f:
+            json_str = json.dumps({'episodes': []})
+            f.write(json_str)
+    else:
+        with gzip.open(f"{config['episode']['save_dir_path']}/{config['episode']['scene']}.json.gz", mode="wt") as f:
+            f.write(dataset_json_str)
+        
     print(f"TOTAL TIME: {(time.time() - start_time)/60} [min]")
     
