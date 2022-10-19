@@ -6,6 +6,10 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
+
+os.environ['MAGNUM_LOG'] = "quiet"
+os.environ['HABITAT_SIM_LOG'] = "quiet"
 
 import argparse
 from math import pi
@@ -25,22 +29,24 @@ class RandomAgent(habitat.Agent):
     def __init__(self, success_distance, goal_sensor_uuid):
         self.dist_threshold_to_stop = success_distance
         self.goal_sensor_uuid = goal_sensor_uuid
+        self.found_goal_id = []
 
     def reset(self):
-        pass
+        self.found_goal_id = []
 
     def is_goal_reached(self, observations):
         # because the frame is in with polar coordinates
         dists = [d[0] for d in observations[self.goal_sensor_uuid]]
         f = open("debug.txt", "a")
-        f.write(f"len(goal): {len(observations[self.goal_sensor_uuid])}\n")
+        f.write(f"self.found_goal_id: {self.found_goal_id}\n")
         f.close()
 
-        for dist in dists:
+        for i, dist in enumerate(dists):
             f = open("debug.txt", "a")
             f.write(f"dist: {dist}\n")
             f.close()
-            if dist <= self.dist_threshold_to_stop:
+            if not (i in self.found_goal_id) and dist <= self.dist_threshold_to_stop:
+                self.found_goal_id.append(i)
                 return True
         return False
 
@@ -50,7 +56,7 @@ class RandomAgent(habitat.Agent):
         f.close()
 
         reached = self.is_goal_reached(observations)
-        if reached and len(observations[self.goal_sensor_uuid]) == 1:
+        if reached and len(self.found_goal_id) == 0:
             action = HabitatSimActions.STOP
         elif reached:
             action = HabitatSimActions.FOUND
