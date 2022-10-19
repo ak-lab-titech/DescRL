@@ -45,10 +45,12 @@ class Benchmark:
         dummy_config.RL.defrost()
         dummy_config.TASK_CONFIG = task_config
 
-
+        
+        dummy_config.TASK_CONFIG.defrost()
+        dummy_config.TASK_CONFIG.TASK.SUCCESS.SUCCESS_DISTANCE = 1.0
+        dummy_config.TASK_CONFIG.TASK.NUM_SOFT_SUCCESS.SUCCESS_DISTANCE = 1.0
         dummy_config.CONTINUOUS = True
         if dummy_config.CONTINUOUS:
-            dummy_config.TASK_CONFIG.defrost()
             dummy_config.TASK_CONFIG.SIMULATOR.FORWARD_STEP_SIZE = 0.25
             dummy_config.TASK_CONFIG.SIMULATOR.TYPE = "ContinuousSoundSpacesSim"
             dummy_config.TASK_CONFIG.SIMULATOR.USE_RENDERED_OBSERVATIONS = False
@@ -57,7 +59,7 @@ class Benchmark:
             dummy_config.TASK_CONFIG.DATASET.CONTINUOUS = True
             dummy_config.RL.DISTANCE_REWARD_SCALE = 1.0
             dummy_config.TASK_CONFIG.SIMULATOR.TURN_ANGLE = 10
-            dummy_config.TASK_CONFIG.freeze()
+        dummy_config.TASK_CONFIG.freeze()
 
         dummy_config.freeze()
         
