@@ -149,7 +149,7 @@ def get_random_rotation(random: "Random") -> List[float]:
     return rotation
 
 
-def get_random_goal_position(pathfinder: "Pathfinder", start: List[float], goals: List[List[float]], step_size: float) -> List[float]:
+def get_random_goal_position(pathfinder: "Pathfinder", start: List[float], goals: List[List[float]], step_size: float, scene: str) -> List[float]:
     """
     goalsはすでに決定されているgoalたち。ゴール間距離とかを図るために使用
     """
@@ -179,10 +179,17 @@ def get_random_goal_position(pathfinder: "Pathfinder", start: List[float], goals
         for p in other_points:
             geo_d = calc_geodesic_distance(pathfinder, goal, p)
             euclid_d = calc_euclid_distance(goal, p)
+
+            if scene == "room_2" or scene == "office_1":
+                geo_euclid_rate = 1.001
+                step_size = 0.15
+            else:
+                geo_euclid_rate = 1.1
+
             if geo_d <= 4*step_size:
                 easy = True
                 break
-            if geo_d / euclid_d <= 1.1:
+            if geo_d / euclid_d <= geo_euclid_rate:
                 almost_linear = True
                 break
             if goal[1] != p[1]:
@@ -213,10 +220,11 @@ def calc_num_action() -> int:
     # TODO とりあえず使わない予定だけど未実装なので、必要になったら
     return None
 
-def get_start_and_goals(pathfinder, random, sounds, step_size):
+def get_start_and_goals(pathfinder, random, sounds, step_size, scene):
     n_goal = len(sounds)
     start_position = get_random_position(pathfinder)
     start_rotation = get_random_rotation(random)
+
     goals = []
     for _ in range(n_goal):
         goal_position = get_random_goal_position(
@@ -224,6 +232,7 @@ def get_start_and_goals(pathfinder, random, sounds, step_size):
             start_position,
             [list(goal["position"]) for goal in goals],
             step_size,
+            scene,
         )
         if goal_position is None:
             goals = None
@@ -255,7 +264,7 @@ def make_episode(
 
     while True:
         start_position, start_rotation, goals = get_start_and_goals(
-            pathfinder, random, sounds, step_size
+            pathfinder, random, sounds, step_size, scene_name,
         )
         if goals is not None:
             break
@@ -329,9 +338,9 @@ def make_dataset(
 
 
 if __name__=="__main__":
-    f = open("debug.txt", "w")
-    f.write("make_dataset !\n")
-    f.close()
+    # f = open("debug.txt", "w")
+    # f.write("make_dataset !\n")
+    # f.close()
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--yaml_path",
@@ -347,30 +356,59 @@ if __name__=="__main__":
 
     start_time = time.time()
 
-    dataset = make_dataset(
-        n_episode=config["episode"]["n_episode"],
-        sounds=config["episode"]["sounds"],
-        n_sound=config["episode"]["n_sound"],
-        scene=config["episode"]["scene"],
-        seed=config["episode"]["seed"],
-        step_size=config["episode"]["step_size"],
-        start_episode_id=config["episode"]["start_episode_id"]
-    )
-    dataset_json_str = json.dumps(dataset)
-
     os.makedirs(config["episode"]["save_dir_path"], exist_ok=True)
 
     if config["episode"]["is_train"]:
         os.makedirs(f"{config['episode']['save_dir_path']}/content", exist_ok=True)
-        with gzip.open(f"{config['episode']['save_dir_path']}/content/{config['episode']['scene']}.json.gz", mode="wt") as f:
-            f.write(dataset_json_str)
+
+        start_episode_id = 1
+        for scene in config["episode"]["scenes"]:
+            dataset = make_dataset(
+                n_episode=scene["n_episode"],
+                sounds=config["episode"]["sounds"],
+                n_sound=config["episode"]["n_sound"],
+                scene=scene["scene"],
+                seed=config["episode"]["seed"],
+                step_size=config["episode"]["step_size"],
+                start_episode_id=start_episode_id
+            )
+            start_episode_id += scene["n_episode"]
+            dataset_json_str = json.dumps(dataset)
+            with gzip.open(f"{config['episode']['save_dir_path']}/content/{scene['scene']}.json.gz", mode="wt") as f:
+                f.write(dataset_json_str)
+
+            file_name = config['episode']['save_dir_path'].split("/")[-1]
+            with gzip.open(f"{config['episode']['save_dir_path']}/{file_name}.json.gz", mode="wt") as f:
+                json_str = json.dumps({'episodes': []})
+                f.write(json_str)
+    else:
+        episodes = []
+        scenes = []
+        start_episode_id = 1
+        for scene in config["episode"]["scenes"]:
+            scenes.append(scene["scene"])
+
+            dataset = make_dataset(
+                n_episode=scene["n_episode"],
+                sounds=config["episode"]["sounds"],
+                n_sound=config["episode"]["n_sound"],
+                scene=scene["scene"],
+                seed=config["episode"]["seed"],
+                step_size=config["episode"]["step_size"],
+                start_episode_id=start_episode_id
+            )
+            start_episode_id += scene["n_episode"]
+            episodes = episodes + dataset["episodes"]
         
+        rand.shuffle(episodes)
+        dataset = {
+            "episodes": episodes,
+            "scene": scenes[0],
+        }
+        dataset_json_str = json.dumps(dataset)
+
         file_name = config['episode']['save_dir_path'].split("/")[-1]
         with gzip.open(f"{config['episode']['save_dir_path']}/{file_name}.json.gz", mode="wt") as f:
-            json_str = json.dumps({'episodes': []})
-            f.write(json_str)
-    else:
-        with gzip.open(f"{config['episode']['save_dir_path']}/{config['episode']['scene']}.json.gz", mode="wt") as f:
             f.write(dataset_json_str)
         
     print(f"TOTAL TIME: {(time.time() - start_time)/60} [min]")

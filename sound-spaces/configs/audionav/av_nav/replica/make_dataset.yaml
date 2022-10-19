@@ -1,37 +1,67 @@
 episode:
-  # "n_episode": 40748
-  # "n_episode": 13670
-  # "n_episode": 13882
-  # "n_episode": 13132
-  # "n_episode": 17220
-  # "n_episode": 388
-  # "n_episode": 4360
-  # "n_episode": 1526
-  "n_episode": 1892
-  "n_sound": 2
+  scenes:
+    -
+      "n_episode": 40748
+      "scene": apartment_0
+    -
+      "n_episode": 13670
+      "scene": frl_apartment_0
+    -
+      "n_episode": 13882
+      "scene": frl_apartment_1
+    -
+      "n_episode": 13132
+      "scene": frl_apartment_2
+    -
+      "n_episode": 17220
+      "scene": frl_apartment_3
+    -
+      "n_episode": 388
+      "scene": office_0
+    -
+      "n_episode": 4360
+      "scene": office_4
+    -
+      "n_episode": 1526
+      "scene": hotel_0
+    -
+      "n_episode": 1892
+      "scene": room_0
+    # val
+    # -
+    #   "n_episode": 230
+    #   "scene": apartment_2
+    # -
+    #   "n_episode": 231
+    #   "scene": frl_apartment_5
+    # -
+    #   "n_episode": 18
+    #   "scene": office_3
+    # -
+    #   "n_episode": 21
+    #   "scene": room_2
+    # test
+    # -
+    #   "n_episode": 646
+    #   "scene": apartment_1
+    # -
+    #   "n_episode": 322
+    #   "scene": frl_apartment_4
+    # -
+    #   "n_episode": 2
+    #   "scene": office_1
+    # -
+    #   "n_episode": 22
+    #   "scene": office_2
+    # -
+    #   "n_episode": 8
+    #   "scene": room_1
+  "n_sound": 3
   "sounds":
     - "telephone"
-    # - "birds1"
+    - "birds1"
     - "bell"
-  # "scene": apartment_0
-  # "scene": frl_apartment_0
-  # "scene": frl_apartment_1
-  # "scene": frl_apartment_2
-  # "scene": frl_apartment_3
-  # "scene": office_0
-  # "scene": office_4
-  # "scene": hotel_0
-  "scene": room_0
   "seed": 0
-  "save_dir_path": "data/my_datasets/train_telephone_bell" # my_datasetに作成したらdata/datasets/audionav/replica/v1 に移動させる必要がある
+  "save_dir_path": "data/my_datasets/train_telephone_birds1_bell" # my_datasetに作成したらdata/datasets/audionav/replica/v1 に移動させる必要がある
   "step_size": 0.25
-  # "start_episode_id": 1
-  # "start_episode_id": 40749
-  # "start_episode_id": 54419
-  # "start_episode_id": 68301
-  # "start_episode_id": 81433
-  # "start_episode_id": 98653
-  # "start_episode_id": 99041
-  # "start_episode_id": 103401
-  "start_episode_id": 104927
   "is_train": True
