@@ -16,8 +16,9 @@ import numpy as np
 import habitat
 from habitat.sims.habitat_simulator.actions import HabitatSimActions
 # from habitat.config.default import get_config
-from av_wan.common.benchmark import Benchmark
-from av_wan.config.default import get_task_config as get_config
+from ss_baselines.common.benchmark import Benchmark
+from ss_baselines.av_nav.config.default import get_task_config
+# from ss_baselines.av_wan.config.default import get_task_config
 
 
 class RandomAgent(habitat.Agent):
@@ -30,12 +31,29 @@ class RandomAgent(habitat.Agent):
 
     def is_goal_reached(self, observations):
         # because the frame is in with polar coordinates
-        dist = observations[self.goal_sensor_uuid][0]
-        return dist <= self.dist_threshold_to_stop
+        dists = [d[0] for d in observations[self.goal_sensor_uuid]]
+        f = open("debug.txt", "a")
+        f.write(f"len(goal): {len(observations[self.goal_sensor_uuid])}\n")
+        f.close()
+
+        for dist in dists:
+            f = open("debug.txt", "a")
+            f.write(f"dist: {dist}\n")
+            f.close()
+            if dist <= self.dist_threshold_to_stop:
+                return True
+        return False
 
     def act(self, observations):
-        if self.is_goal_reached(observations):
+        f = open("debug.txt", "a")
+        f.write("--------------------------------\n")
+        f.close()
+
+        reached = self.is_goal_reached(observations)
+        if reached and len(observations[self.goal_sensor_uuid]) == 1:
             action = HabitatSimActions.STOP
+        elif reached:
+            action = HabitatSimActions.FOUND
         else:
             action = np.random.choice(
                 [
@@ -44,6 +62,9 @@ class RandomAgent(habitat.Agent):
                     HabitatSimActions.TURN_RIGHT,
                 ]
             )
+        f = open("debug.txt", "a")
+        f.write(f"action: {action}\n")
+        f.close()
         return {"action": action}
 
 
@@ -136,15 +157,22 @@ def main():
     )
     parser.add_argument("--agent-class", type=str, default="RandomAgent")
     parser.add_argument("--debug", default=False, action="store_true")
+    parser.add_argument(
+        "opts",
+        default=None,
+        nargs=argparse.REMAINDER,
+        help="Modify config options from command line",
+    )
     args = parser.parse_args()
 
     level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(level=level, format='%(asctime)s, %(levelname)s: %(message)s',
                         datefmt="%Y-%m-%d %H:%M:%S")
 
-    task_config = get_config(args.task_config)
+    # task_config = get_task_config(args.task_config)
+    task_config = get_task_config(args.task_config, args.opts)
     task_config.defrost()
-    task_config.DATASET.SPLIT = 'test_telephone'
+    task_config.DATASET.SPLIT = 'test_telephone_bell'
     task_config.freeze()
 
     agent = get_agent_cls(args.agent_class)(
@@ -152,11 +180,31 @@ def main():
         goal_sensor_uuid=task_config.TASK.GOAL_SENSOR_UUID,
     )
     benchmark = Benchmark(task_config)
-    metrics = benchmark.evaluate(agent)
+
+    num_episodes = 50
+    metrics = benchmark.evaluate(agent, num_episodes)
 
     for k, v in metrics.items():
         habitat.logger.info("{}: {:.3f}".format(k, v))
 
 
 if __name__ == "__main__":
+    f = open("debug.txt", "w")
+    f.write("start simple_agents.py!\n")
+    f.close()
     main()
+
+
+# デフォルトのnum_episodes (1000)だと、普通のav-navで、Randomだと1日10時間くらいかかる。
+
+# 50の結果
+# 2022-10-17 22:19:10, INFO: Average reward: -1.9367682201521168 in 49 episodes
+# 2022-10-17 22:19:10, INFO: Average episode steps: 425.1020408163265
+# 2022-10-17 22:19:10, INFO: Success rate: 0.2
+# 2022-10-17 22:19:10,134 distance_to_goal: 5.668
+# 2022-10-17 22:19:10,134 normalized_distance_to_goal: 1.097
+# 2022-10-17 22:19:10,134 success: 0.204
+# 2022-10-17 22:19:10,135 spl: 0.135
+# 2022-10-17 22:19:10,135 softspl: 0.174
+# 2022-10-17 22:19:10,135 na: 425.102
+# 2022-10-17 22:19:10,135 sna: 0.044

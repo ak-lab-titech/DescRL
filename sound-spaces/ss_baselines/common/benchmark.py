@@ -38,12 +38,31 @@ class Benchmark:
         dummy_config.RL = Config()
         dummy_config.RL.SLACK_REWARD = -0.01
         dummy_config.RL.SUCCESS_REWARD = 10
+        dummy_config.RL.FOUND_REWARD = 5.0
         dummy_config.RL.WITH_TIME_PENALTY = True
         dummy_config.RL.DISTANCE_REWARD_SCALE = 1
         dummy_config.RL.WITH_DISTANCE_REWARD = True
         dummy_config.RL.defrost()
         dummy_config.TASK_CONFIG = task_config
+
+
+        dummy_config.CONTINUOUS = True
+        if dummy_config.CONTINUOUS:
+            dummy_config.TASK_CONFIG.defrost()
+            dummy_config.TASK_CONFIG.SIMULATOR.FORWARD_STEP_SIZE = 0.25
+            dummy_config.TASK_CONFIG.SIMULATOR.TYPE = "ContinuousSoundSpacesSim"
+            dummy_config.TASK_CONFIG.SIMULATOR.USE_RENDERED_OBSERVATIONS = False
+            dummy_config.TASK_CONFIG.SIMULATOR.STEP_TIME = 0.25
+            dummy_config.TASK_CONFIG.SIMULATOR.AUDIO.CROSSFADE = True
+            dummy_config.TASK_CONFIG.DATASET.CONTINUOUS = True
+            dummy_config.RL.DISTANCE_REWARD_SCALE = 1.0
+            dummy_config.TASK_CONFIG.SIMULATOR.TURN_ANGLE = 10
+            dummy_config.TASK_CONFIG.freeze()
+
         dummy_config.freeze()
+        
+        import pprint
+        pprint.pprint(dummy_config)
 
         dataset = make_dataset(id_dataset=task_config.DATASET.TYPE, config=task_config.DATASET)
         self._env = AudioNavRLEnv(config=dummy_config, dataset=dataset)
@@ -78,6 +97,9 @@ class Benchmark:
         step_episodes = 0
         success_count = 0
         for count_episodes in tqdm(range(num_episodes)):
+            f = open("debug.txt", "a")
+            f.write(f"---------------------- RESET {count_episodes}/{num_episodes} ----------------------------\n")
+            f.close()
             agent.reset()
             observations = self._env.reset()
             episode_reward = 0
