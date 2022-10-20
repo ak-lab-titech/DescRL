@@ -603,7 +603,11 @@ class PPOTrainer(BaseRLTrainer):
                         if 'sound' in current_episodes[i].info:
                             sound = current_episodes[i].info['sound']
                         else:
-                            sound = current_episodes[i].sound_id.split('/')[1][:-4]
+                            # sound = current_episodes[i].sound_id.split('/')[1][:-4]
+                            sound = "multi"
+                        
+                        # print(f"audios: {audios}")
+
                         generate_video(
                             video_option=self.config.VIDEO_OPTION,
                             video_dir=self.config.VIDEO_DIR,
