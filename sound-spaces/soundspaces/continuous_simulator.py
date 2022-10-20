@@ -581,6 +581,8 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
                 binaural_rir = np.transpose(np.array(self._prev_sim_obs[f"audio_sensor_{i}"]))
                 # binaural_rir = np.transpose(np.array(self._prev_sim_obs[f"audio_sensor"]))
 
+                sound_source = list(self.current_source_sound[i])
+
                 # if i == 2:
                 #     va = 5
                 # else:
@@ -588,9 +590,9 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
                 va = 1
 
                 if audiogoal is None:
-                    audiogoal = self._convolve_with_rir(binaural_rir, list(self._source_sound_dict.values())[i], va)
+                    audiogoal = self._convolve_with_rir(binaural_rir, sound_source, va)
                 else:
-                    audiogoal += self._convolve_with_rir(binaural_rir, list(self._source_sound_dict.values())[i], va)
+                    audiogoal += self._convolve_with_rir(binaural_rir, sound_source, va)
 
             # f = open("debug.txt", "a")
             # f.write(f"self.config.AUDIO.CROSSFADE: {self.config.AUDIO.CROSSFADE}\n")
@@ -602,25 +604,26 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
                 for i in range(self._audio_sensor_num):
                     if not f"goal_{i}" in self.not_found_goals:
                         continue
-                    
-                    list(self._source_sound_dict.values())[i]
+
+                    # list(self._source_sound_dict.values())[i]
                     # if i == 2:
                     #     va = 5
                     # else:
                     #     va = 1
                     va = 1
 
+                    sound_source = list(self.current_source_sound[i])
 
                     if audiogoal_from_last_rir is None:
                         audiogoal_from_last_rir = self._convolve_with_rir(
                             self._last_rir[f"audio_sensor_{i}"],
-                            list(self._source_sound_dict.values())[i],
+                            sound_source,
                             va,
                         )
                     else:
                         audiogoal_from_last_rir += self._convolve_with_rir(
                             self._last_rir[f"audio_sensor_{i}"],
-                            list(self._source_sound_dict.values())[i],
+                            sound_source,
                             va,
                         )
 
