@@ -123,7 +123,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         import pprint
         for i in range(self._audio_sensor_num):
             acoustics_config = habitat_sim.sensor.RLRAudioPropagationConfiguration()
-            acoustics_config.threadCount = 1
+            acoustics_config.threadCount = 3
             acoustics_config.sampleRate = self.config.AUDIO.RIR_SAMPLING_RATE
             acoustics_config.irTime = self.config.AUDIO.IR_TIME
             acoustics_config.indirectRayCount = 500
@@ -581,7 +581,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
                 binaural_rir = np.transpose(np.array(self._prev_sim_obs[f"audio_sensor_{i}"]))
                 # binaural_rir = np.transpose(np.array(self._prev_sim_obs[f"audio_sensor"]))
 
-                sound_source = list(self.current_source_sound[i])
+                sound_source = np.array(list(self.current_source_sound[i]))
 
                 # if i == 2:
                 #     va = 5
@@ -612,7 +612,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
                     #     va = 1
                     va = 1
 
-                    sound_source = list(self.current_source_sound[i])
+                    sound_source = np.array(list(self.current_source_sound[i]))
 
                     if audiogoal_from_last_rir is None:
                         audiogoal_from_last_rir = self._convolve_with_rir(
@@ -779,6 +779,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
             position: Optional[List[float]] = None,
             rotation: Optional[List[float]] = None,
             keep_agent_at_new_pose: bool = False,
+            found: bool = False,
     ) -> Optional[Observations]:
         current_state = self.get_agent_state()
         if position is None or rotation is None: # ActionStopから呼ばれた場合はこっち
@@ -789,6 +790,12 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
             )
 
         if success:
+
+            if found:
+                self._last_rir = {}
+                for i in range(self._audio_sensor_num):
+                    self._last_rir[f"audio_sensor_{i}"] = np.transpose(np.array(self._prev_sim_obs[f"audio_sensor_{i}"]))
+
             sim_obs = self._sim.get_sensor_observations()
 
             self._prev_sim_obs = sim_obs
@@ -800,6 +807,12 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
                     current_state.rotation,
                     reset_sensors=False,
                 )
+
+            if found:
+                self._episode_step_count += 1
+                self._current_sample_index = int(
+                    self._current_sample_index + self.config.AUDIO.RIR_SAMPLING_RATE * self.config.STEP_TIME
+                ) % self.current_source_sound[0].shape[0]
             return observations
         else:
             return None
