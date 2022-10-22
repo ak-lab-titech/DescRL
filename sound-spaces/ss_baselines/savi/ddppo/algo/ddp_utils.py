@@ -167,6 +167,7 @@ def init_distrib_slurm(
         world_rank = 0
         world_size = 1
     
+    world_size = 1
     print(f"local_rank: {local_rank}, world_rank: {world_rank}, world_size: {world_size}")
     tcp_store = distrib.TCPStore(
         master_addr, master_port, world_size, world_rank == 0

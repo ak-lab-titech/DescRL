@@ -4,6 +4,8 @@ __pycache__
 test.py
 debug*.txt
 test
+job.sh
+*output.out
 
 habitat-sim
 habitat-lab

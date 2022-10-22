@@ -7,6 +7,9 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import sys
+
+sys.path.insert(0, "/home/hkondo/av-nav/myss/sound-spaces")
 
 os.environ['MAGNUM_LOG'] = "quiet"
 os.environ['HABITAT_SIM_LOG'] = "quiet"
