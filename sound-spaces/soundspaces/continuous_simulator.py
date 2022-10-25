@@ -133,6 +133,8 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
 
             channel_layout = habitat_sim.sensor.RLRAudioPropagationChannelLayout()
             channel_layout.channelType = habitat_sim.sensor.RLRAudioPropagationChannelLayoutType.Binaural
+            # channel_layout.channelType = habitat_sim.sensor.RLRAudioPropagationChannelLayoutType.Ambisonics
+            # channel_layout.channelType = habitat_sim.sensor.RLRAudioPropagationChannelLayoutType.Quad
             channel_layout.channelCount = 2
 
             audio_sensor_spec = habitat_sim.AudioSensorSpec()
@@ -668,7 +670,14 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         sampling_rate = self.config.AUDIO.RIR_SAMPLING_RATE
         num_sample = int(sampling_rate * self.config.STEP_TIME)
 
+        # f = open("debug.txt", "a")
+        # f.write(f"sampling_rate: {sampling_rate}\n")
+        # f.write(f"num_sample: {num_sample}\n")
+        # f.write(f"rir.shape: {rir.shape}\n")
+
         # index = self._current_sample_index
+        # f.write(f"index: {index}\n")
+        # f.write(f"source_sound.shape: {source_sound.shape}\n")
 
         if index - rir.shape[0] < 0:
             sound_segment = source_sound[: index + num_sample] * volume_adjust
@@ -691,6 +700,9 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         # audiogoal = np.array([fftconvolve(self.current_source_sound, rir[:, channel], mode='full',
         #                                   ) for channel in range(rir.shape[-1])])
         # audiogoal = audiogoal[:, self._episode_step_count * num_sample: (self._episode_step_count + 1) * num_sample]
+
+        # f.write(f"audiogoal.shape: {audiogoal.shape}\n")
+        # f.close()
 
         audiogoal = np.pad(audiogoal, [(0, 0), (0, sampling_rate - audiogoal.shape[1])])
         return audiogoal
