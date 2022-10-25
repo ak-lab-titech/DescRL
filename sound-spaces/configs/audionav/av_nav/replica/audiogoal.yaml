@@ -11,6 +11,10 @@ SIMULATOR:
     HEIGHT: 128
 #    NOISE_MODEL: RedwoodDepthNoiseModel
 
+  FORWARD_STEP_SIZE: 0.25
+  STEP_TIME: 0.25
+  TURN_ANGLE: 10
+
   TYPE: "SoundSpacesSim"
   ACTION_SPACE_CONFIG: "v0"
   SCENE_DATASET: "replica"
