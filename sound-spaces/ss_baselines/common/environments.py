@@ -122,8 +122,7 @@ class AudioNavRLEnv(habitat.RLEnv):
 
         if self._found():
             # f = open("debug.txt", "a")
-            # f.write(f"self._rl_config.FOUND_REWARD: {self._rl_config.FOUND_REWARD}\n")
-            # f.write("success FOUND in get_reward\n")
+            # f.write("success FOUND\n")
             # f.close()
 
             reward += 1 * self._rl_config.FOUND_REWARD
@@ -132,7 +131,7 @@ class AudioNavRLEnv(habitat.RLEnv):
 
         if self._episode_success():
             # f = open("debug.txt", "a")
-            # f.write("success SUCCESS in get_reward\n")
+            # f.write("success SUCCESS\n")
             # f.close()
             reward += self._env.get_metrics()['success'] * self._rl_config.SUCCESS_REWARD
             logging.debug('Reaching goal!')

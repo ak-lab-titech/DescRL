@@ -111,7 +111,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         self.points, self.graph = load_metadata(self.metadata_dir)
         self._sim = habitat_sim.Simulator(config=self.sim_config)
         self._last_rir = None
-        self._current_sample_index = 0
+        self._current_sample_indexs = []
         self._audio_sensor_num = self.config.AUDIO.NUM
         self.add_acoustic_config()
 
@@ -390,7 +390,12 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
 
         self._episode_step_count = 0
         self._last_rir = None
-        # self._current_sample_index = np.random.randint(self.config.AUDIO.RIR_SAMPLING_RATE * self.config.STEP_TIME)
+
+        # self._current_sample_indexs = []
+        # for i in range(self._audio_sensor_num):
+        #     # current_sample_index = np.random.randint(self.config.AUDIO.RIR_SAMPLING_RATE * self.config.STEP_TIME)
+        #     current_sample_index = np.random.randint(self.config.AUDIO.RIR_SAMPLING_RATE)
+        #     self._current_sample_indexs.append(current_sample_index)
 
     @staticmethod
     def position_encoding(position):
@@ -498,6 +503,21 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         # f.write(f"FIN reset in ContinuousSimulator: {time.time() - s}[s]\n")
         # f.close()
 
+        # self._current_sample_indexs = [
+        #     int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.6),
+        #     int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.0),
+        # ]
+        
+        # f = open("debug.txt", "a")
+        # f.write(f"self._current_sample_indexs: {self._current_sample_indexs}¥n")
+        # f.write(f"self.current_source_sound: {self.current_source_sound}¥n")
+        self._current_sample_indexs = []
+        for i in range(self._audio_sensor_num):
+            current_sample_index = np.random.randint(self.config.AUDIO.RIR_SAMPLING_RATE)
+            # f.write(f"current_sample_index: {current_sample_index}\n")
+            self._current_sample_indexs.append(current_sample_index)
+        # f.close()
+
         return observations
 
     def step(self, action):
@@ -534,8 +554,12 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         # {"rgb": ndarray (3次元になってる)}
 
         self._episode_step_count += 1
-        self._current_sample_index = int(self._current_sample_index + self.config.AUDIO.RIR_SAMPLING_RATE *
+
+        for i in range(self._audio_sensor_num):
+            current_sample_index = self._current_sample_indexs[i]
+            current_sample_index = int(current_sample_index + self.config.AUDIO.RIR_SAMPLING_RATE *
                                          self.config.STEP_TIME) % self.current_source_sound[0].shape[0]
+            self._current_sample_indexs[i] = current_sample_index
         
         # f = open("debug.txt", "a")
         # f.write(f"FIN step in ContinuousSimulator: {time.time() - s}[s]\n")
@@ -591,10 +615,12 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
                 #     va = 1
                 va = 1
 
+                index = self._current_sample_indexs[i]
+
                 if audiogoal is None:
-                    audiogoal = self._convolve_with_rir(binaural_rir, sound_source, va)
+                    audiogoal = self._convolve_with_rir(binaural_rir, index, sound_source, va)
                 else:
-                    audiogoal += self._convolve_with_rir(binaural_rir, sound_source, va)
+                    audiogoal += self._convolve_with_rir(binaural_rir, index, sound_source, va)
 
             # f = open("debug.txt", "a")
             # f.write(f"self.config.AUDIO.CROSSFADE: {self.config.AUDIO.CROSSFADE}\n")
@@ -614,17 +640,21 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
                     #     va = 1
                     va = 1
 
+                    index = self._current_sample_indexs[i]
+
                     sound_source = np.array(list(self.current_source_sound[i]))
 
                     if audiogoal_from_last_rir is None:
                         audiogoal_from_last_rir = self._convolve_with_rir(
                             self._last_rir[f"audio_sensor_{i}"],
+                            index,
                             sound_source,
                             va,
                         )
                     else:
                         audiogoal_from_last_rir += self._convolve_with_rir(
                             self._last_rir[f"audio_sensor_{i}"],
+                            index,
                             sound_source,
                             va,
                         )
@@ -633,7 +663,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
 
         return audiogoal
 
-    def _convolve_with_rir(self, rir, source_sound = None, volume_adjust = 1.0):
+    def _convolve_with_rir(self, rir, index, source_sound = None, volume_adjust = 1.0):
         # if source_sound is None:
         #     source_sound = self.current_source_sound
 
@@ -645,7 +675,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         # f.write(f"num_sample: {num_sample}\n")
         # f.write(f"rir.shape: {rir.shape}\n")
 
-        index = self._current_sample_index
+        # index = self._current_sample_index
         # f.write(f"index: {index}\n")
         # f.write(f"source_sound.shape: {source_sound.shape}\n")
 
@@ -822,9 +852,12 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
 
             if found:
                 self._episode_step_count += 1
-                self._current_sample_index = int(
-                    self._current_sample_index + self.config.AUDIO.RIR_SAMPLING_RATE * self.config.STEP_TIME
-                ) % self.current_source_sound[0].shape[0]
+                for i in range(self._audio_sensor_num):
+                    current_sample_index = self._current_sample_indexs[i]
+                    current_sample_index = int(
+                        current_sample_index + self.config.AUDIO.RIR_SAMPLING_RATE * self.config.STEP_TIME
+                    ) % self.current_source_sound[0].shape[0]
+                    self._current_sample_indexs[i] = current_sample_index
             return observations
         else:
             return None
