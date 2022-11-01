@@ -23,6 +23,7 @@ class RolloutStorage:
         observation_space,
         action_space,
         recurrent_hidden_state_size,
+        direct_map_size,
         num_recurrent_layers=1,
     ):
         self.observations = {}
@@ -40,6 +41,17 @@ class RolloutStorage:
             num_envs,
             recurrent_hidden_state_size,
         )
+
+        self.direct_map_size = direct_map_size
+        self.use_direct_map = (direct_map_size is not None)
+        if self.use_direct_map:
+            self.prev_direct_map = torch.zeros(
+                num_steps + 2,
+                num_envs,
+                direct_map_size,
+            )
+        else:
+            self.prev_direct_map = None
 
         self.rewards = torch.zeros(num_steps, num_envs, 1)
         self.value_preds = torch.zeros(num_steps + 1, num_envs, 1)
@@ -67,6 +79,10 @@ class RolloutStorage:
             self.observations[sensor] = self.observations[sensor].to(device)
 
         self.recurrent_hidden_states = self.recurrent_hidden_states.to(device)
+
+        if self.use_direct_map:
+            self.prev_direct_map = self.prev_direct_map.to(device)
+
         self.rewards = self.rewards.to(device)
         self.value_preds = self.value_preds.to(device)
         self.returns = self.returns.to(device)
@@ -92,12 +108,38 @@ class RolloutStorage:
         self.recurrent_hidden_states[self.step + 1].copy_(
             recurrent_hidden_states
         )
+        # f = open("debug.txt", "a")
+        # f.write(f"actions type: {type(actions)}\n")
+        # f.close()
+
+        if self.use_direct_map:
+            for i in range(len(actions)):
+                # f = open("debug.txt", "a")
+                # f.write(f"action: {actions[i]}\n")
+                # f.write(f"action type: {type(actions[i])}\n")
+                # f.write(f"action item: {actions[i].item()}\n")
+                # f.write(f"observations direct_map: {observations['direct_map'][i]} (self.step: {self.step})\n")
+                # f.close()
+                if actions[i].item() == 0:
+                    self.prev_direct_map[self.step + 1][i].copy_(torch.zeros(self.direct_map_size))
+                self.prev_direct_map[self.step + 2][i].copy_(observations["direct_map"][i])
+    
         self.actions[self.step].copy_(actions)
         self.prev_actions[self.step + 1].copy_(actions)
         self.action_log_probs[self.step].copy_(action_log_probs)
         self.value_preds[self.step].copy_(value_preds)
         self.rewards[self.step].copy_(rewards)
         self.masks[self.step + 1].copy_(masks)
+
+
+        # f = open("debug.txt", "a")
+        # f.write(f"-------------------------- self.step: {self.step} ----------------------------\n")
+        # f.write(f"self.obervations['direct_map']:\n{self.observations['direct_map'][:5]}\n")
+        # f.write(f"self.prev_direct_map:\n{self.prev_direct_map[:5]}\n")
+        # f.write(f"self.prev_actions:\n{self.prev_actions[:5]}\n")
+        # f.write(f"self.actions:\n{self.actions[:5]}\n")
+        # f.write("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n")
+        # f.close()
 
         self.step = (self.step + 1) % self.num_steps
 
@@ -106,6 +148,11 @@ class RolloutStorage:
             self.observations[sensor][0].copy_(self.observations[sensor][-1])
 
         self.recurrent_hidden_states[0].copy_(self.recurrent_hidden_states[-1])
+
+        if self.use_direct_map:
+            self.prev_direct_map[0].copy_(self.prev_direct_map[-2])
+            self.prev_direct_map[1].copy_(self.prev_direct_map[-1])
+
         self.masks[0].copy_(self.masks[-1])
         self.prev_actions[0].copy_(self.prev_actions[-1])
 
@@ -142,6 +189,10 @@ class RolloutStorage:
             observations_batch = defaultdict(list)
 
             recurrent_hidden_states_batch = []
+            if self.use_direct_map:
+                prev_direct_map_batch = []
+            else:
+                prev_direct_map_batch = None
             actions_batch = []
             prev_actions_batch = []
             value_preds_batch = []
@@ -162,6 +213,9 @@ class RolloutStorage:
                     self.recurrent_hidden_states[0, :, ind]
                 )
 
+                if self.use_direct_map:
+                    prev_direct_map_batch.append(self.prev_direct_map[:-2, ind])
+
                 actions_batch.append(self.actions[:, ind])
                 prev_actions_batch.append(self.prev_actions[:-1, ind])
                 value_preds_batch.append(self.value_preds[:-1, ind])
@@ -180,6 +234,9 @@ class RolloutStorage:
                 observations_batch[sensor] = torch.stack(
                     observations_batch[sensor], 1
                 )
+            
+            if self.use_direct_map:
+                prev_direct_map_batch = torch.stack(prev_direct_map_batch, 1)
 
             actions_batch = torch.stack(actions_batch, 1)
             prev_actions_batch = torch.stack(prev_actions_batch, 1)
@@ -201,6 +258,9 @@ class RolloutStorage:
                 observations_batch[sensor] = self._flatten_helper(
                     T, N, observations_batch[sensor]
                 )
+            
+            if self.use_direct_map:
+                prev_direct_map_batch = self._flatten_helper(T, N, prev_direct_map_batch)
 
             actions_batch = self._flatten_helper(T, N, actions_batch)
             prev_actions_batch = self._flatten_helper(T, N, prev_actions_batch)
@@ -215,6 +275,7 @@ class RolloutStorage:
             yield (
                 observations_batch,
                 recurrent_hidden_states_batch,
+                prev_direct_map_batch,
                 actions_batch,
                 prev_actions_batch,
                 value_preds_batch,

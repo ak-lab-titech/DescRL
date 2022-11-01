@@ -53,6 +53,7 @@ class PPOTrainer(BaseRLTrainer):
         self.actor_critic = None
         self.agent = None
         self.envs = None
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
 
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
         r"""Sets up actor critic and agent for PPO.
@@ -87,6 +88,8 @@ class PPOTrainer(BaseRLTrainer):
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
         )
+
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR is not None)
 
     def save_checkpoint(self, file_name: str) -> None:
         r"""Save checkpoint with specified name.
@@ -137,9 +140,11 @@ class PPOTrainer(BaseRLTrainer):
                 actions,
                 actions_log_probs,
                 recurrent_hidden_states,
+                direct_map,
             ) = self.actor_critic.act(
                 step_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
+                rollouts.prev_direct_map[rollouts.step] if self.use_direct_map else None,
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step],
             )
@@ -202,6 +207,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value = self.actor_critic.get_value(
                 last_observation,
                 rollouts.recurrent_hidden_states[-1],
+                rollouts.prev_direct_map[-1] if self.use_direct_map else None,
                 rollouts.prev_actions[-1],
                 rollouts.masks[-1],
             ).detach()
@@ -210,7 +216,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value, ppo_cfg.use_gae, ppo_cfg.gamma, ppo_cfg.tau
         )
 
-        value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, direct_map_loss = self.agent.update(rollouts)
 
         rollouts.after_update()
 
@@ -219,6 +225,7 @@ class PPOTrainer(BaseRLTrainer):
             value_loss,
             action_loss,
             dist_entropy,
+            direct_map_loss,
         )
 
     def train(self) -> None:
@@ -494,6 +501,15 @@ class PPOTrainer(BaseRLTrainer):
             ppo_cfg.hidden_size,
             device=self.device,
         )
+
+        if self.use_direct_map:
+            predict_direct_map = torch.zeros(
+                self.config.NUM_PROCESSES,
+                config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+                device=self.device,
+            )
+        else:
+            predict_direct_map = None
         prev_actions = torch.zeros(
             self.config.NUM_PROCESSES, 1, device=self.device, dtype=torch.long
         )
@@ -519,13 +535,18 @@ class PPOTrainer(BaseRLTrainer):
             current_episodes = self.envs.current_episodes()
 
             with torch.no_grad():
-                _, actions, _, test_recurrent_hidden_states = self.actor_critic.act(
+                _, actions, _, test_recurrent_hidden_states, predict_direct_map = self.actor_critic.act(
                     batch,
                     test_recurrent_hidden_states,
+                    predict_direct_map,
                     prev_actions,
                     not_done_masks,
                     deterministic=False
                 )
+
+                if self.use_direct_map:
+                    # predict_direct_map.copy_(batch["direct_map"]) # こっちを選択するとGTをいれることになる
+                    predict_direct_map.copy_(predict_direct_map)
 
                 prev_actions.copy_(actions)
 
@@ -643,6 +664,7 @@ class PPOTrainer(BaseRLTrainer):
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
+                predict_direct_map,
                 prev_actions,
                 batch,
                 rgb_frames,
@@ -652,6 +674,7 @@ class PPOTrainer(BaseRLTrainer):
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
+                predict_direct_map,
                 prev_actions,
                 batch,
                 rgb_frames,

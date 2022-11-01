@@ -115,6 +115,8 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         self._audio_sensor_num = self.config.AUDIO.NUM
         self.add_acoustic_config()
 
+        self.is_found = False
+
     def add_acoustic_config(self):
         """
         シミュレータ(self._sim)に、audio_sensorを加える
@@ -123,7 +125,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         import pprint
         for i in range(self._audio_sensor_num):
             acoustics_config = habitat_sim.sensor.RLRAudioPropagationConfiguration()
-            acoustics_config.threadCount = 3
+            acoustics_config.threadCount = 1
             acoustics_config.sampleRate = self.config.AUDIO.RIR_SAMPLING_RATE
             acoustics_config.irTime = self.config.AUDIO.IR_TIME
             acoustics_config.indirectRayCount = 500
@@ -517,6 +519,8 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
             # f.write(f"current_sample_index: {current_sample_index}\n")
             self._current_sample_indexs.append(current_sample_index)
         # f.close()
+
+        self.is_found = False
 
         return observations
 

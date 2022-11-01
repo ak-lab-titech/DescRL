@@ -22,6 +22,7 @@ class PPO(nn.Module):
         num_mini_batch,
         value_loss_coef,
         entropy_coef,
+        direct_map_loss_coef,
         lr=None,
         eps=None,
         max_grad_norm=None,
@@ -39,6 +40,7 @@ class PPO(nn.Module):
 
         self.value_loss_coef = value_loss_coef
         self.entropy_coef = entropy_coef
+        self.direct_map_loss_coef = direct_map_loss_coef
 
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
@@ -63,6 +65,7 @@ class PPO(nn.Module):
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
+        direct_map_loss_epoch = 0
 
         for e in range(self.ppo_epoch):
             data_generator = rollouts.recurrent_generator(
@@ -73,6 +76,7 @@ class PPO(nn.Module):
                 (
                     obs_batch,
                     recurrent_hidden_states_batch,
+                    prev_direct_map_batch,
                     actions_batch,
                     prev_actions_batch,
                     value_preds_batch,
@@ -83,14 +87,20 @@ class PPO(nn.Module):
                 ) = sample
 
                 # Reshape to do in a single forward pass for all steps
+                f = open("debug.txt", "a")
+                f.write("before evaluate_actions in ppo.update\n")
+                f.close()
+
                 (
                     values,
                     action_log_probs,
                     dist_entropy,
                     _,
+                    predict_direct_map,
                 ) = self.actor_critic.evaluate_actions(
                     obs_batch,
                     recurrent_hidden_states_batch,
+                    prev_direct_map_batch,
                     prev_actions_batch,
                     masks_batch,
                     actions_batch,
@@ -122,13 +132,24 @@ class PPO(nn.Module):
                     )
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
+                
+                if predict_direct_map is not None:
+                    direct_map_loss = 0.5 * (obs_batch["direct_map"] - predict_direct_map).pow(2).mean()
 
                 self.optimizer.zero_grad()
-                total_loss = (
-                    value_loss * self.value_loss_coef
-                    + action_loss
-                    - dist_entropy * self.entropy_coef
-                )
+                if predict_direct_map is not None:
+                    total_loss = (
+                        value_loss * self.value_loss_coef
+                        + action_loss
+                        - dist_entropy * self.entropy_coef
+                        + direct_map_loss * self.direct_map_loss_coef
+                    )
+                else:
+                    total_loss = (
+                        value_loss * self.value_loss_coef
+                        + action_loss
+                        - dist_entropy * self.entropy_coef
+                    )
 
                 self.before_backward(total_loss)
                 total_loss.backward()
@@ -141,14 +162,19 @@ class PPO(nn.Module):
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
+                if predict_direct_map is not None:
+                    direct_map_loss_epoch += direct_map_loss.item()
+                else:
+                    direct_map_loss_epoch += 0
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
         value_loss_epoch /= num_updates
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
+        direct_map_loss_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, direct_map_loss_epoch
 
     def before_backward(self, loss):
         pass
