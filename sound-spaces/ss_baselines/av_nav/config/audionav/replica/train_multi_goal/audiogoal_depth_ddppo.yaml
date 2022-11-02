@@ -1,6 +1,6 @@
 BASE_TASK_CONFIG_PATH: "configs/audionav/av_nav/replica/multi_audiogoal.yaml"
 TRAINER_NAME: "ddppo"
-NUM_PROCESSES: 4
+NUM_PROCESSES: 1
 SENSORS: ["DEPTH_SENSOR"]
 NUM_UPDATES: 2501
 LOG_INTERVAL: 10
@@ -16,6 +16,7 @@ RL:
     num_mini_batch: 1
     value_loss_coef: 0.5
     entropy_coef: 0.20
+    direct_map_loss_coef: 1
     lr: 2.5e-4
     eps: 1e-5
     max_grad_norm: 0.5

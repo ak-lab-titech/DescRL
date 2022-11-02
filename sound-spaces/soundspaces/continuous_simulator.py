@@ -115,6 +115,8 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         self._audio_sensor_num = self.config.AUDIO.NUM
         self.add_acoustic_config()
 
+        self.is_found = False
+
     def add_acoustic_config(self):
         """
         シミュレータ(self._sim)に、audio_sensorを加える
@@ -517,6 +519,8 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
             # f.write(f"current_sample_index: {current_sample_index}\n")
             self._current_sample_indexs.append(current_sample_index)
         # f.close()
+
+        self.is_found = False
 
         return observations
 

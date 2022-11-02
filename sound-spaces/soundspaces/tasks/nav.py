@@ -4,8 +4,10 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Type, Union
+from re import A
+from typing import Any, Type, Union, List
 import logging
+from cv2 import AgastFeatureDetector_NONMAX_SUPPRESSION
 
 import numpy as np
 import torch
@@ -103,6 +105,192 @@ class SpectrogramSensor(Sensor):
         spectrogram = self._sim.get_current_spectrogram_observation(self.compute_spectrogram)
 
         return spectrogram
+
+@registry.register_sensor
+class DirectMap(Sensor):
+    cls_uuid: str = "direct_map"
+
+    def __init__(self, *args: Any, sim: Simulator, config: Config, **kwargs: Any) -> None:
+        """
+
+        Args:
+            angle_resolution (int): resolution of direct map angle. 4なら90度ずつになる
+
+        """
+        self._sim = sim
+        self.angle_resolution = sim.config.DIRECT_MAP_SIZE
+        self.euclid_or_geodesic = sim.config.DIRECT_MAP_DISTANCE
+        super().__init__(config=config)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return "direct_map"
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        # return SensorTypes.PATH
+        # return SensorTypes.COLOR
+        return SensorTypes.NULL
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        return spaces.Box(
+            low=0,
+            high=np.finfo(np.float32).max,
+            shape=(self.angle_resolution,),
+            dtype=np.float32,
+        )
+    
+    def get_observation(self, *args: Any, **kwargs: Any) -> Any:
+        r"""
+        Returns:
+            current observation for Sensor.
+        """
+        agent_position = self._sim.get_agent_state().position
+        agent_rotation = self._sim.get_agent_state().rotation
+        goals = [self._sim.goals_dict[goal_id] for goal_id in self._sim.not_found_goals]
+        direct_map = self.make_direct_map(agent_position, agent_rotation, goals)
+        return direct_map
+    
+    def make_direct_map(
+        self,
+        agent_position: List[float],
+        agent_rotation: List[float], # Listじゃなくてクオータニオン
+        goals: List[List[float]],
+    ):
+        """
+
+        Args:
+            agent_position (list[float]): agent's position. [x, y, z]
+            agent_rotation (list[float]): agent's rotation.
+            goals (list[list[float]]): list of goal positions
+            is_found (bool): found actionがいま取られているのかどうか
+        """
+        # f = open("debug.txt", "a")
+        # f.write("--- make_direct_map ---\n")
+        # f.write(f"agent_position: {agent_position}\n")
+        # f.write(f"agent_rotation: {agent_rotation}\n")
+        # f.write(f"agent_rotation.w: {agent_rotation.w}\n")
+        # f.write(f"angle: {2 * np.arccos(agent_rotation.w)} [rad]\n")
+        # f.write(f"agent angle: {2 * np.arccos(agent_rotation.w) * 180 / np.pi} [deg]\n")
+        # f.write(f"goals: {goals}, length: {len(goals)}, is_found: {self._sim.is_found}\n")
+        # f.write(f"angle_resolution: {self.angle_resolution}\n")
+        # f.close()
+
+        direct_map = np.full(self.angle_resolution, np.inf)
+        for goal in goals:
+            angle = self.calc_angle(agent_rotation, agent_position, goal)
+            # f = open("debug.txt", "a")
+            # f.write(f"angle from agent: {angle}\n")
+            angle += 180 / self.angle_resolution
+            # f.write(f"angle += 180 / self.angle_resolution: {angle}\n")
+            direct_map_index = int(angle / (360 / self.angle_resolution)) % self.angle_resolution
+            # f.write(f"direct_map_index: {direct_map_index}\n")
+            # f.close()
+            distance = self.calc_distance(agent_position, goal, self.euclid_or_geodesic)
+            
+            if self._sim.is_found:
+                geo_dis = self.calc_distance(agent_position, goal, "geodesic")
+                if geo_dis < 1:
+                    continue
+
+            if distance < direct_map[direct_map_index]:
+                direct_map[direct_map_index] = distance
+
+
+        for i in range(len(direct_map)):
+            if direct_map[i] == 0:
+                direct_map[i] = np.finfo(np.float32).max
+            else:
+                direct_map[i] = 1 / direct_map[i]
+
+        # f = open("debug.txt", "a")
+        # f.write(f"direct_map in DirectMap: {direct_map}\n")
+        # f.close()
+
+        return direct_map
+
+    def calc_distance(
+        self,
+        p1: List[float],
+        p2: List[float],
+        euclid_or_geodesic: str,
+    ) -> float:
+        if euclid_or_geodesic == "euclid":
+            distance = np.linalg.norm(np.array(p1) - np.array(p2))
+        elif euclid_or_geodesic == "geodesic":
+            distance = self._sim._calc_geodesic_distance(p1, p2)
+        else:
+            raise Exception(
+                f"euclid_or_geodesic must be 'euclid' or 'geodeic', not {euclid_or_geodesic}."
+            )
+        
+        # f = open("debug.txt", "a")
+        # f.write(f"-- distance: {distance}\n")
+        # f.close()
+
+        return distance
+
+    def calc_angle(
+        self,
+        agent_rotation: List[float], # Listじゃなくてクオータニオン
+        agent_position: List[float],
+        position: List[float],
+    ) -> float:
+        """
+        agentが向いている方向を0度したときに、positionの位置がどの方向にあるかを判定する
+
+        0から360度で返したい
+        """
+        agent_angle = self.calc_angle_from_quaternion(agent_rotation)
+
+        vector = [position[0] - agent_position[0], position[2] - agent_position[2]] # [x, z]
+        vec_angle = self.calc_angle_from_2d_vector(vector)
+
+        angle = vec_angle - agent_angle
+
+        # f = open("debug.txt", "a")
+        # f.write(f"-- agent_angle: {agent_angle}, vec_angle: {vec_angle}\n")
+        # f.close()
+
+        if angle < 0:
+            angle += 360
+        
+        # f = open("debug.txt", "a")
+        # f.write(f"-- fixed angle: {angle}\n")
+        # f.close()
+
+        return angle
+
+    
+    def calc_angle_from_quaternion(self, quat):
+        angle = 2 * np.arccos(quat.w) * 180 / np.pi
+        return angle
+
+    def calc_angle_from_2d_vector(self, vec):
+        """
+        z軸(縦軸)の負の方向(0, -1)を0度とした、時計回りの回転角度
+        0~360 degree
+        """
+        r = np.sqrt(vec[0]**2 + vec[1]**2)
+        cos = vec[0] / r
+
+        angle = np.arccos(cos)
+
+        if vec[1] < 0:
+            angle = 2*np.pi - angle
+        
+        
+        angle = angle * 180 / np.pi
+
+        # f = open("debug.txt", "a")
+        # f.write(f"--arccos: {angle}\n")
+
+        angle = 270 - angle
+        if angle < 0:
+            angle += 360
+        
+        # f.write(f"-- angle from [0, -1]: {angle}\n")
+        # f.close()
+
+        return angle 
 
 
 @registry.register_measure

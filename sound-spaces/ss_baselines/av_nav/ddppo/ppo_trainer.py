@@ -72,6 +72,7 @@ class PPOTrainer(BaseRLTrainer):
 
         self._static_smt_encoder = False
         self._encoder = None
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
 
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
         r"""Sets up actor critic and agent for PPO.
@@ -114,6 +115,8 @@ class PPOTrainer(BaseRLTrainer):
             self.agent.actor_critic.net.action_encoder.load_state_dict(self.search_dict(ckpt_dict, 'action_encoder'))
 
         self.actor_critic.to(self.device)
+
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR is not None)
 
     @staticmethod
     def search_dict(ckpt_dict, encoder_name):
@@ -228,10 +231,12 @@ class PPOTrainer(BaseRLTrainer):
                 values,
                 actions,
                 actions_log_probs,
-                recurrent_hidden_states
+                recurrent_hidden_states,
+                prev_direct_map
             ) = self.actor_critic.act(
                 step_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
+                rollouts.prev_direct_map[rollouts.step] if self.use_direct_map else None,
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step],
             )
@@ -242,6 +247,9 @@ class PPOTrainer(BaseRLTrainer):
 
         outputs = self.envs.step([a[0].item() for a in actions])
         observations, rewards, dones, infos = [list(x) for x in zip(*outputs)]
+        # f = open("debug.txt", "a")
+        # f.write(f"observations in collect_rollout_step:\n{observations[0]['direct_map']}\n")
+        # f.close()
         logging.debug('Reward: {}'.format(rewards[0]))
 
         env_time += time.time() - t_step_env
@@ -291,10 +299,13 @@ class PPOTrainer(BaseRLTrainer):
             last_observation = {
                 k: v[-1] for k, v in rollouts.observations.items()
             }
-
+            f = open("debug.txt", "a")
+            f.write(f"before get_value in ppo_trainer._update_agent\n")
+            f.close()
             next_value = self.actor_critic.get_value(
                 last_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
+                rollouts.prev_direct_map[rollouts.step] if self.use_direct_map else None,
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step]
             ).detach()
@@ -303,7 +314,9 @@ class PPOTrainer(BaseRLTrainer):
             next_value, ppo_cfg.use_gae, ppo_cfg.gamma, ppo_cfg.tau
         )
 
-        value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, direct_map_loss = self.agent.update(
+            rollouts
+        )
 
         rollouts.after_update()
 
@@ -312,6 +325,7 @@ class PPOTrainer(BaseRLTrainer):
             value_loss,
             action_loss,
             dist_entropy,
+            direct_map_loss,
         )
 
     def train(self) -> None:
