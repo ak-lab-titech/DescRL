@@ -120,7 +120,8 @@ def requeue_job():
 
 
 def get_ifname():
-    return ifcfg.default_interface()["device"]
+    # return ifcfg.default_interface()["device"]
+    return "ib0"
 
 
 def init_distrib_slurm(
@@ -139,6 +140,11 @@ def init_distrib_slurm(
         torch.distributed.is_available()
     ), "torch.distributed must be available"
 
+    rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
+    os.environ["NODE_RANK"]=str(rank//4)
+    os.environ["LOCAL_RANK"]=str(rank%4)
+    os.environ["WORLD_SIZE"] = str(4)
+
     if "GLOO_SOCKET_IFNAME" not in os.environ:
         os.environ["GLOO_SOCKET_IFNAME"] = get_ifname()
 
@@ -152,7 +158,8 @@ def init_distrib_slurm(
     if os.environ.get("LOCAL_RANK", None) is not None:
         print("LOCAL_RANK")
         local_rank = int(os.environ["LOCAL_RANK"])
-        world_rank = int(os.environ["RANK"])
+        # world_rank = int(os.environ["RANK"])
+        world_rank = int(os.environ["LOCAL_RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
     # Else parse from SLURM is using SLURM
     elif os.environ.get("SLURM_JOBID", None) is not None:
@@ -167,12 +174,12 @@ def init_distrib_slurm(
         world_rank = 0
         world_size = 1
     
-    world_size = 1
+    # world_size = 1
     print(f"local_rank: {local_rank}, world_rank: {world_rank}, world_size: {world_size}")
     tcp_store = distrib.TCPStore(
         master_addr, master_port, world_size, world_rank == 0
     )
-    print(f"tcp_store: {tcp_store}")
+    print(f"tcp_store: {tcp_store}, backend: {backend}")
     distrib.init_process_group(
         backend, store=tcp_store, rank=world_rank, world_size=world_size
     )

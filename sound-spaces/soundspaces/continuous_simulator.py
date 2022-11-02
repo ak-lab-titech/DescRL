@@ -123,7 +123,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         import pprint
         for i in range(self._audio_sensor_num):
             acoustics_config = habitat_sim.sensor.RLRAudioPropagationConfiguration()
-            acoustics_config.threadCount = 3
+            acoustics_config.threadCount = 1
             acoustics_config.sampleRate = self.config.AUDIO.RIR_SAMPLING_RATE
             acoustics_config.irTime = self.config.AUDIO.IR_TIME
             acoustics_config.indirectRayCount = 500

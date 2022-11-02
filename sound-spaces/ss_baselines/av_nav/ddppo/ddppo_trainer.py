@@ -63,6 +63,7 @@ class DDPPOTrainer(PPOTrainer):
         Returns:
             None
         """
+        time.sleep(5)
         logger.add_filehandler(self.config.LOG_FILE)
 
         # Setup heuristic stop criterion if applicable
