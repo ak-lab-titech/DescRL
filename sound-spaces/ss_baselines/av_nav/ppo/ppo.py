@@ -87,9 +87,9 @@ class PPO(nn.Module):
                 ) = sample
 
                 # Reshape to do in a single forward pass for all steps
-                f = open("debug.txt", "a")
-                f.write("before evaluate_actions in ppo.update\n")
-                f.close()
+                # f = open("debug.txt", "a")
+                # f.write("before evaluate_actions in ppo.update\n")
+                # f.close()
 
                 (
                     values,

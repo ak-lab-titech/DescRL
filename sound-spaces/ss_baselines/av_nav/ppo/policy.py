@@ -43,9 +43,9 @@ class Policy(nn.Module):
         masks,
         deterministic=False,
     ):
-        f = open("debug.txt", "a")
-        f.write("act act act act act act act act act act act\n")
-        f.close()
+        # f = open("debug.txt", "a")
+        # f.write("act act act act act act act act act act act\n")
+        # f.close()
         features, rnn_hidden_states, direct_map = self.net(
             observations, rnn_hidden_states, prev_direct_map, prev_actions, masks
         )
@@ -67,9 +67,9 @@ class Policy(nn.Module):
         return value, action, action_log_probs, rnn_hidden_states, direct_map
 
     def get_value(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks):
-        f = open("debug.txt", "a")
-        f.write("get_value get_value get_value get_value get_value get_value get_value get_value get_value get_value get_value\n")
-        f.close()
+        # f = open("debug.txt", "a")
+        # f.write("get_value get_value get_value get_value get_value get_value get_value get_value get_value get_value get_value\n")
+        # f.close()
         features, _, _ = self.net(
             observations, rnn_hidden_states, prev_direct_map, prev_actions, masks
         )
@@ -78,9 +78,9 @@ class Policy(nn.Module):
     def evaluate_actions(
         self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, action
     ):
-        f = open("debug.txt", "a")
-        f.write("evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions\n")
-        f.close()
+        # f = open("debug.txt", "a")
+        # f.write("evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions\n")
+        # f.close()
         features, rnn_hidden_states, direct_map = self.net(
             observations, rnn_hidden_states, prev_direct_map, prev_actions, masks
         )
@@ -240,9 +240,9 @@ class AudioNavBaselineNet(Net):
                 direct_map = self.direct_map_encoder(prev_direct_map, x[1], prev_actions)
                 x.append(direct_map)
             elif self._audiogoal:
-                f = open("debug.txt", "a")
-                f.write(f"--------- direct_map in forward ----------:\nhead:\n{observations['direct_map'][:5]}\ntail:{observations['direct_map'][-5:]}\n")
-                f.close()
+                # f = open("debug.txt", "a")
+                # f.write(f"--------- direct_map in forward ----------:\nhead:\n{observations['direct_map'][:5]}\ntail:{observations['direct_map'][-5:]}\n")
+                # f.close()
 
                 direct_map = self.direct_map_encoder(prev_direct_map, x[0], prev_actions)
                 x.append(direct_map)

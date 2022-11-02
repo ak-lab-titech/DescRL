@@ -299,9 +299,9 @@ class PPOTrainer(BaseRLTrainer):
             last_observation = {
                 k: v[-1] for k, v in rollouts.observations.items()
             }
-            f = open("debug.txt", "a")
-            f.write(f"before get_value in ppo_trainer._update_agent\n")
-            f.close()
+            # f = open("debug.txt", "a")
+            # f.write(f"before get_value in ppo_trainer._update_agent\n")
+            # f.close()
             next_value = self.actor_critic.get_value(
                 last_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],

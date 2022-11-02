@@ -283,9 +283,9 @@ class DDPPOTrainer(PPOTrainer):
                 count_steps_delta = 0
                 self.agent.eval()
                 for step in range(ppo_cfg.num_steps):
-                    f = open("debug.txt", "a")
-                    f.write(f"before _collect_rollout_step in ddppo_trainer.train (step: {step})\n")
-                    f.close()
+                    # f = open("debug.txt", "a")
+                    # f.write(f"before _collect_rollout_step in ddppo_trainer.train (step: {step})\n")
+                    # f.close()
                     (
                         delta_pth_time,
                         delta_env_time,
