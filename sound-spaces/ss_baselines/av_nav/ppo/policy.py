@@ -241,13 +241,9 @@ class AudioNavBaselineNet(Net):
                 x.append(direct_map)
             elif self._audiogoal:
                 # f = open("debug.txt", "a")
-<<<<<<< HEAD
-                # f.write(f"--------- direct_map in forward ----------:\nhead:\n{observations['direct_map'][:5]}\ntail:{observations['direct_map'][-5:]}\n")
-=======
                 # # f.write(f"--------- direct_map in forward ----------:\nhead:\n{observations['direct_map'][:5]}\ntail:{observations['direct_map'][-5:]}\n")
                 # f.write(f"------- direct_map in forward -------\n{observations['direct_map']}\n")
                 # f.write(f"------ prev_direct_map in forward ------\n{prev_direct_map}\n")
->>>>>>> origin/feature/direct-map
                 # f.close()
 
                 direct_map = self.direct_map_encoder(prev_direct_map, x[0], prev_actions)
