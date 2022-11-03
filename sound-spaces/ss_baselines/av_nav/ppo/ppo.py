@@ -132,9 +132,18 @@ class PPO(nn.Module):
                     )
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
-                
+
+
                 if predict_direct_map is not None:
                     direct_map_loss = 0.5 * (obs_batch["direct_map"] - predict_direct_map).pow(2).mean()
+
+                # f = open("debug.txt", "a")
+                # f.write(f"------------------------------------------ calc direct map loss -------------------------------------------------\n")
+                # f.write(f"obs_batch:\nshape: {obs_batch['direct_map'].shape}\nhead:\n{obs_batch['direct_map'][:5]}\n")
+                # f.write(f"predict_direct_map:\nshape: {predict_direct_map.shape}\nhead:\n{predict_direct_map[:5]}\n")
+                # f.write(f"loss: {direct_map_loss}\n")
+                # f.close()
+
 
                 self.optimizer.zero_grad()
                 if predict_direct_map is not None:
@@ -158,6 +167,17 @@ class PPO(nn.Module):
                 self.before_step()
                 self.optimizer.step()
                 self.after_step()
+
+
+                # self.actor_critic.net.watch_grad()
+
+                # f = open("debug.txt", "a")
+                # f.write(f"obs_batch.key(): {obs_batch.keys()}\n")
+                # f.close()
+                # f.write(f"recurrent_hidden_states_batch: {recurrent_hidden_states_batch.grad}\n")
+                # f.write(f"prev_direct_map: {prev_direct_map_batch.grad}\n")
+                # f.write(f"prev_direct_map: {prev_direct_map_batch}\n")
+                # f.close()
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()

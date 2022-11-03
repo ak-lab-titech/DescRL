@@ -232,7 +232,7 @@ class PPOTrainer(BaseRLTrainer):
                 actions,
                 actions_log_probs,
                 recurrent_hidden_states,
-                prev_direct_map
+                predict_direct_map
             ) = self.actor_critic.act(
                 step_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
@@ -285,6 +285,7 @@ class PPOTrainer(BaseRLTrainer):
             actions,
             actions_log_probs,
             values,
+            predict_direct_map,
             rewards.to(device=self.device),
             masks.to(device=self.device),
         )

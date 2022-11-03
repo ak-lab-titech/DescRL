@@ -241,15 +241,26 @@ class AudioNavBaselineNet(Net):
                 x.append(direct_map)
             elif self._audiogoal:
                 # f = open("debug.txt", "a")
+<<<<<<< HEAD
                 # f.write(f"--------- direct_map in forward ----------:\nhead:\n{observations['direct_map'][:5]}\ntail:{observations['direct_map'][-5:]}\n")
+=======
+                # # f.write(f"--------- direct_map in forward ----------:\nhead:\n{observations['direct_map'][:5]}\ntail:{observations['direct_map'][-5:]}\n")
+                # f.write(f"------- direct_map in forward -------\n{observations['direct_map']}\n")
+                # f.write(f"------ prev_direct_map in forward ------\n{prev_direct_map}\n")
+>>>>>>> origin/feature/direct-map
                 # f.close()
 
                 direct_map = self.direct_map_encoder(prev_direct_map, x[0], prev_actions)
+                # direct_map = self.direct_map_encoder(prev_direct_map, x[0], prev_actions)
                 x.append(direct_map)
             else:
                 direct_map = None
         else:
             direct_map = None
+        
+        # f = open("debug.txt", "a")
+        # f.write(f"------- predict next direct_map in forward ------\n{direct_map}\n")
+        # f.close()
 
         x1 = torch.cat(x, dim=1)
         x2, rnn_hidden_states1 = self.state_encoder(x1, rnn_hidden_states, masks)
@@ -262,3 +273,17 @@ class AudioNavBaselineNet(Net):
             print('mask', torch.isnan(masks).any().item())
             assert True
         return x2, rnn_hidden_states1, direct_map
+    
+    def watch_grad(self):
+        f = open("debug.txt", "a")
+        f.write(f"---------------- watch_grad -------------------\n")
+        f.write(f"audio_encoder_{0}: {self.audio_encoder.cnn[0].weight.grad}\n")
+        f.write(f"audio_encoder_{2}: {self.audio_encoder.cnn[2].weight.grad}\n")
+        f.write(f"audio_encoder_{4}: {self.audio_encoder.cnn[4].weight.grad}\n")
+        f.write(f"audio_encoder_{6}: {self.audio_encoder.cnn[6].weight.grad}\n")
+
+        f.write(f"direct_map_encoder_{0}: {self.direct_map_encoder.mlp[0].weight.grad}\n")
+        f.write(f"direct_map_encoder_{2}: {self.direct_map_encoder.mlp[2].weight.grad}\n")
+        f.write(f"direct_map_encoder_{4}: {self.direct_map_encoder.mlp[4].weight.grad}\n")
+        f.write(f"direct_map_encoder_{6}: {self.direct_map_encoder.mlp[6].weight.grad}\n")
+        f.close()

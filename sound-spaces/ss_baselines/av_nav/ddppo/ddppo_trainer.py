@@ -55,6 +55,7 @@ class DDPPOTrainer(PPOTrainer):
         super().__init__(config)
 
         self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.use_gt_direct_map = self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP
 
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
         r"""Sets up actor critic and agent for DD-PPO.
@@ -102,6 +103,7 @@ class DDPPOTrainer(PPOTrainer):
             use_normalized_advantage=ppo_cfg.use_normalized_advantage,
         )
         self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.use_gt_direct_map = self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP
 
     def train(self) -> None:
         r"""Main method for DD-PPO.
@@ -181,13 +183,14 @@ class DDPPOTrainer(PPOTrainer):
             self.action_space,
             ppo_cfg.hidden_size,
             self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+            self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP,
             num_recurrent_layers=self.actor_critic.net.num_recurrent_layers,
         )
         rollouts.to(self.device)
 
         for sensor in rollouts.observations:
             rollouts.observations[sensor][0].copy_(batch[sensor])
-            if self.use_direct_map:
+            if self.use_direct_map and self.use_gt_direct_map:
                 rollouts.prev_direct_map[1].copy_(batch["direct_map"])
 
         # batch and observations may contain shared PyTorch CUDA

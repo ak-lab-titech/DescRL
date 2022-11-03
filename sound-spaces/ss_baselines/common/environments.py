@@ -56,7 +56,10 @@ class AudioNavRLEnv(habitat.RLEnv):
         # self.episode_start_time = time.time()
 
     def reset(self):
-        # f = open("debug.txt", mos
+        # f = open("debug.txt", mode="a")
+        # f.write("==================================================== RESET AudioNavRLEnv ===================================================================\n")
+        # f.close()
+
         # f = open("debug.txt", "a")
         # f.write(f"Reset in AudioNavRL: {time.time() - self.episode_start_time} [s]\n")
         # f.close()
