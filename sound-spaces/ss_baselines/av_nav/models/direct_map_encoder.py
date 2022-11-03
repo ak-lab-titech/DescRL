@@ -54,9 +54,9 @@ class DirectMapEncoder(nn.Module):
 
         inputs.append(prev_actions_onehot)
 
-        f = open("debug.txt", "a")
-        f.write(f"-------------- prev_direct_map in DirectMapEncoder forward ---------------\nhead:\n{prev_direct_map[:5]}\ntail:\n{prev_direct_map[-5:]}\n")
-        f.close()
+        # f = open("debug.txt", "a")
+        # f.write(f"-------------- prev_direct_map in DirectMapEncoder forward ---------------\nhead:\n{prev_direct_map[:5]}\ntail:\n{prev_direct_map[-5:]}\n")
+        # f.close()
         inputs.append(prev_direct_map)
 
         inputs = torch.cat(inputs, dim=1)

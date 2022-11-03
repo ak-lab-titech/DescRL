@@ -24,6 +24,7 @@ class RolloutStorage:
         action_space,
         recurrent_hidden_state_size,
         direct_map_size,
+        use_gt_direct_map,
         num_recurrent_layers=1,
     ):
         self.observations = {}
@@ -74,6 +75,8 @@ class RolloutStorage:
         self.num_steps = num_steps
         self.step = 0
 
+        self.use_gt_direct_map = use_gt_direct_map
+
     def to(self, device):
         for sensor in self.observations:
             self.observations[sensor] = self.observations[sensor].to(device)
@@ -98,6 +101,7 @@ class RolloutStorage:
         actions,
         action_log_probs,
         value_preds,
+        predict_direct_map,
         rewards,
         masks,
     ):
@@ -112,7 +116,13 @@ class RolloutStorage:
         # f.write(f"actions type: {type(actions)}\n")
         # f.close()
 
-        if self.use_direct_map:
+        if self.use_direct_map and not self.use_gt_direct_map:
+            for i in range(len(actions)):
+                if actions[i].item() == 0:
+                    self.prev_direct_map[self.step + 1][i].copy_(torch.zeros(self.direct_map_size))
+                else:
+                    self.prev_direct_map[self.step + 1][i].copy_(predict_direct_map[i].detach()) # detachはあってもなくてもかわらなそう？
+        elif self.use_direct_map:
             for i in range(len(actions)):
                 # f = open("debug.txt", "a")
                 # f.write(f"action: {actions[i]}\n")
@@ -149,7 +159,9 @@ class RolloutStorage:
 
         self.recurrent_hidden_states[0].copy_(self.recurrent_hidden_states[-1])
 
-        if self.use_direct_map:
+        if self.use_direct_map and self.use_gt_direct_map:
+            self.prev_direct_map[0].copy_(self.prev_direct_map[-2])
+        elif self.use_direct_map:
             self.prev_direct_map[0].copy_(self.prev_direct_map[-2])
             self.prev_direct_map[1].copy_(self.prev_direct_map[-1])
 

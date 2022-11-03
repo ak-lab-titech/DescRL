@@ -56,9 +56,9 @@ class AudioNavRLEnv(habitat.RLEnv):
         # self.episode_start_time = time.time()
 
     def reset(self):
-        f = open("debug.txt", mode="a")
-        f.write("==================================================== RESET AudioNavRLEnv ===================================================================\n")
-        f.close()
+        # f = open("debug.txt", mode="a")
+        # f.write("==================================================== RESET AudioNavRLEnv ===================================================================\n")
+        # f.close()
 
         # f = open("debug.txt", "a")
         # f.write(f"Reset in AudioNavRL: {time.time() - self.episode_start_time} [s]\n")
@@ -85,10 +85,10 @@ class AudioNavRLEnv(habitat.RLEnv):
         return observations
 
     def step(self, *args, **kwargs):
-        f = open("debug.txt", "a")
-        f.write("============================================== STEP AudioNavRL =======================================================\n")
-        f.write(f"Action: {kwargs['action']}\n")
-        f.close()
+        # f = open("debug.txt", "a")
+        # f.write("============================================== STEP AudioNavRL =======================================================\n")
+        # f.write(f"Action: {kwargs['action']}\n")
+        # f.close()
         # s = time.time()
         self._previous_action = kwargs["action"]
         step_return =  super().step(*args, **kwargs)
