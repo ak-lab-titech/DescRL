@@ -8,7 +8,11 @@
 
 from collections import defaultdict
 
+import numpy as np
 import torch
+
+
+np.random.seed(0)
 
 
 class RolloutStorage:
@@ -25,6 +29,7 @@ class RolloutStorage:
         recurrent_hidden_state_size,
         direct_map_size,
         use_gt_direct_map,
+        dropout_rate,
         num_recurrent_layers=1,
     ):
         self.observations = {}
@@ -76,6 +81,7 @@ class RolloutStorage:
         self.step = 0
 
         self.use_gt_direct_map = use_gt_direct_map
+        self.dropout_rate = dropout_rate
 
     def to(self, device):
         for sensor in self.observations:
@@ -113,19 +119,26 @@ class RolloutStorage:
         self.recurrent_hidden_states[self.step + 1].copy_(
             recurrent_hidden_states
         )
-
+        
         if self.use_direct_map and not self.use_gt_direct_map:
             for i in range(len(dones)):
                 if dones[i]:
                     self.prev_direct_map[self.step + 1][i].copy_(torch.zeros(self.direct_map_size))
                 else:
                     self.prev_direct_map[self.step + 1][i].copy_(predict_direct_map[i].detach()) # detachはあってもなくてもかわらなそう？
+                for j in range(self.direct_map_size):
+                    if np.random.rand() < self.dropout_rate:
+                        self.prev_direct_map[self.step + 1][i][j] = 0.0
         elif self.use_direct_map:
             for i in range(len(dones)):
                 if dones[i]:
                     self.prev_direct_map[self.step + 1][i].copy_(torch.zeros(self.direct_map_size))
                 self.prev_direct_map[self.step + 2][i].copy_(observations["direct_map"][i])
-    
+                for j in range(self.direct_map_size):
+                    if np.random.rand() < self.dropout_rate:
+                        self.prev_direct_map[self.step + 1][i][j] = 0.0
+
+
         self.actions[self.step].copy_(actions)
         self.prev_actions[self.step + 1].copy_(actions)
         self.action_log_probs[self.step].copy_(action_log_probs)
