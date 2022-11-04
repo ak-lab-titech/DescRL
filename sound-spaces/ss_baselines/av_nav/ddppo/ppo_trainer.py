@@ -288,6 +288,7 @@ class PPOTrainer(BaseRLTrainer):
             predict_direct_map,
             rewards.to(device=self.device),
             masks.to(device=self.device),
+            dones,
         )
 
         pth_time += time.time() - t_update_stats

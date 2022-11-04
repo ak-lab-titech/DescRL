@@ -104,6 +104,7 @@ class RolloutStorage:
         predict_direct_map,
         rewards,
         masks,
+        dones,
     ):
         for sensor in observations:
             self.observations[sensor][self.step + 1].copy_(
@@ -112,25 +113,16 @@ class RolloutStorage:
         self.recurrent_hidden_states[self.step + 1].copy_(
             recurrent_hidden_states
         )
-        # f = open("debug.txt", "a")
-        # f.write(f"actions type: {type(actions)}\n")
-        # f.close()
 
         if self.use_direct_map and not self.use_gt_direct_map:
-            for i in range(len(actions)):
-                if actions[i].item() == 0:
+            for i in range(len(dones)):
+                if dones[i]:
                     self.prev_direct_map[self.step + 1][i].copy_(torch.zeros(self.direct_map_size))
                 else:
                     self.prev_direct_map[self.step + 1][i].copy_(predict_direct_map[i].detach()) # detachはあってもなくてもかわらなそう？
         elif self.use_direct_map:
-            for i in range(len(actions)):
-                # f = open("debug.txt", "a")
-                # f.write(f"action: {actions[i]}\n")
-                # f.write(f"action type: {type(actions[i])}\n")
-                # f.write(f"action item: {actions[i].item()}\n")
-                # f.write(f"observations direct_map: {observations['direct_map'][i]} (self.step: {self.step})\n")
-                # f.close()
-                if actions[i].item() == 0:
+            for i in range(len(dones)):
+                if dones[i]:
                     self.prev_direct_map[self.step + 1][i].copy_(torch.zeros(self.direct_map_size))
                 self.prev_direct_map[self.step + 2][i].copy_(observations["direct_map"][i])
     
