@@ -8,3 +8,7 @@ VISUALIZATION_OPTION: []
 EVAL:
   SPLIT: "test_telephone_bell"
   USE_CKPT_CONFIG: True
+
+RL:
+  PPO:
+    direct_map_loss_coef: 0

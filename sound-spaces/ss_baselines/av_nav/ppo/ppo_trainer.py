@@ -53,6 +53,7 @@ class PPOTrainer(BaseRLTrainer):
         self.actor_critic = None
         self.agent = None
         self.envs = None
+        self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
         self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
 
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
@@ -71,6 +72,7 @@ class PPOTrainer(BaseRLTrainer):
         self.actor_critic = AudioNavBaselinePolicy(
             observation_space=observation_space,
             action_space=self.envs.action_spaces[0],
+            direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
             hidden_size=ppo_cfg.hidden_size,
             goal_sensor_uuid=self.config.TASK_CONFIG.TASK.GOAL_SENSOR_UUID,
             extra_rgb=self.config.EXTRA_RGB
@@ -84,12 +86,14 @@ class PPOTrainer(BaseRLTrainer):
             num_mini_batch=ppo_cfg.num_mini_batch,
             value_loss_coef=ppo_cfg.value_loss_coef,
             entropy_coef=ppo_cfg.entropy_coef,
+            direct_map_loss_coef=ppo_cfg.direct_map_loss_coef,
             lr=ppo_cfg.lr,
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
         )
 
-        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR is not None)
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
 
     def save_checkpoint(self, file_name: str) -> None:
         r"""Save checkpoint with specified name.
@@ -560,6 +564,11 @@ class PPOTrainer(BaseRLTrainer):
             observations, rewards, dones, infos = [
                 list(x) for x in zip(*outputs)
             ]
+
+            for i in range(len(dones)):
+                if dones[i] and self.use_direct_map:
+                    predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
+
             for i in range(self.envs.num_envs):
                 if len(self.config.VIDEO_OPTION) > 0:
                     if config.TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE and 'intermediate' in observations[i]:
