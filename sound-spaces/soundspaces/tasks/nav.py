@@ -119,6 +119,8 @@ class DirectMap(Sensor):
         """
         self._sim = sim
         self.angle_resolution = sim.config.DIRECT_MAP_SIZE
+        self.distance_trans_method = sim.config.DISTANCE_TRANS_METHOD
+        self.clipping = sim.config.CLIPPING
         self.euclid_or_geodesic = sim.config.DIRECT_MAP_DISTANCE
         super().__init__(config=config)
 
@@ -196,21 +198,34 @@ class DirectMap(Sensor):
 
 
         for i in range(len(direct_map)):
-            if direct_map[i] == 0:
-                direct_map[i] = np.finfo(np.float32).max
+            if self.clipping:
+                if direct_map[i] == 0:
+                    direct_map[i] = 1
+                else:
+                    d = self.transform_distance(direct_map[i])
+                    direct_map[i] = max(min(d, 1), 0)
             else:
-                d = 1 / direct_map[i]
-                # d = 1 / (direct_map[i])**2
-                # d = max(np.log10(1/direct_map[i]) + 1, 0)
-                direct_map[i] = d
+                if direct_map[i] == 0:
+                    direct_map[i] = np.finfo(np.float32).max
+                else:
+                    d = transform_distance(direct_map[i])
+                    direct_map[i] = d
 
-            # if direct_map[i] == 0:
-            #     direct_map[i] = 1
-            # else:
-            #     d = 1 / direct_map[i]
-            #     direct_map[i] = min(d, 1)
+            # clipping
 
         return direct_map
+    
+    def transform_distance(self, d):
+        if self.distance_trans_method == "1d":
+            td = 1 / d
+        elif self.distance_trans_method == "1dd":
+            td = 1 / (d)**2
+        elif self.distance_trans_method == "log10":
+            td = max(np.log10(1 / d) + 1, 0)
+        else:
+            raise Exception(f"distance_trans_method must be '1d', '1dd' or 'log10', not {self.distance_trans_method}")
+        return td
+
 
     def calc_distance(
         self,
