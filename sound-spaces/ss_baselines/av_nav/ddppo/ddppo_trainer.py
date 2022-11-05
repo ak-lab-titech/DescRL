@@ -80,6 +80,7 @@ class DDPPOTrainer(PPOTrainer):
             hidden_size=ppo_cfg.hidden_size,
             goal_sensor_uuid=self.config.TASK_CONFIG.TASK.GOAL_SENSOR_UUID,
             extra_rgb=self.config.EXTRA_RGB,
+            dm_use_visual=self.config.TASK_CONFIG.SIMULATOR.DM_USE_VISUAL,
             direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
         )
 

@@ -199,11 +199,16 @@ class DirectMap(Sensor):
             if direct_map[i] == 0:
                 direct_map[i] = np.finfo(np.float32).max
             else:
-                direct_map[i] = 1 / direct_map[i]
+                d = 1 / direct_map[i]
+                # d = 1 / (direct_map[i])**2
+                # d = max(np.log10(1/direct_map[i]) + 1, 0)
+                direct_map[i] = d
 
-        # f = open("debug.txt", "a")
-        # f.write(f"direct_map in DirectMap: {direct_map}\n")
-        # f.close()
+            # if direct_map[i] == 0:
+            #     direct_map[i] = 1
+            # else:
+            #     d = 1 / direct_map[i]
+            #     direct_map[i] = min(d, 1)
 
         return direct_map
 
@@ -243,20 +248,10 @@ class DirectMap(Sensor):
 
         vector = [position[0] - agent_position[0], position[2] - agent_position[2]] # [x, z]
         vec_angle = self.calc_angle_from_2d_vector(vector)
-
         angle = vec_angle - agent_angle
-
-        # f = open("debug.txt", "a")
-        # f.write(f"-- agent_angle: {agent_angle}, vec_angle: {vec_angle}\n")
-        # f.close()
 
         if angle < 0:
             angle += 360
-        
-        # f = open("debug.txt", "a")
-        # f.write(f"-- fixed angle: {angle}\n")
-        # f.close()
-
         return angle
 
     
@@ -277,18 +272,11 @@ class DirectMap(Sensor):
         if vec[1] < 0:
             angle = 2*np.pi - angle
         
-        
         angle = angle * 180 / np.pi
-
-        # f = open("debug.txt", "a")
-        # f.write(f"--arccos: {angle}\n")
 
         angle = 270 - angle
         if angle < 0:
             angle += 360
-        
-        # f.write(f"-- angle from [0, -1]: {angle}\n")
-        # f.close()
 
         return angle 
 

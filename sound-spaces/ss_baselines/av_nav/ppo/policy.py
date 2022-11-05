@@ -111,6 +111,7 @@ class AudioNavBaselinePolicy(Policy):
         action_space,
         goal_sensor_uuid,
         direct_map_size,
+        dm_use_visual,
         hidden_size=512,
         extra_rgb=False
     ):
@@ -121,6 +122,7 @@ class AudioNavBaselinePolicy(Policy):
                 goal_sensor_uuid=goal_sensor_uuid,
                 direct_map_size=direct_map_size,
                 action_num=action_space.n,
+                dm_use_visual=dm_use_visual,
                 extra_rgb=extra_rgb,
             ),
             action_space.n,
@@ -153,7 +155,16 @@ class AudioNavBaselineNet(Net):
     goal vector with CNN's output and passes that through RNN.
     """
 
-    def __init__(self, observation_space, hidden_size, goal_sensor_uuid, direct_map_size, action_num, extra_rgb=False):
+    def __init__(
+        self,
+        observation_space,
+        hidden_size,
+        goal_sensor_uuid,
+        direct_map_size,
+        action_num,
+        dm_use_visual,
+        extra_rgb=False
+    ):
         super().__init__()
         self.goal_sensor_uuid = goal_sensor_uuid
         self._hidden_size = hidden_size
@@ -161,6 +172,7 @@ class AudioNavBaselineNet(Net):
         self._pointgoal = False
         self._n_pointgoal = 0
         self.direct_map_size = direct_map_size
+        self.dm_use_visual = dm_use_visual
 
         if DUAL_GOAL_DELIMITER in self.goal_sensor_uuid:
             goal1_uuid, goal2_uuid = self.goal_sensor_uuid.split(DUAL_GOAL_DELIMITER)
@@ -182,8 +194,13 @@ class AudioNavBaselineNet(Net):
             self.audio_encoder = AudioCNN(observation_space, hidden_size, audiogoal_sensor)
         
         if direct_map_size is not None:
+            dm_input_size = (
+                hidden_size + action_num + direct_map_size
+            ) + (
+                hidden_size if self.dm_use_visual else 0
+            )
             self.direct_map_encoder = DirectMapEncoder(
-                input_size=hidden_size + action_num + direct_map_size,
+                input_size=dm_input_size,
                 output_size=direct_map_size,
                 action_num=action_num,
             )
@@ -237,7 +254,10 @@ class AudioNavBaselineNet(Net):
         
         if self.direct_map_size is not None:
             if self._pointgoal and self._audiogoal:
-                direct_map = self.direct_map_encoder(prev_direct_map, x[1], prev_actions)
+                if self.dm_use_visual:
+                    direct_map = self.direct_map_encoder(prev_direct_map, x[1], x[2], prev_actions)
+                else:
+                    direct_map = self.direct_map_encoder(prev_direct_map, x[1], None, prev_actions)
                 x.append(direct_map)
             elif self._audiogoal:
                 # f = open("debug.txt", "a")
@@ -245,9 +265,10 @@ class AudioNavBaselineNet(Net):
                 # f.write(f"------- direct_map in forward -------\n{observations['direct_map']}\n")
                 # f.write(f"------ prev_direct_map in forward ------\n{prev_direct_map}\n")
                 # f.close()
-
-                direct_map = self.direct_map_encoder(prev_direct_map, x[0], prev_actions)
-                # direct_map = self.direct_map_encoder(prev_direct_map, x[0], prev_actions)
+                if self.dm_use_visual:
+                    direct_map = self.direct_map_encoder(prev_direct_map, x[0], x[1], prev_actions)
+                else:
+                    direct_map = self.direct_map_encoder(prev_direct_map, x[0], None, prev_actions)
                 x.append(direct_map)
             else:
                 direct_map = None

@@ -93,6 +93,7 @@ class PPOTrainer(BaseRLTrainer):
             action_space=self.envs.action_spaces[0],
             hidden_size=ppo_cfg.hidden_size,
             goal_sensor_uuid=self.config.TASK_CONFIG.TASK.GOAL_SENSOR_UUID,
+            dm_use_visual=self.config.TASK_CONFIG.SIMULATOR.DM_USE_VISUAL,
             extra_rgb=self.config.EXTRA_RGB
         )
 
@@ -116,7 +117,7 @@ class PPOTrainer(BaseRLTrainer):
 
         self.actor_critic.to(self.device)
 
-        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR is not None)
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
 
     @staticmethod
     def search_dict(ckpt_dict, encoder_name):
