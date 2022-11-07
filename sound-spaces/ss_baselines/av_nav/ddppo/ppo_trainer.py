@@ -94,6 +94,7 @@ class PPOTrainer(BaseRLTrainer):
             hidden_size=ppo_cfg.hidden_size,
             goal_sensor_uuid=self.config.TASK_CONFIG.TASK.GOAL_SENSOR_UUID,
             dm_use_visual=self.config.TASK_CONFIG.SIMULATOR.DM_USE_VISUAL,
+            dm_use_gru=self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU,
             extra_rgb=self.config.EXTRA_RGB
         )
 
@@ -233,11 +234,13 @@ class PPOTrainer(BaseRLTrainer):
                 actions,
                 actions_log_probs,
                 recurrent_hidden_states,
-                predict_direct_map
+                predict_direct_map,
+                dm_hidden_states
             ) = self.actor_critic.act(
                 step_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
                 rollouts.prev_direct_map[rollouts.step] if self.use_direct_map else None,
+                rollouts.dm_hidden_states[rollouts.step],
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step],
             )
@@ -287,6 +290,7 @@ class PPOTrainer(BaseRLTrainer):
             actions_log_probs,
             values,
             predict_direct_map,
+            dm_hidden_states,
             rewards.to(device=self.device),
             masks.to(device=self.device),
             dones,
@@ -309,6 +313,7 @@ class PPOTrainer(BaseRLTrainer):
                 last_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
                 rollouts.prev_direct_map[rollouts.step] if self.use_direct_map else None,
+                rollouts.dm_hidden_states[rollouts.step],
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step]
             ).detach()

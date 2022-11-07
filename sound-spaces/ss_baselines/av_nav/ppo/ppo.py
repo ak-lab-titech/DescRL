@@ -77,6 +77,7 @@ class PPO(nn.Module):
                     obs_batch,
                     recurrent_hidden_states_batch,
                     prev_direct_map_batch,
+                    dm_hidden_states_batch,
                     actions_batch,
                     prev_actions_batch,
                     value_preds_batch,
@@ -97,10 +98,12 @@ class PPO(nn.Module):
                     dist_entropy,
                     _,
                     predict_direct_map,
+                    dm_hidden_states
                 ) = self.actor_critic.evaluate_actions(
                     obs_batch,
                     recurrent_hidden_states_batch,
                     prev_direct_map_batch,
+                    dm_hidden_states_batch,
                     prev_actions_batch,
                     masks_batch,
                     actions_batch,

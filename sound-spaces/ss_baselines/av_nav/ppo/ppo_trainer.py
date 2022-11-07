@@ -55,6 +55,7 @@ class PPOTrainer(BaseRLTrainer):
         self.envs = None
         self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
         self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.dm_use_gru = self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU
 
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
         r"""Sets up actor critic and agent for PPO.
@@ -76,6 +77,7 @@ class PPOTrainer(BaseRLTrainer):
             hidden_size=ppo_cfg.hidden_size,
             goal_sensor_uuid=self.config.TASK_CONFIG.TASK.GOAL_SENSOR_UUID,
             dm_use_visual=self.config.TASK_CONFIG.SIMULATOR.DM_USE_VISUAL,
+            dm_use_gru=self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU,
             extra_rgb=self.config.EXTRA_RGB,
         )
         self.actor_critic.to(self.device)
@@ -95,6 +97,7 @@ class PPOTrainer(BaseRLTrainer):
 
         self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
         self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
+        self.dm_use_gru = self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU
 
     def save_checkpoint(self, file_name: str) -> None:
         r"""Save checkpoint with specified name.
@@ -515,6 +518,12 @@ class PPOTrainer(BaseRLTrainer):
             )
         else:
             predict_direct_map = None
+        test_dm_hidden_states = torch.zeros(
+            self.actor_critic.net.num_recurrent_layers,
+            self.config.NUM_PROCESSES,
+            ppo_cfg.hidden_size,
+            device=self.device,
+        )
         prev_actions = torch.zeros(
             self.config.NUM_PROCESSES, 1, device=self.device, dtype=torch.long
         )
@@ -540,10 +549,11 @@ class PPOTrainer(BaseRLTrainer):
             current_episodes = self.envs.current_episodes()
 
             with torch.no_grad():
-                _, actions, _, test_recurrent_hidden_states, predict_direct_map = self.actor_critic.act(
+                _, actions, _, test_recurrent_hidden_states, predict_direct_map, dm_hidden_states = self.actor_critic.act(
                     batch,
                     test_recurrent_hidden_states,
                     predict_direct_map,
+                    test_dm_hidden_states,
                     prev_actions,
                     not_done_masks,
                     deterministic=False
@@ -552,6 +562,9 @@ class PPOTrainer(BaseRLTrainer):
                 if self.use_direct_map:
                     # predict_direct_map.copy_(batch["direct_map"]) # こっちを選択するとGTをいれることになる
                     predict_direct_map.copy_(predict_direct_map)
+                    
+                    if self.dm_use_gru:
+                        test_dm_hidden_states.copy_(dm_hidden_states)
 
                 prev_actions.copy_(actions)
 

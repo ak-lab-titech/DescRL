@@ -208,10 +208,8 @@ class DirectMap(Sensor):
                 if direct_map[i] == 0:
                     direct_map[i] = np.finfo(np.float32).max
                 else:
-                    d = transform_distance(direct_map[i])
+                    d = self.transform_distance(direct_map[i])
                     direct_map[i] = d
-
-            # clipping
 
         return direct_map
     

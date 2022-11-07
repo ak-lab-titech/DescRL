@@ -58,6 +58,13 @@ class RolloutStorage:
             )
         else:
             self.prev_direct_map = None
+        
+        self.dm_hidden_states = torch.zeros(
+            num_steps + 1,
+            num_recurrent_layers,
+            num_envs,
+            recurrent_hidden_state_size,
+        )
 
         self.rewards = torch.zeros(num_steps, num_envs, 1)
         self.value_preds = torch.zeros(num_steps + 1, num_envs, 1)
@@ -91,6 +98,8 @@ class RolloutStorage:
 
         if self.use_direct_map:
             self.prev_direct_map = self.prev_direct_map.to(device)
+        
+        self.dm_hidden_states = self.dm_hidden_states.to(device)
 
         self.rewards = self.rewards.to(device)
         self.value_preds = self.value_preds.to(device)
@@ -108,6 +117,7 @@ class RolloutStorage:
         action_log_probs,
         value_preds,
         predict_direct_map,
+        dm_hidden_states,
         rewards,
         masks,
         dones,
@@ -137,7 +147,11 @@ class RolloutStorage:
                 for j in range(self.direct_map_size):
                     if np.random.rand() < self.dropout_rate:
                         self.prev_direct_map[self.step + 1][i][j] = 0.0
-
+        
+        if dm_hidden_states is not None:
+            self.dm_hidden_states[self.step + 1].copy_(
+                dm_hidden_states
+            )
 
         self.actions[self.step].copy_(actions)
         self.prev_actions[self.step + 1].copy_(actions)
@@ -169,6 +183,8 @@ class RolloutStorage:
         elif self.use_direct_map:
             self.prev_direct_map[0].copy_(self.prev_direct_map[-2])
             self.prev_direct_map[1].copy_(self.prev_direct_map[-1])
+        
+        self.dm_hidden_states[0].copy_(self.dm_hidden_states[-1])
 
         self.masks[0].copy_(self.masks[-1])
         self.prev_actions[0].copy_(self.prev_actions[-1])
@@ -210,6 +226,7 @@ class RolloutStorage:
                 prev_direct_map_batch = []
             else:
                 prev_direct_map_batch = None
+            dm_hidden_states_batch = []
             actions_batch = []
             prev_actions_batch = []
             value_preds_batch = []
@@ -232,6 +249,10 @@ class RolloutStorage:
 
                 if self.use_direct_map:
                     prev_direct_map_batch.append(self.prev_direct_map[:-2, ind])
+                
+                dm_hidden_states_batch.append(
+                    self.dm_hidden_states[0, :, ind]
+                )
 
                 actions_batch.append(self.actions[:, ind])
                 prev_actions_batch.append(self.prev_actions[:-1, ind])
@@ -254,6 +275,8 @@ class RolloutStorage:
             
             if self.use_direct_map:
                 prev_direct_map_batch = torch.stack(prev_direct_map_batch, 1)
+            
+            dm_hidden_states_batch = torch.stack(dm_hidden_states_batch, 1)
 
             actions_batch = torch.stack(actions_batch, 1)
             prev_actions_batch = torch.stack(prev_actions_batch, 1)
@@ -293,6 +316,7 @@ class RolloutStorage:
                 observations_batch,
                 recurrent_hidden_states_batch,
                 prev_direct_map_batch,
+                dm_hidden_states_batch,
                 actions_batch,
                 prev_actions_batch,
                 value_preds_batch,
