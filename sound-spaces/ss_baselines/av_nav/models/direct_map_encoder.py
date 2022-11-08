@@ -27,7 +27,7 @@ class DirectMapEncoder(nn.Module):
             nn.Linear(input_size * 2, input_size),
             nn.ReLU(True),
             nn.Linear(input_size, output_size),
-            # nn.Sigmoid(),
+            nn.Sigmoid(),
         )
 
         layer_init(self.mlp)
