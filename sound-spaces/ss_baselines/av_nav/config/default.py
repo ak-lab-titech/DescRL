@@ -157,6 +157,11 @@ _TC.TASK.SUCCESS_WEIGHTED_BY_NUM_ACTION = CN()
 _TC.TASK.SUCCESS_WEIGHTED_BY_NUM_ACTION.TYPE = "SNA"
 _TC.TASK.ORACLE_ACTION_SENSOR = CN()
 _TC.TASK.ORACLE_ACTION_SENSOR.TYPE = "OracleActionSensor"
+# -----------------------------------------------------------------------------
+# FoundNum Measure
+# -----------------------------------------------------------------------------
+_TC.TASK.FOUND_NUM = CN()
+_TC.TASK.FOUND_NUM.TYPE = "FoundNum"
 
 
 def merge_from_path(config, config_paths):

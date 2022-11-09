@@ -281,18 +281,8 @@ class AudioNavBaselineNet(Net):
         
         if self.direct_map_size is not None:
             if self._pointgoal and self._audiogoal:
-                # if self.dm_use_visual:
-                #     direct_map = self.direct_map_encoder(prev_direct_map, x[1], x[2], prev_actions)
-                # else:
-                #     direct_map = self.direct_map_encoder(prev_direct_map, x[1], None, prev_actions)
-                # x.append(direct_map)
                 raise NotImplementedError("Don't use DirectMap with pointgoal sensor")
             elif self._audiogoal:
-                # f = open("debug.txt", "a")
-                # # f.write(f"--------- direct_map in forward ----------:\nhead:\n{observations['direct_map'][:5]}\ntail:{observations['direct_map'][-5:]}\n")
-                # f.write(f"------- direct_map in forward -------\n{observations['direct_map']}\n")
-                # f.write(f"------ prev_direct_map in forward ------\n{prev_direct_map}\n")
-                # f.close()
                 if self.dm_use_visual:
                     if self.dm_use_gru:
                         direct_map, dm_hidden_states1 = self.direct_map_encoder(
@@ -332,7 +322,7 @@ class AudioNavBaselineNet(Net):
             print('mask', torch.isnan(masks).any().item())
             assert True
         return x2, rnn_hidden_states1, direct_map, dm_hidden_states1
-    
+
     def watch_grad(self):
         f = open("debug.txt", "a")
         f.write(f"---------------- watch_grad -------------------\n")

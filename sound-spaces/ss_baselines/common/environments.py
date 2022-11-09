@@ -181,3 +181,16 @@ class AudioNavRLEnv(habitat.RLEnv):
     # for data collection
     def get_current_episode_id(self):
         return self.habitat_env.current_episode.episode_id
+
+    def get_sound_diss(self):
+        sounds_dict = {}
+        for i, sound in enumerate(self._env.sim._current_sounds):
+            if f"goal_{i}" in self._env.sim.not_found_goals:
+
+                current_position = self._env.sim.get_agent_state().position
+                goals = [self._env.sim.goals_dict[f"goal_{i}"]]
+                geo_dis = self._env.sim.calc_geo_dis_to_goals(current_position, goals)[0]
+                sounds_dict[sound] = geo_dis
+            else:
+                sounds_dict[sound] = None
+        return sounds_dict

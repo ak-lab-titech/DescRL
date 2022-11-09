@@ -542,6 +542,8 @@ class PPOTrainer(BaseRLTrainer):
             os.makedirs(self.config.VIDEO_DIR, exist_ok=True)
 
         t = tqdm(total=self.config.TEST_EPISODE_COUNT)
+
+        sound_found_nums = {}
         while (
             len(stats_episodes) < self.config.TEST_EPISODE_COUNT
             and self.envs.num_envs > 0
@@ -568,6 +570,8 @@ class PPOTrainer(BaseRLTrainer):
 
                 prev_actions.copy_(actions)
 
+            prev_sound_diss = self.envs.get_sound_diss()
+
             if config.FOLLOW_SHORTEST_PATH:
                 actions = [follower.get_next_action(
                     self.envs.workers[0]._env.habitat_env.current_episode.goals[0].view_points[0].agent_state.position)]
@@ -582,6 +586,16 @@ class PPOTrainer(BaseRLTrainer):
             for i in range(len(dones)):
                 if dones[i] and self.use_direct_map:
                     predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
+                
+                if dones[i]:
+                    for sound, dis in prev_sound_diss[i].items():
+                        if not sound in list(sound_found_nums.keys()):
+                            sound_found_nums[sound] = 0
+                        
+                        if dis is None:
+                            sound_found_nums[sound] += 1
+                        elif dis < 1.0 and prev_actions[i] == 0:
+                            sound_found_nums[sound] += 1
 
             for i in range(self.envs.num_envs):
                 if len(self.config.VIDEO_OPTION) > 0:
@@ -724,6 +738,11 @@ class PPOTrainer(BaseRLTrainer):
         for metric_uuid in self.metric_uuids:
             logger.info(
                 f"Average episode {metric_uuid}: {episode_metrics_mean[metric_uuid]:.6f}"
+            )
+
+        for sound, num in sound_found_nums.items():
+            logger.info(
+                f"{sound}: {num / self.config.TEST_EPISODE_COUNT}"
             )
 
         if not config.EVAL.SPLIT.startswith('test'):

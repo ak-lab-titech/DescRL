@@ -295,6 +295,34 @@ class DirectMap(Sensor):
 
 
 @registry.register_measure
+class FoundNum(Measure):
+    """the number of Found Action
+    """
+
+    cls_uuid: str = "foundnum"
+    
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
+        super().__init__(sim, config, args, kwargs)
+        self._metric = 0
+    
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return self.cls_uuid
+    
+    def reset_metric(self, episode, task, *args: Any, **kwargs: Any):
+        self._metric = 0
+    
+    def update_metric(
+        self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any
+    ):
+        if (
+            hasattr(task, "is_found_called") and task.is_found_called
+        ):
+            self._metric += 1
+
+
+@registry.register_measure
 class NormalizedDistanceToGoal(Measure):
     r""" Distance to goal the episode ends
     """
