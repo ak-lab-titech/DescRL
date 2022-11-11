@@ -308,7 +308,9 @@ class AudioNavBaselineNet(Net):
             dm_hidden_states1 = None
         
         # f = open("debug.txt", "a")
-        # f.write(f"------- predict next direct_map in forward ------\n{direct_map}\n")
+        # f.write(f"previous:\n{direct_map}\n")
+        # f.write(f"predict:\n{direct_map}\n")
+        # f.write(f"GT:\n{observations['direct_map']}\n")
         # f.close()
 
         x1 = torch.cat(x, dim=1)

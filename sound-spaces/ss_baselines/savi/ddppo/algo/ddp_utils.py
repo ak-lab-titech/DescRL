@@ -143,7 +143,10 @@ def init_distrib_slurm(
     rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
     os.environ["NODE_RANK"]=str(rank//4)
     os.environ["LOCAL_RANK"]=str(rank%4)
+    os.environ["RANK"] = str(rank)
     os.environ["WORLD_SIZE"] = str(4)
+    # os.environ["WORLD_SIZE"] = str(8)
+    # os.environ["NNODES"] = str(2)
 
     if "GLOO_SOCKET_IFNAME" not in os.environ:
         os.environ["GLOO_SOCKET_IFNAME"] = get_ifname()
@@ -158,8 +161,8 @@ def init_distrib_slurm(
     if os.environ.get("LOCAL_RANK", None) is not None:
         print("LOCAL_RANK")
         local_rank = int(os.environ["LOCAL_RANK"])
-        # world_rank = int(os.environ["RANK"])
-        world_rank = int(os.environ["LOCAL_RANK"])
+        world_rank = int(os.environ["RANK"])
+        # world_rank = int(os.environ["LOCAL_RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
     # Else parse from SLURM is using SLURM
     elif os.environ.get("SLURM_JOBID", None) is not None:
@@ -175,11 +178,11 @@ def init_distrib_slurm(
         world_size = 1
     
     # world_size = 1
-    print(f"local_rank: {local_rank}, world_rank: {world_rank}, world_size: {world_size}")
+    print(f"node_rank: {rank//4} local_rank: {local_rank}, world_rank: {world_rank}, world_size: {world_size}")
     tcp_store = distrib.TCPStore(
         master_addr, master_port, world_size, world_rank == 0
     )
-    print(f"tcp_store: {tcp_store}, backend: {backend}")
+    print(f"tcp_store: {tcp_store}, backend: {backend} (world_rank: {world_rank})")
     distrib.init_process_group(
         backend, store=tcp_store, rank=world_rank, world_size=world_size
     )

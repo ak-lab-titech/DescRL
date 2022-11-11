@@ -18,6 +18,7 @@ from skimage.measure import block_reduce
 
 from habitat.config import Config
 from habitat.core.dataset import Episode
+from habitat_sim.utils.common import quat_to_angle_axis
 
 from habitat.tasks.nav.nav import DistanceToGoal, Measure, EmbodiedTask, Success
 from habitat.core.registry import registry
@@ -267,10 +268,10 @@ class DirectMap(Sensor):
             angle += 360
         return angle
 
-    
     def calc_angle_from_quaternion(self, quat):
         angle = 2 * np.arccos(quat.w) * 180 / np.pi
-        return angle
+        fix_angle = 360 - angle if quat_to_angle_axis(quat)[1][1] == -1 else angle
+        return fix_angle
 
     def calc_angle_from_2d_vector(self, vec):
         """
