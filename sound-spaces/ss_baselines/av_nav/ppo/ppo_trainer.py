@@ -20,6 +20,8 @@ from torch.optim.lr_scheduler import LambdaLR
 from tqdm import tqdm
 from numpy.linalg import norm
 from gym import spaces
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 from habitat import Config, logger
 from habitat.utils.visualizations.utils import observations_to_image
@@ -56,6 +58,7 @@ class PPOTrainer(BaseRLTrainer):
         self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
         self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
         self.dm_use_gru = self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU
+        self.save_gif = self.config.GIF_VISUALIZATION
 
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
         r"""Sets up actor critic and agent for PPO.
@@ -98,6 +101,7 @@ class PPOTrainer(BaseRLTrainer):
         self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
         self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
         self.dm_use_gru = self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU
+        self.save_gif = self.config.GIF_VISUALIZATION
 
     def save_checkpoint(self, file_name: str) -> None:
         r"""Save checkpoint with specified name.
@@ -543,6 +547,8 @@ class PPOTrainer(BaseRLTrainer):
 
         t = tqdm(total=self.config.TEST_EPISODE_COUNT)
 
+        if self.save_gif:
+            gt_pred_dms = []
         sound_found_nums = {}
         while (
             len(stats_episodes) < self.config.TEST_EPISODE_COUNT
@@ -571,6 +577,12 @@ class PPOTrainer(BaseRLTrainer):
                 prev_actions.copy_(actions)
 
             prev_sound_diss = self.envs.get_sound_diss()
+
+            if self.save_gif:
+                gt_pred_dms.append([
+                    batch["direct_map"][0],
+                    predict_direct_map[0],
+                ])
 
             if config.FOLLOW_SHORTEST_PATH:
                 actions = [follower.get_next_action(
@@ -758,5 +770,30 @@ class PPOTrainer(BaseRLTrainer):
         }
         for metric_uuid in self.metric_uuids:
             result['episode_{}_mean'.format(metric_uuid)] = episode_metrics_mean[metric_uuid]
+        
+        if self.save_gif:
+            flag_legend = True
+            fig = plt.figure()
+            x = np.arange(0, 8, 1)
+            ims = []
+            for gt_dm, pred_dm in gt_pred_dms:
+                pred, = plt.plot(x, pred_dm, "b", label="Pred")
+    
+                x_gt = []
+                y_gt = []
+                for i in range(len(gt_dm)):
+                    if gt_dm[i] != 0:
+                        x_gt.append(i)
+                        y_gt.append(gt_dm[i])
+                gt = plt.scatter(x_gt, y_gt , c="red", label="GT")
+    
+                if flag_legend:
+                    plt.legend()
+                    flag_legend = False
+                
+                ims.append([pred, gt])
+    
+            ani = animation.ArtistAnimation(fig, ims)
+            ani.save('anim.gif', writer="imagemagick")
 
         return result
