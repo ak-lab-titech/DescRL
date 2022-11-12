@@ -308,7 +308,7 @@ class AudioNavBaselineNet(Net):
             dm_hidden_states1 = None
         
         # f = open("debug.txt", "a")
-        # f.write(f"previous:\n{direct_map}\n")
+        # f.write(f"previous:\n{prev_direct_map}\n")
         # f.write(f"predict:\n{direct_map}\n")
         # f.write(f"GT:\n{observations['direct_map']}\n")
         # f.close()

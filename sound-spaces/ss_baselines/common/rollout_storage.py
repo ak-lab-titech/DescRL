@@ -30,6 +30,7 @@ class RolloutStorage:
         direct_map_size,
         use_gt_direct_map,
         dropout_rate,
+        noise_coef,
         num_recurrent_layers=1,
     ):
         self.observations = {}
@@ -89,6 +90,7 @@ class RolloutStorage:
 
         self.use_gt_direct_map = use_gt_direct_map
         self.dropout_rate = dropout_rate
+        self.noise_coef = noise_coef
 
     def to(self, device):
         for sensor in self.observations:
@@ -130,23 +132,33 @@ class RolloutStorage:
             recurrent_hidden_states
         )
         
-        if self.use_direct_map and not self.use_gt_direct_map:
-            for i in range(len(dones)):
+        for i in range(len(dones)):
+            if not self.use_direct_map:
+                break
+            
+            if not self.use_gt_direct_map:
                 if dones[i]:
                     self.prev_direct_map[self.step + 1][i].copy_(torch.zeros(self.direct_map_size))
                 else:
                     self.prev_direct_map[self.step + 1][i].copy_(predict_direct_map[i].detach()) # detachはあってもなくてもかわらなそう？
-                for j in range(self.direct_map_size):
-                    if np.random.rand() < self.dropout_rate:
-                        self.prev_direct_map[self.step + 1][i][j] = 0.0
-        elif self.use_direct_map:
-            for i in range(len(dones)):
+            else:
                 if dones[i]:
                     self.prev_direct_map[self.step + 1][i].copy_(torch.zeros(self.direct_map_size))
                 self.prev_direct_map[self.step + 2][i].copy_(observations["direct_map"][i])
+
+            # Dropout
+            if self.dropout_rate != 0.0:
                 for j in range(self.direct_map_size):
                     if np.random.rand() < self.dropout_rate:
                         self.prev_direct_map[self.step + 1][i][j] = 0.0
+
+            # Add noise
+            if self.noise_coef != 0.0:
+                for j in range(self.direct_map_size):
+                    noise = np.random.normal(loc=0, scale=1) * self.noise_coef
+                    self.prev_direct_map[self.step + 1][i][j] = min(
+                        max(self.prev_direct_map[self.step + 1][i][j] + noise, 0), 1
+                    )            
         
         if dm_hidden_states is not None:
             self.dm_hidden_states[self.step + 1].copy_(

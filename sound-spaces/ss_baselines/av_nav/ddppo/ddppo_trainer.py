@@ -187,6 +187,7 @@ class DDPPOTrainer(PPOTrainer):
             self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
             self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP,
             self.config.TASK_CONFIG.SIMULATOR.DROPOUT_RATE,
+            self.config.TASK_CONFIG.SIMULATOR.NOISE_COEF,
             num_recurrent_layers=self.actor_critic.net.num_recurrent_layers,
         )
         rollouts.to(self.device)
