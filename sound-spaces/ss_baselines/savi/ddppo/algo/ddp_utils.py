@@ -140,13 +140,16 @@ def init_distrib_slurm(
         torch.distributed.is_available()
     ), "torch.distributed must be available"
 
+    WORLD_SIZE = 4
+    NNODES = 1
+    NPERNODE = int(WORLD_SIZE / NNODES)
+
     rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
-    os.environ["NODE_RANK"]=str(rank//4)
-    os.environ["LOCAL_RANK"]=str(rank%4)
+    os.environ["NODE_RANK"]=str(rank//NPERNODE)
+    os.environ["LOCAL_RANK"]=str(rank%NPERNODE)
     os.environ["RANK"] = str(rank)
-    os.environ["WORLD_SIZE"] = str(4)
-    # os.environ["WORLD_SIZE"] = str(8)
-    # os.environ["NNODES"] = str(2)
+    os.environ["WORLD_SIZE"] = str(WORLD_SIZE)
+    os.environ["NNODES"] = str(NNODES)
 
     if "GLOO_SOCKET_IFNAME" not in os.environ:
         os.environ["GLOO_SOCKET_IFNAME"] = get_ifname()
