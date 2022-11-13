@@ -774,7 +774,7 @@ class PPOTrainer(BaseRLTrainer):
         if self.save_gif:
             flag_legend = True
             fig = plt.figure()
-            x = np.arange(0, 8, 1)
+            x = np.arange(0, len(gt_pred_dms[0][0]), 1)
             ims = []
             for gt_dm, pred_dm in gt_pred_dms:
                 pred, = plt.plot(x, pred_dm, "b", label="Pred")
