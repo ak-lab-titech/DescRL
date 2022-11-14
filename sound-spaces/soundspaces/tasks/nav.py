@@ -189,14 +189,13 @@ class DirectMap(Sensor):
             # f.close()
             distance = self.calc_distance(agent_position, goal, self.euclid_or_geodesic)
             
-            if self._sim.is_found:
+            if self._sim.is_found and len(goals) != 1:
                 geo_dis = self.calc_distance(agent_position, goal, "geodesic")
                 if geo_dis < 1:
                     continue
 
             if distance < direct_map[direct_map_index]:
                 direct_map[direct_map_index] = distance
-
 
         for i in range(len(direct_map)):
             if self.clipping:
