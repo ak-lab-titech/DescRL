@@ -1,9 +1,11 @@
 BASE_TASK_CONFIG_PATH: "configs/audionav/av_nav/replica/multi_audiogoal.yaml"
 NUM_PROCESSES: 1
 SENSORS: ["DEPTH_SENSOR"]
+# SENSORS: ["RGB_SENSOR","DEPTH_SENSOR"] # video
 TEST_EPISODE_COUNT: 100 # default: 1000
 GIF_VISUALIZATION: False
 VIDEO_OPTION: []
+# VIDEO_OPTION: ["disk"] # video
 VISUALIZATION_OPTION: []
 
 EVAL:

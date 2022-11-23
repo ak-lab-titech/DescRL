@@ -17,5 +17,7 @@ output
 
 train.sh
 test.sh
+video.sh
+
 anim*.gif
 
