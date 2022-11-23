@@ -82,6 +82,7 @@ class DDPPOTrainer(PPOTrainer):
             extra_rgb=self.config.EXTRA_RGB,
             dm_use_visual=self.config.TASK_CONFIG.SIMULATOR.DM_USE_VISUAL,
             dm_use_gru=self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU,
+            dm_cgo=self.config.TASK_CONFIG.SIMULATOR.DM_CGO,
             direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
         )
 

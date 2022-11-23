@@ -115,6 +115,7 @@ class AudioNavBaselinePolicy(Policy):
         direct_map_size,
         dm_use_visual,
         dm_use_gru,
+        dm_cgo,
         hidden_size=512,
         extra_rgb=False
     ):
@@ -127,6 +128,7 @@ class AudioNavBaselinePolicy(Policy):
                 action_num=action_space.n,
                 dm_use_visual=dm_use_visual,
                 dm_use_gru=dm_use_gru,
+                dm_cgo=dm_cgo,
                 extra_rgb=extra_rgb,
             ),
             action_space.n,
@@ -168,6 +170,7 @@ class AudioNavBaselineNet(Net):
         action_num,
         dm_use_visual,
         dm_use_gru,
+        dm_cgo,
         extra_rgb=False
     ):
         super().__init__()
@@ -179,6 +182,7 @@ class AudioNavBaselineNet(Net):
         self.direct_map_size = direct_map_size
         self.dm_use_visual = dm_use_visual
         self.dm_use_gru = dm_use_gru
+        self.dm_cgo = dm_cgo
 
         if DUAL_GOAL_DELIMITER in self.goal_sensor_uuid:
             goal1_uuid, goal2_uuid = self.goal_sensor_uuid.split(DUAL_GOAL_DELIMITER)
@@ -199,7 +203,7 @@ class AudioNavBaselineNet(Net):
                 audiogoal_sensor = 'spectrogram'
             self.audio_encoder = AudioCNN(observation_space, hidden_size, audiogoal_sensor)
         
-        if direct_map_size is not None:
+        if direct_map_size is not None and not self.dm_cgo:
             if dm_use_gru:
                 dm_input_size = (
                     hidden_size + action_num
@@ -223,6 +227,19 @@ class AudioNavBaselineNet(Net):
                     output_size=direct_map_size,
                     action_num=action_num,
                 )
+        elif direct_map_size is not None:
+            if not dm_use_gru:
+                dm_input_size = (
+                    hidden_size + action_num + direct_map_size
+                )
+                self.direct_map_encoder = DirectMapEncoder(
+                    input_size=dm_input_size,
+                    output_size=direct_map_size,
+                    action_num=action_num,
+                )
+            else:
+                raise NotImplementedError() # TODO NotImplemented
+
 
         rnn_input_size = (
             0 if self.is_blind else self._hidden_size
@@ -231,7 +248,7 @@ class AudioNavBaselineNet(Net):
         ) + (
             self._hidden_size if self._audiogoal else 0
         ) + (
-            direct_map_size if self.direct_map_size is not None else 0
+            direct_map_size if self.direct_map_size is not None and not self.dm_cgo else 0
         )
                         
         self.state_encoder = RNNStateEncoder(rnn_input_size, self._hidden_size)
@@ -251,7 +268,11 @@ class AudioNavBaselineNet(Net):
 
     @property
     def output_size(self):
-        return self._hidden_size
+        if self.dm_cgo:
+            output_size = self._hidden_size + self.direct_map_size
+        else:
+            output_size = self._hidden_size
+        return output_size
 
     @property
     def is_blind(self):
@@ -279,7 +300,7 @@ class AudioNavBaselineNet(Net):
         if not self.is_blind:
             x.append(self.visual_encoder(observations))
         
-        if self.direct_map_size is not None:
+        if self.direct_map_size is not None and not self.dm_cgo:
             if self._pointgoal and self._audiogoal:
                 raise NotImplementedError("Don't use DirectMap with pointgoal sensor")
             elif self._audiogoal:
@@ -303,11 +324,21 @@ class AudioNavBaselineNet(Net):
             else:
                 direct_map = None
                 dm_hidden_states1 = None
+        elif self.direct_map_size is not None:
+            if self._pointgoal and self._audiogoal:
+                raise NotImplementedError("Don't use DirectMap with pointgoal sensor")
+            elif self._audiogoal:
+                if self.dm_use_gru:
+                    raise NotImplementedError()
+                else:
+                    direct_map = self.direct_map_encoder(prev_direct_map, x[0], None, prev_actions)
+                    dm_hidden_states1 = None
         else:
             direct_map = None
             dm_hidden_states1 = None
         
         # f = open("debug.txt", "a")
+        # f.write("----------------------------------------------\n")
         # f.write(f"previous:\n{prev_direct_map}\n")
         # f.write(f"predict:\n{direct_map}\n")
         # f.write(f"GT:\n{observations['direct_map']}\n")
@@ -315,6 +346,9 @@ class AudioNavBaselineNet(Net):
 
         x1 = torch.cat(x, dim=1)
         x2, rnn_hidden_states1 = self.state_encoder(x1, rnn_hidden_states, masks)
+
+        if self.dm_cgo:
+            x2 = torch.cat([x2, direct_map], axis=1)
 
         if torch.isnan(x2).any().item():
             for key in observations:

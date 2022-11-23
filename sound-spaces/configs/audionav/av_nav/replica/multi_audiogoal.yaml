@@ -25,6 +25,7 @@ SIMULATOR:
   DISTANCE_TRANS_METHOD: "1d"
   CLIPPING: True
   DM_USE_GRU: False
+  DM_CGO: False
 
   TYPE: "SoundSpacesSim"
   ACTION_SPACE_CONFIG: "v0"
