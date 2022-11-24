@@ -82,6 +82,7 @@ class PPOTrainer(BaseRLTrainer):
             dm_use_visual=self.config.TASK_CONFIG.SIMULATOR.DM_USE_VISUAL,
             dm_use_gru=self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU,
             dm_cgo=self.config.TASK_CONFIG.SIMULATOR.DM_CGO,
+            use_conv1d=self.config.TASK_CONFIG.SIMULATOR.USE_CONV1D,
             extra_rgb=self.config.EXTRA_RGB,
         )
         self.actor_critic.to(self.device)

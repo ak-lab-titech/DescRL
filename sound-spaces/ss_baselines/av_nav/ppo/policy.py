@@ -116,6 +116,7 @@ class AudioNavBaselinePolicy(Policy):
         dm_use_visual,
         dm_use_gru,
         dm_cgo,
+        use_conv1d,
         hidden_size=512,
         extra_rgb=False
     ):
@@ -129,6 +130,7 @@ class AudioNavBaselinePolicy(Policy):
                 dm_use_visual=dm_use_visual,
                 dm_use_gru=dm_use_gru,
                 dm_cgo=dm_cgo,
+                use_conv1d=use_conv1d,
                 extra_rgb=extra_rgb,
             ),
             action_space.n,
@@ -171,6 +173,7 @@ class AudioNavBaselineNet(Net):
         dm_use_visual,
         dm_use_gru,
         dm_cgo,
+        use_conv1d,
         extra_rgb=False
     ):
         super().__init__()
@@ -226,6 +229,7 @@ class AudioNavBaselineNet(Net):
                     input_size=dm_input_size,
                     output_size=direct_map_size,
                     action_num=action_num,
+                    use_conv1d=use_conv1d,
                 )
         elif direct_map_size is not None:
             if not dm_use_gru:
@@ -236,6 +240,7 @@ class AudioNavBaselineNet(Net):
                     input_size=dm_input_size,
                     output_size=direct_map_size,
                     action_num=action_num,
+                    use_conv1d=use_conv1d,
                 )
             else:
                 raise NotImplementedError() # TODO NotImplemented

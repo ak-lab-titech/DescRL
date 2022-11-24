@@ -26,6 +26,7 @@ SIMULATOR:
   CLIPPING: True
   DM_USE_GRU: False
   DM_CGO: False
+  USE_CONV1D: False
 
   TYPE: "SoundSpacesSim"
   ACTION_SPACE_CONFIG: "v0"

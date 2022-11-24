@@ -42,7 +42,7 @@ def conv_output_dim(dimension, padding, dilation, kernel_size, stride
 
 def layer_init(cnn):
     for layer in cnn:
-        if isinstance(layer, (nn.Conv2d, nn.Linear)):
+        if isinstance(layer, (nn.Conv1d, nn.Conv2d, nn.Linear)):
             nn.init.kaiming_normal_(
                 layer.weight, nn.init.calculate_gain("relu")
             )
