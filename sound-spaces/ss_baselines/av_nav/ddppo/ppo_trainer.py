@@ -219,7 +219,7 @@ class PPOTrainer(BaseRLTrainer):
         return results
 
     def _collect_rollout_step(
-        self, rollouts, current_episode_reward, running_episode_stats
+        self, rollouts, current_episode_reward, running_episode_stats, episode100_stats=None,
     ):
         pth_time = 0.0
         env_time = 0.0
@@ -268,6 +268,12 @@ class PPOTrainer(BaseRLTrainer):
         masks = torch.tensor(
             [[0.0] if done else [1.0] for done in dones], dtype=torch.float, device=current_episode_reward.device
         )
+
+        if episode100_stats is not None:
+            for i in range(len(dones)):
+                if dones[i]:
+                    for k, v in self._extract_scalars_from_infos(infos).items():
+                        episode100_stats[k].append(v[i])
 
         current_episode_reward += rewards
         running_episode_stats["reward"] += (1 - masks) * current_episode_reward

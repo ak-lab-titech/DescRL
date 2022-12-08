@@ -66,7 +66,7 @@ class DDPPOTrainer(PPOTrainer):
         Returns:
             None
         """
-        time.sleep(5)
+        time.sleep(10)
         logger.add_filehandler(self.config.LOG_FILE)
 
         # Setup heuristic stop criterion if applicable
@@ -216,6 +216,10 @@ class DDPPOTrainer(PPOTrainer):
             lambda: deque(maxlen=ppo_cfg.reward_window_size)
         )
 
+        episode100_stats = defaultdict(
+            lambda: deque(maxlen=100)
+        )
+
         t_start = time.time()
         env_time = 0
         pth_time = 0
@@ -300,7 +304,7 @@ class DDPPOTrainer(PPOTrainer):
                         delta_env_time,
                         delta_steps,
                     ) = self._collect_rollout_step(
-                        rollouts, current_episode_reward, running_episode_stats
+                        rollouts, current_episode_reward, running_episode_stats, episode100_stats,
                     )
                     pth_time += delta_pth_time
                     env_time += delta_env_time
@@ -345,6 +349,13 @@ class DDPPOTrainer(PPOTrainer):
                 distrib.all_reduce(stats)
                 count_steps += stats[3].item()
 
+                epi100_stats_ordering = list(sorted(episode100_stats.keys()))
+                epi100_stats = torch.stack(
+                    [torch.tensor([np.mean(episode100_stats[k])]) for k in epi100_stats_ordering], 0
+                )
+
+                distrib.all_reduce(epi100_stats)
+
                 if self.world_rank == 0:
                     num_rollouts_done_store.set("num_done", "0")
 
@@ -384,6 +395,9 @@ class DDPPOTrainer(PPOTrainer):
                     writer.add_scalar("Policy/entropy_loss", losses[2], count_steps)
                     writer.add_scalar("Policy/direct_map_loss", losses[3], count_steps)
                     writer.add_scalar('Policy/learning_rate', lr_scheduler.get_lr()[0], count_steps)
+
+                    for i in range(len(epi100_stats_ordering)):
+                        writer.add_scalar(f"MeanEpisode100/{epi100_stats_ordering[i]}", epi100_stats[i].item() / self.world_size, count_steps)
 
                     # log stats
                     if update > 0 and update % self.config.LOG_INTERVAL == 0:
