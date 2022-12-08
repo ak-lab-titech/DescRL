@@ -2,6 +2,7 @@ __pycache__
 .DS_Store
 
 test.py
+debug.py
 debug*.txt
 test
 job.sh
@@ -18,6 +19,7 @@ output
 train.sh
 test.sh
 video.sh
+make_dataset.sh
 
 anim*.gif
 
