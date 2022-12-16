@@ -207,12 +207,12 @@ class AudioNavBaselineNet(Net):
             self.audio_encoder = AudioCNN(observation_space, hidden_size, audiogoal_sensor)
         
         if direct_map_size is not None and not self.dm_cgo:
-            if dm_use_gru:
-                dm_input_size = (
-                    hidden_size + action_num
+            dm_input_size = (
+                    hidden_size + action_num + direct_map_size
                 ) + (
                     hidden_size if self.dm_use_visual else 0
                 )
+            if dm_use_gru:
                 self.direct_map_encoder = GRUDirectMapEncoder(
                     input_size=dm_input_size,
                     output_size=direct_map_size,
@@ -220,11 +220,6 @@ class AudioNavBaselineNet(Net):
                     action_num=action_num,
                 )
             else:
-                dm_input_size = (
-                    hidden_size + action_num + direct_map_size
-                ) + (
-                    hidden_size if self.dm_use_visual else 0
-                )
                 self.direct_map_encoder = DirectMapEncoder(
                     input_size=dm_input_size,
                     output_size=direct_map_size,
@@ -312,7 +307,7 @@ class AudioNavBaselineNet(Net):
                 if self.dm_use_visual:
                     if self.dm_use_gru:
                         direct_map, dm_hidden_states1 = self.direct_map_encoder(
-                            x[0], x[1], prev_actions, dm_hidden_states, masks
+                            prev_direct_map, x[0], x[1], prev_actions, dm_hidden_states, masks
                         )
                     else:
                         direct_map = self.direct_map_encoder(prev_direct_map, x[0], x[1], prev_actions)
@@ -320,7 +315,7 @@ class AudioNavBaselineNet(Net):
                 else:
                     if self.dm_use_gru:
                         direct_map, dm_hidden_states1 = self.direct_map_encoder(
-                            x[0], None, prev_actions, dm_hidden_states, masks
+                            prev_direct_map, x[0], None, prev_actions, dm_hidden_states, masks
                         )
                     else:
                         direct_map = self.direct_map_encoder(prev_direct_map, x[0], None, prev_actions)

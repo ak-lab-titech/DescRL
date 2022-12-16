@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from ss_baselines.av_nav.models.visual_cnn import layer_init
 from ss_baselines.common.utils import Flatten
 
 
@@ -20,20 +21,36 @@ class GRUDirectMapEncoder(nn.Module):
 
         self.action_num = action_num
         self._num_recurrent_layers = num_layers
+        self.direct_map_size = output_size
 
+
+        self.conv_1d = nn.Sequential(
+            nn.Conv1d(1, 32, 3, padding_mode="circular", padding="same"),
+            nn.ReLU(True),
+            nn.Conv1d(32, 32, 3, padding_mode="circular", padding="same"),
+            nn.ReLU(True),
+            nn.Conv1d(32, 32, 3, padding_mode="circular", padding="same"),
+            nn.ReLU(True),
+            nn.Conv1d(32, 32, 3, padding_mode="circular", padding="same"),
+            Flatten(),
+        )
+
+        rnn_input_size = input_size - output_size + 32 * output_size
         self.rnn = getattr(nn, "GRU")(
-            input_size=input_size,
+            input_size=rnn_input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
         )
 
+        mlp_input_size = hidden_size
         self.mlp = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size),
+            nn.Linear(mlp_input_size, mlp_input_size),
             nn.ReLU(True),
-            nn.Linear(hidden_size, output_size),
-            # nn.Sigmoid(),
+            nn.Linear(mlp_input_size, output_size),
+            nn.Sigmoid(),
         )
 
+        layer_init(self.conv_1d)
         self.mlp_layer_init()
         self.rnn_layer_init()
     
@@ -116,13 +133,21 @@ class GRUDirectMapEncoder(nn.Module):
 
     def forward(
         self,
+        prev_direct_map,
         audio_encoder_output,
         visual_encoder_output,
         prev_actions,
         hidden_states,
         masks,
     ):
-        x = self.make_inputs(audio_encoder_output, visual_encoder_output, prev_actions)
+        prev_direct_map_cnn_feature = self.conv_1d(
+            torch.reshape(
+                prev_direct_map,
+                (-1, self.direct_map_size, 1),
+            ).permute(0, 2, 1)
+        )
+
+        x = self.make_inputs(prev_direct_map_cnn_feature, audio_encoder_output, visual_encoder_output, prev_actions)
 
         if x.size(0) == hidden_states.size(1):
             x, hidden_states = self.single_forward(x, hidden_states, masks)
@@ -131,11 +156,13 @@ class GRUDirectMapEncoder(nn.Module):
         
         return self.mlp(x), hidden_states
 
-    def make_inputs(self, audio_encoder_output, visual_encoder_output, prev_actions):
+    def make_inputs(self, prev_direct_map_cnn_feature, audio_encoder_output, visual_encoder_output, prev_actions):
         """
-        inputs = (visual, audio, prev_action_onehot)
+        inputs = (prev_direct_map, (visual,) audio, prev_action_onehot)
         """
         inputs = []
+
+        inputs.append(torch.clone(prev_direct_map_cnn_feature))
 
         if visual_encoder_output is not None:
             inputs.append(torch.clone(visual_encoder_output))
