@@ -15,6 +15,7 @@ SIMULATOR:
   STEP_TIME: 0.25
   TURN_ANGLE: 10
 
+  # Direct Map
   # DIRECT_MAP_SIZE: null
   DIRECT_MAP_SIZE: 8
   DIRECT_MAP_DISTANCE: "euclid"
@@ -26,7 +27,7 @@ SIMULATOR:
   CLIPPING: True
   DM_USE_GRU: False
   DM_CGO: False
-  USE_CONV1D: False
+  USE_CONV1D: True
 
   TYPE: "SoundSpacesSim"
   ACTION_SPACE_CONFIG: "v0"
