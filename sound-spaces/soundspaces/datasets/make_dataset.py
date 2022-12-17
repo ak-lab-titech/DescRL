@@ -15,52 +15,13 @@ from habitat_sim.bindings import Random
 from habitat_sim.utils.common import quat_from_angle_axis
 from habitat.sims.habitat_simulator.habitat_simulator import overwrite_config
 
-sys.path.insert(0, "../habitat-sim")
+sys.path.insert(0, "../../habitat-sim")
 # print(sys.path)
 import examples.settings
 
 import numpy as np
 import yaml
 
-
-# def get_sim(scene: str, seed: int, move_forward_amount: float, turn_left_amount: int, turn_right_amount: int) -> "Simulator":
-#     f = open("debug.txt", "a")
-#     f.write("-- pathfinder default nav_mesh_settings --\n")
-    # pathfinder = PathFinder()
-    # pathfinder.seed(seed)
-    # navmesh_filename = f"data/scene_datasets/replica/{scene}/habitat/mesh_semantic.navmesh"
-    # pathfinder.load_nav_mesh(navmesh_filename)
-    # navmesh_settings = pathfinder.nav_mesh_settings
-
-
-    # cfg_settings = examples.settings.default_sim_settings.copy()
-    # cfg_settings["physics_config_file"] = "/home/haru/av-nav/habitat-sim/data/default.physics_config.json"
-    ## cfg_settings["scene"] = f"./data/scene_datasets/replica/{scene}"
-    # hab_cfg = examples.settings.make_cfg(cfg_settings)
-    # hab_cfg.sim_cfg.scene_id = f"./data/scene_datasets/replica/{scene}/habitat/mesh_semantic.ply"
-
-    # f.write("-- cfg_settings --------------------\n")
-    # pprint.pprint(cfg_settings, f)
-
-    # hab_cfg = SimulatorConfiguration()
-    # hab_cfg.scene_id = f"./data/scene_datasets/replica/{scene}/habitat/mesh_semantic.ply"
-    # f.write(f"hab_cfg.enable_physics: {hab_cfg.enable_physics}\n")
-    # hab_cfg.enable_physics = False
-
-    # sim = Simulator(hab_cfg)
-    # sim.reconfigure(hab_cfg)
-    
-    # navmesh_settings = NavMeshSettings()
-    # navmesh_settings.set_defaults()
-
-    # assert sim.recompute_navmesh(sim.pathfinder, navmesh_settings)
-    # assert sim.pathfinder.is_loaded
-    # assert len(sim.pathfinder.build_navmesh_vertices()) > 0
-    # assert len(sim.pathfinder.build_navmesh_vertex_indices()) > 0
-
-    # f.write(f"sim.pathfinder.navigatable_area\n{sim.pathfinder.navigable_area}\n")
-    # f.close()
-    # return sim
 
 def get_pathfinder(scene: str, seed: int):
     pathfinder = PathFinder()
@@ -158,9 +119,8 @@ def get_random_goal_position(pathfinder: "Pathfinder", start: List[float], goals
     almost_linear = True
     same_height = False # startとgoalが同じ高さであるかどうか
     other_points = [start] + goals
-    # other_points = [start]
     cnt = 0
-    while not (exist_path and not easy and not almost_linear and same_height):
+    while not (exist_path and not easy and not almost_linear and same_height and random_ok):
         if cnt > 100:
             return None
         cnt += 1
@@ -171,6 +131,7 @@ def get_random_goal_position(pathfinder: "Pathfinder", start: List[float], goals
         almost_linear = False
         easy = False
         same_height = True
+        random_ok = True
 
         if geo_dis == np.inf:
             exist_path = False
@@ -189,10 +150,25 @@ def get_random_goal_position(pathfinder: "Pathfinder", start: List[float], goals
             if geo_d <= 4*step_size:
                 easy = True
                 break
+
+            if geo_d >= 3 and scene == "apartment_0":
+                r = rand.random()
+                if geo_d >= 10:
+                    # random_ok = (r < 0.10)
+                    random_ok = False
+                elif geo_d >= 6:
+                    random_ok = (r < 0.30)
+                elif geo_d >= 5:
+                    random_ok = (r < 0.40)
+                elif geo_d >= 4:
+                    random_ok = (r < 0.50)
+                else:
+                    random_ok = (r < 0.60)
+
             if geo_d / euclid_d <= geo_euclid_rate:
                 almost_linear = True
                 break
-            if goal[1] != p[1]:
+            if not (p[1] - 0.3 < goal[1] < p[1] + 0.3):
                 same_height = False
                 break
     return goal
@@ -258,9 +234,6 @@ def make_episode(
     """
     episodeのdictを作成する
     """
-    # f = open("debug.txt", "a")
-    # f.write("----------------- make_episode --------------\n")
-    # f.close()
 
     while True:
         start_position, start_rotation, goals = get_start_and_goals(
@@ -289,12 +262,6 @@ def make_episode(
         },
         "goals": goals,
     }
-    # f = open("debug.txt", "a")
-    # f.write(f"start_position: {start_position}, start_rotation: {start_rotation}\n")
-    # f.write(f"goal positions:\n")
-    # for goal in goals:
-    #     f.write(f"{list(goal['position'])}\n")
-    # f.close()
 
     return episode
 
@@ -307,10 +274,12 @@ def make_dataset(
     seed: int,
     step_size: float,
     start_episode_id: int,
+    pathfinder: "PathFinder" = None,
 ) -> Dict[str, Any]:
 
     random = get_random(seed)
-    pathfinder = get_pathfinder(scene, seed)
+    if pathfinder is None:
+        pathfinder = get_pathfinder(scene, seed)
     episodes = []
     cnt = 0
 
@@ -338,9 +307,9 @@ def make_dataset(
 
 
 if __name__=="__main__":
-    # f = open("debug.txt", "w")
-    # f.write("make_dataset !\n")
-    # f.close()
+    f = open("debug.txt", "w")
+    f.write("make_dataset !\n")
+    f.close()
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--yaml_path",

@@ -59,9 +59,9 @@ episode:
   "n_sound": 3
   "sounds":
     - "telephone"
-    - "birds1"
     - "bell"
+    - "birds1"
   "seed": 0
-  "save_dir_path": "data/my_datasets/train_telephone_birds1_bell" # my_datasetに作成したらdata/datasets/audionav/replica/v1 に移動させる必要がある
+  "save_dir_path": "data/datasets/audionav/replica/v3/train_telephone_bell_birds1"
   "step_size": 0.25
   "is_train": True
