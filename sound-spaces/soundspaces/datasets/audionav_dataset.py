@@ -159,8 +159,23 @@ class AudioNavDataset(Dataset):
             self.content_scenes_path = deserialized[CONTENT_SCENES_PATH_FIELD]
 
         episode_cnt = 0
+        f = open(f"debug.txt", "a")
+        f.write("--------------------------------------------------\n")
+        f.write(f"SAME_SOUND: {self._config.SAME_SOUND}\n")
         for episode in deserialized["episodes"]:
             episode = NavigationEpisode(**episode)
+
+            if episode_cnt == 0:
+                f.write(f"episode.info['sounds'] Before change: {episode.info['sounds']}\n")
+            
+            if self._config.SAME_SOUND:
+                if len(episode.info['sounds']) == 2:
+                    episode.info['sounds'] = ['telephone', 'telephone']
+                else:
+                    raise NotImplementedError()
+
+            if episode_cnt == 0:
+                f.write(f"episode.info['sounds'] After change: {episode.info['sounds']}\n")
 
             if scenes_dir is not None:
                 if episode.scene_id.startswith(DEFAULT_SCENE_PATH_PREFIX):
@@ -184,3 +199,6 @@ class AudioNavDataset(Dataset):
 
             self.episodes.append(episode)
             episode_cnt += 1
+        
+        f.write(f"episode_cnt: {episode_cnt}\n")
+        f.close()
