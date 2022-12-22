@@ -1,0 +1,39 @@
+model_names:
+  - "1g-v2-av-nav"
+  - "2g-v2-av-nav"
+  - "3g-v2-av-nav"
+tag: "MeanEpisode100/numsoftsuccess"
+labels:
+  - 1g-AV-Nav
+  - 2g-AV-Nav
+  - 3g-AV-Nav
+ylabel: "PROGRESS"
+y_min: 0.0
+y_max: 1.0
+img_name: "plot_tb_data.png"
+
+## Tags
+# 'Metrics/reward'
+# 'Metrics/distance_to_goal'
+# 'Metrics/foundnum'
+# 'Metrics/na'
+# 'Metrics/normalized_distance_to_goal'
+# 'Metrics/numsoftspl'
+# 'Metrics/numsoftsuccess'
+# 'Metrics/softspl'
+# 'Metrics/spl'
+# 'Metrics/success'
+# 'Policy/value_loss'
+# 'Policy/policy_loss'
+# 'Policy/entropy_loss'
+# 'Policy/direct_map_loss'
+# 'Policy/learning_rate'
+# 'MeanEpisode100/distance_to_goal'
+# 'MeanEpisode100/foundnum'
+# 'MeanEpisode100/na'
+# 'MeanEpisode100/normalized_distance_to_goal'
+# 'MeanEpisode100/numsoftspl'
+# 'MeanEpisode100/numsoftsuccess'
+# 'MeanEpisode100/softspl'
+# 'MeanEpisode100/spl'
+# 'MeanEpisode100/success'
