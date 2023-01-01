@@ -99,9 +99,9 @@ class Benchmark:
         step_episodes = 0
         success_count = 0
         for count_episodes in tqdm(range(num_episodes)):
-            f = open("debug.txt", "a")
-            f.write(f"---------------------- RESET {count_episodes}/{num_episodes} ----------------------------\n")
-            f.close()
+            # f = open("debug.txt", "a")
+            # f.write(f"---------------------- RESET {count_episodes}/{num_episodes} ----------------------------\n")
+            # f.close()
             agent.reset()
             observations = self._env.reset()
             episode_reward = 0

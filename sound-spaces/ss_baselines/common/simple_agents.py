@@ -29,9 +29,10 @@ from ss_baselines.av_nav.config.default import get_task_config
 
 
 class RandomAgent(habitat.Agent):
-    def __init__(self, success_distance, goal_sensor_uuid):
+    def __init__(self, success_distance, goal_sensor_uuid, goal_num):
         self.dist_threshold_to_stop = success_distance
         self.goal_sensor_uuid = goal_sensor_uuid
+        self.goal_num = goal_num
         self.found_goal_id = []
 
     def reset(self):
@@ -40,26 +41,17 @@ class RandomAgent(habitat.Agent):
     def is_goal_reached(self, observations):
         # because the frame is in with polar coordinates
         dists = [d[0] for d in observations[self.goal_sensor_uuid]]
-        f = open("debug.txt", "a")
-        f.write(f"self.found_goal_id: {self.found_goal_id}\n")
-        f.close()
 
         for i, dist in enumerate(dists):
-            f = open("debug.txt", "a")
-            f.write(f"dist: {dist}\n")
-            f.close()
             if not (i in self.found_goal_id) and dist <= self.dist_threshold_to_stop:
                 self.found_goal_id.append(i)
                 return True
         return False
 
     def act(self, observations):
-        f = open("debug.txt", "a")
-        f.write("--------------------------------\n")
-        f.close()
 
         reached = self.is_goal_reached(observations)
-        if reached and len(self.found_goal_id) == 0:
+        if reached and len(self.found_goal_id) == self.goal_num:
             action = HabitatSimActions.STOP
         elif reached:
             action = HabitatSimActions.FOUND
@@ -71,9 +63,10 @@ class RandomAgent(habitat.Agent):
                     HabitatSimActions.TURN_RIGHT,
                 ]
             )
-        f = open("debug.txt", "a")
-        f.write(f"action: {action}\n")
-        f.close()
+        # f = open("debug.txt", "a")
+        # f.write(f"--------------- act ----------------\n")
+        # f.write(f"NUM: {self.goal_num}, found_goal_id: {self.found_goal_id}, reached: {reached}, action: {action}\n")
+        # f.close()
         return {"action": action}
 
 
@@ -178,20 +171,21 @@ def main():
     logging.basicConfig(level=level, format='%(asctime)s, %(levelname)s: %(message)s',
                         datefmt="%Y-%m-%d %H:%M:%S")
 
-    # task_config = get_task_config(args.task_config)
     task_config = get_task_config(args.task_config, args.opts)
-    task_config.defrost()
-    task_config.DATASET.SPLIT = 'test_telephone_bell'
-    task_config.freeze()
+
+    f = open("debug.txt", "a")
+    f.write(f"split: {task_config.DATASET.SPLIT}\n")
+    f.write(f"version: {task_config.DATASET.VERSION}\n")
+    f.close()
 
     agent = get_agent_cls(args.agent_class)(
         success_distance=args.success_distance,
         goal_sensor_uuid=task_config.TASK.GOAL_SENSOR_UUID,
+        goal_num=task_config.SIMULATOR.AUDIO.NUM,
     )
     benchmark = Benchmark(task_config)
 
-    num_episodes = 50
-    metrics = benchmark.evaluate(agent, num_episodes)
+    metrics = benchmark.evaluate(agent)
 
     for k, v in metrics.items():
         habitat.logger.info("{}: {:.3f}".format(k, v))
