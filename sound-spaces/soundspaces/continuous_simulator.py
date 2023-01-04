@@ -490,35 +490,27 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         self.goals_dict = {f"goal_{i}": goal for i, goal in enumerate(goals)}
         geo_dis_from_goals = self.calc_geo_dis_from_goals(goals)
         self.distance_from_goals = {f"goal_{i}": geo_dis_from_goals[i] for i in range(len(geo_dis_from_goals))} # 各ゴールから、すべてのゴールに到達するときの最短距離
-        # goal_time = time.time() - goal_s
+        
+        # overlap
+        # self._current_sample_indexs = [0, 0]
 
-        # f = open("debug.txt", "a")
-        # f.write(f"not_found_goals: {self.not_found_goals}\n")
-        # f.write(f"goals_dict: {self.goals_dict}\n")
-        # f.write(f"distance_from_goals: {self.distance_from_goals}\n")
-        # f.close()
+        # not overlap
+        # self._current_sample_indexs = [
+        #     int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.5),
+        #     0,
+        # ]
 
-        # f = open("debug.txt", "a")
-        # f.write(f"obs_time: {obs_time}\n")
-        # f.write(f"observations_time: {observations_time}\n")
-        # f.write(f"goal_time: {goal_time}\n")
-        # f.write(f"FIN reset in ContinuousSimulator: {time.time() - s}[s]\n")
-        # f.close()
-
+        # telephone and bell overlap
         # self._current_sample_indexs = [
         #     int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.6),
         #     int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.0),
         # ]
         
-        # f = open("debug.txt", "a")
-        # f.write(f"self._current_sample_indexs: {self._current_sample_indexs}¥n")
-        # f.write(f"self.current_source_sound: {self.current_source_sound}¥n")
+        # random
         self._current_sample_indexs = []
         for i in range(self._audio_sensor_num):
             current_sample_index = np.random.randint(self.config.AUDIO.RIR_SAMPLING_RATE)
-            # f.write(f"current_sample_index: {current_sample_index}\n")
             self._current_sample_indexs.append(current_sample_index)
-        # f.close()
 
         self.is_found = False
 
