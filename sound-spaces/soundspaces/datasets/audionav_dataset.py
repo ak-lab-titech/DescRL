@@ -171,6 +171,7 @@ class AudioNavDataset(Dataset):
             if self._config.SAME_SOUND:
                 if len(episode.info['sounds']) == 2:
                     episode.info['sounds'] = ['telephone', 'telephone']
+                    # episode.info['sounds'] = ['bell', 'bell']
                 else:
                     raise NotImplementedError()
 
