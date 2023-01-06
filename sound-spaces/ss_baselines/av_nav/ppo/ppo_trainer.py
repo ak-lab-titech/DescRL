@@ -602,13 +602,20 @@ class PPOTrainer(BaseRLTrainer):
                     predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
                 
                 if dones[i]:
+                    # calc not found num
+                    not_found_num = len(prev_sound_diss[i].items())
+                    for dis in prev_sound_diss:
+                        if dis is None: # Found
+                            not_found_num -= 1
+
+                    # 到達したかどうかの判定
                     for sound, dis in prev_sound_diss[i].items():
                         if not sound in list(sound_found_nums.keys()):
                             sound_found_nums[sound] = 0
                         
-                        if dis is None:
+                        if dis is None: # Found
                             sound_found_nums[sound] += 1
-                        elif dis < 1.0 and prev_actions[i] == 0:
+                        elif dis < 1.0 and prev_actions[i] == 0 and not_found_num == 1: # Success
                             sound_found_nums[sound] += 1
 
             for i in range(self.envs.num_envs):
