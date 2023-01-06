@@ -11,6 +11,7 @@ import logging
 import pprint
 from typing import List, Optional
 
+import numpy as np
 from habitat.config import Config
 from habitat.core.dataset import Dataset
 from habitat.core.registry import registry
@@ -20,6 +21,7 @@ from habitat.tasks.nav.nav import (
     ShortestPathPoint,
 )
 
+np.random.seed(0)
 
 ALL_SCENES_MASK = "*"
 CONTENT_SCENES_PATH_FIELD = "content_scenes_path"
@@ -161,19 +163,41 @@ class AudioNavDataset(Dataset):
         episode_cnt = 0
         f = open(f"debug.txt", "a")
         f.write("--------------------------------------------------\n")
-        f.write(f"SAME_SOUND: {self._config.SAME_SOUND}\n")
+        f.write(f"SAME_TYPE: {self._config.SOUND_TYPE}\n")
         for episode in deserialized["episodes"]:
             episode = NavigationEpisode(**episode)
 
             if episode_cnt == 0:
                 f.write(f"episode.info['sounds'] Before change: {episode.info['sounds']}\n")
             
-            if self._config.SAME_SOUND:
-                if len(episode.info['sounds']) == 2:
-                    episode.info['sounds'] = ['telephone', 'telephone']
-                    # episode.info['sounds'] = ['bell', 'bell']
+            n_sound = len(episode.info['sounds'])
+
+            if self._config.SOUND_TYPE == "default":
+                pass
+            elif self._config.SOUND_TYPE == "all_telephone":
+                episode.info['sounds'] = ['telephone' for _ in range(n_sound)]
+            elif self._config.SOUND_TYPE == "all_bell":
+                episode.info['sounds'] = ['bell' for _ in range(n_sound)]
+            else:
+                if self._config.SOUND_TYPE == "multi_train":
+                    # num: 73
+                    all_sounds = [
+                        'copy_machine', 'machinery', 'big_engine_loop', 'whirr_loop', 'computer_fan_2', 'fan_2', 'elevator', 'impulse', 'fan_1', 'turbine_3', 'ship_ambience', 'come_to_office', 'police_siren', 'waves3', 'angel', 'turbine_2', 'horn_beeps', 'big_door', 'electric_buzz', 'evolves', 'computer_beeps', 'lawrence', 'car_start_run', 'static', 'bell', 'waves2', 'alien_ambience', 'air_compressor_clicks', 'birds3', 'person_6', 'machinery_loop', 'wooddoorclose', 'person_0', 'metaldoorclose', 'bowl', 'air_pump', 'canon_short', 'apollo', 'person_4', 'horn_1', 'person_1', 'beep_noise_loop', 'computer_fan_1', 'plane_old', 'alarm', 'big_bass_rattle', 'birds2', 'person_3', 'air_conditioner', 'test', 'waves1', 'force_field_loop', 'chiller', 'exhaust_fan', 'steam_door', 'person_2', 'engine_2', 'person_5', 'siren', 'birds4', 'plane', 'engine_1', 'fireplace', 'water_waves_1', 'metaldooropen', 'turbine_1', 'fountain', 'fan_3', 'elevator_door_close', 'engine_3', 'sweet_beat', 'birds1', 'helicopter2'
+                    ]
+                elif self._config.SOUND_TYPE == "multi_val":
+                    # val (num: 11)
+                    all_sounds = [
+                        'fan_6', 'reverb_time', 'fan_4', 'terminal', 'water_waves_2', 'come_again', 'infinitely', 'person_8', 'birds5', 'person_7', 'helicopter'
+                    ]
+                elif self._config.SOUND_TYPE == "multi_test":
+                    # test (num: 18)
+                    all_sounds = [
+                        'fan_7', 'arrived', 'waves4', 'canon_short_2', 'radio_static', 'person_9', 'person_11', 'creak', 'birds6', 'turbine_4', 'person_10', 'engine_4', 'telephone', 'beeps', 'propeller', 'leak', 'horn_2', 'fan'
+                    ]
                 else:
                     raise NotImplementedError()
+
+                episode.info['sounds'] = list(np.random.choice(all_sounds, n_sound))
 
             if episode_cnt == 0:
                 f.write(f"episode.info['sounds'] After change: {episode.info['sounds']}\n")

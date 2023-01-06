@@ -61,7 +61,7 @@ TASK:
 DATASET:
   TYPE: "AudioNav"
   SPLIT: "train_telephone_bell"
-  SAME_SOUND: False # audionav_datasetでtelephoneかbellか選択するの忘れずに
+  SOUND_TYPE: "multi_train" # "default", "all_telephone", "all_bell", "multi_train", "multi_val", "multi_test"
   CONTENT_SCENES: ["*"]
   VERSION: 'v2'
   SCENES_DIR: "data/scene_datasets/replica"
