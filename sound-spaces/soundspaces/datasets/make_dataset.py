@@ -138,7 +138,7 @@ def get_random_goal_position(pathfinder: "Pathfinder", start: List[float], goals
             continue
 
         for p in other_points:
-            geo_d = calc_geodesic_distance(pathfinder, goal, p)
+            geo_d = calc_geodesic_distance(pathfinder, p, goal)
             euclid_d = calc_euclid_distance(goal, p)
 
             if scene == "room_2" or scene == "office_1":
