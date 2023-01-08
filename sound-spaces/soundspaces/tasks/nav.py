@@ -13,12 +13,15 @@ import numpy as np
 import torch
 import cv2
 import librosa
+import librosa.display
 from gym import spaces
 from skimage.measure import block_reduce
 
 from habitat.config import Config
 from habitat.core.dataset import Episode
 from habitat_sim.utils.common import quat_to_angle_axis
+import matplotlib.pyplot as plt
+import japanize_matplotlib
 
 from habitat.tasks.nav.nav import DistanceToGoal, Measure, EmbodiedTask, Success
 from habitat.core.registry import registry
@@ -93,6 +96,33 @@ class SpectrogramSensor(Sensor):
             hop_length = 160
             win_length = 400
             stft = np.abs(librosa.stft(signal, n_fft=n_fft, hop_length=hop_length, win_length=win_length))
+
+            # plt.rcParams["font.size"] = 16
+            # fig = plt.figure(figsize=(18, 6), dpi=600)
+                
+            # # 波形
+            # ax1 = fig.add_subplot(1, 2, 1)
+            # ax1.plot(np.arange(0, 1, 1/44100), signal, lw=0.1)
+            # ax1.set_xlabel("時間 [s]")
+            # ax1.set_ylabel("振幅")
+            # ax1.set_title("波形")
+
+            # # スペクトログラム
+            # ax2 = fig.add_subplot(1, 2, 2)
+            # img = librosa.display.specshow(
+            #     librosa.amplitude_to_db(librosa.stft(signal), ref=np.max),
+            #     y_axis='hz',
+            #     x_axis='time',
+            #     ax=ax2,
+            #     sr=44100,
+            # )
+            # ax2.set_xlabel("時間 [s]")
+            # ax2.set_ylabel("周波数 [Hz]")
+            # ax2.set_title('スペクトログラム')
+            # fig.colorbar(img, ax=ax2, format="%+2.0f dB")
+
+            # fig.savefig(f"./imgs/spectrogram.png")
+
             stft = block_reduce(stft, block_size=(4, 4), func=np.mean)
             return stft
 
