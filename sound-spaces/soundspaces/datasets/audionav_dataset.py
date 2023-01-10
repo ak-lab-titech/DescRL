@@ -197,10 +197,21 @@ class AudioNavDataset(Dataset):
                 else:
                     raise NotImplementedError()
 
+                # random
                 episode.info['sounds'] = list(np.random.choice(all_sounds, n_sound))
+
+                # same
+                # sound = list(np.random.choice(all_sounds, 1))[0]
+                # episode.info['sounds'] = [sound for _ in range(n_sound)]
+
+                # different
+                # episode.info['sounds'] = list(np.random.choice(all_sounds, n_sound, replace=False))
+
 
             if episode_cnt == 0:
                 f.write(f"episode.info['sounds'] After change: {episode.info['sounds']}\n")
+
+            # print(f"Sounds: {episode.info['sounds']}")
 
             if scenes_dir is not None:
                 if episode.scene_id.startswith(DEFAULT_SCENE_PATH_PREFIX):
