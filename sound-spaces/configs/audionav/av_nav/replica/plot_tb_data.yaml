@@ -1,15 +1,19 @@
 model_names:
-  - "1g-v2-av-nav"
-  - "2g-v2-av-nav"
-  - "3g-v2-av-nav"
-tag: "MeanEpisode100/numsoftsuccess"
+  - "1g-v2-av-nav-varied"
+  - "2g-v2-av-nav-varied"
+  - "3g-v2-av-nav-varied"
+tags:
+  - 'MeanEpisode100/success'
+  - "MeanEpisode100/numsoftsuccess"
 labels:
-  - 1g-AV-Nav
-  - 2g-AV-Nav
-  - 3g-AV-Nav
-ylabel: "PROGRESS"
-y_min: 0.0
-y_max: 1.0
+  - 1-Goal AV-Nav
+  - 2-Goal AV-Nav
+  - 3-Goal AV-Nav
+titles:
+  - "(a) SUCCESS"
+  - "(b) PROGRESS"
+y_min: -0.05
+y_max: 1.05
 img_name: "plot_tb_data.png"
 
 ## Tags

@@ -33,9 +33,9 @@ def get_tb_data_dict(model_name: str):
 
 def plot_and_save_img(
     model_names: List[str],
-    tag: str,
+    tags: List[str],
     labels: List[str],
-    ylabel: str,
+    titles: List[str],
     y_min: float,
     y_max: float,
     save_dir_path: str,
@@ -44,26 +44,30 @@ def plot_and_save_img(
     """
     データをplotして画像の保存まで行う
     """
-    tb_data_list = []
-    for model_name in model_names:
-        tb_data_list.append(get_tb_data_dict(model_name)[tag])
+    tb_data_lists = []
+    for tag in tags:
+        tb_data_list = []
+        for model_name in model_names:
+            tb_data_list.append(get_tb_data_dict(model_name)[tag])
+        tb_data_lists.append(tb_data_list)
     
     plt.rcParams["font.size"] = 16        # fontのsize
     plt.rcParams["legend.framealpha"] = 1 # legendの透明度
     
-    fig = plt.figure(figsize=(10, 6), dpi=144)
-    for i, tb_data in enumerate(tb_data_list):
-        plt.plot([i for i in range(len(tb_data))], tb_data, label=labels[i])
-        print(f"i:{i}, length: {len(tb_data)}")
+    fig = plt.figure(figsize=(14, 6), dpi=600)
+    for i in range(len(tags)):
+        ax = fig.add_subplot(1, len(tags), i+1)
+        for j, tb_data in enumerate(tb_data_lists[i]):
+            ax.plot([j for j in range(len(tb_data))], tb_data, label=labels[j])
+            print(f"i:{j}, length: {len(tb_data)}")
 
-    plt.xlabel("更新回数")
-    plt.ylabel(ylabel)
-    plt.ylim(y_min, y_max)
-    plt.grid()
-    plt.legend()
+        ax.set_xlabel("更新回数")
+        ax.set_title(titles[i])
+        ax.set_ylim(y_min, y_max)
+        plt.grid()
+        plt.legend()
     # plt.tight_layout()
     fig.savefig(f"{save_dir_path}/{img_name}", pad_inches=0.01)
-
 
 
 if __name__=="__main__":
@@ -89,18 +93,18 @@ if __name__=="__main__":
 
 
     model_names = config["model_names"]
-    tag = config["tag"]
+    tags = config["tags"]
+    titles = config["titles"]
     labels = config["labels"]
-    ylabel = config["ylabel"]
     y_min = config["y_min"]
     y_max = config["y_max"]
     img_name = config["img_name"]
 
     plot_and_save_img(
         model_names=model_names,
-        tag=tag,
+        tags=tags,
         labels=labels,
-        ylabel=ylabel,
+        titles=titles,
         y_min=y_min,
         y_max=y_max,
         save_dir_path=save_dir_path,
