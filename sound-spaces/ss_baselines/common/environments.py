@@ -190,7 +190,13 @@ class AudioNavRLEnv(habitat.RLEnv):
                 current_position = self._env.sim.get_agent_state().position
                 goals = [self._env.sim.goals_dict[f"goal_{i}"]]
                 geo_dis = self._env.sim.calc_geo_dis_to_goals(current_position, goals)[0]
-                sounds_dict[sound] = geo_dis
+                
             else:
-                sounds_dict[sound] = None
+                geo_dis = None
+            
+            if not sound in sounds_dict.keys():
+                sounds_dict[sound] = [geo_dis]
+            else:
+                sounds_dict[sound].append(geo_dis)
+                
         return sounds_dict
