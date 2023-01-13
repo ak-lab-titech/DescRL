@@ -552,6 +552,7 @@ class PPOTrainer(BaseRLTrainer):
         if self.save_gif:
             gt_pred_dms = []
         sound_found_nums = {}
+        sound_all_nums = {}
         while (
             len(stats_episodes) < self.config.TEST_EPISODE_COUNT
             and self.envs.num_envs > 0
@@ -613,6 +614,8 @@ class PPOTrainer(BaseRLTrainer):
                     for sound, ds in prev_sound_diss[i].items():
                         if not sound in list(sound_found_nums.keys()):
                             sound_found_nums[sound] = 0
+                        if not sound in list(sound_all_nums.keys()):
+                            sound_all_nums[sound] = 0
                         
                         for d in ds:
                             if d is None: # Found
@@ -621,6 +624,8 @@ class PPOTrainer(BaseRLTrainer):
                                 sound_found_nums[sound] += 1
                             elif d < 1.0 and prev_actions[i] == 4 and not_found_num > 1: # Found
                                 sound_found_nums[sound] += 1
+                            
+                            sound_all_nums[sound] += 1
 
             for i in range(self.envs.num_envs):
                 if len(self.config.VIDEO_OPTION) > 0:
@@ -765,10 +770,16 @@ class PPOTrainer(BaseRLTrainer):
                 f"Average episode {metric_uuid}: {episode_metrics_mean[metric_uuid]:.6f}"
             )
 
+        total_num = 0
         for sound, num in sound_found_nums.items():
-            logger.info(
-                f"{sound}: {num / self.config.TEST_EPISODE_COUNT}"
-            )
+            total_num += sound_all_nums[sound]
+            if sound_all_nums[sound] == 0:
+                logger.info(f"sound_all_nums[{sound}] == 0")
+            else:
+                logger.info(
+                    f"{sound}: {num / sound_all_nums[sound]} (all num: {sound_all_nums[sound]})"
+                )
+        logger.info(f"TOTAL NUM: {total_num}")
 
         if not config.EVAL.SPLIT.startswith('test'):
             writer.add_scalar("{}/reward".format(config.EVAL.SPLIT), episode_reward_mean, checkpoint_index)
