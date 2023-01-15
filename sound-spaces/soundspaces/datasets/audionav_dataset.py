@@ -178,6 +178,41 @@ class AudioNavDataset(Dataset):
                 episode.info['sounds'] = ['telephone' for _ in range(n_sound)]
             elif self._config.SOUND_TYPE == "all_bell":
                 episode.info['sounds'] = ['bell' for _ in range(n_sound)]
+            elif self._config.SOUND_TYPE == "long_and_short" or self._config.SOUND_TYPE == "long" or self._config.SOUND_TYPE == "short":
+                longs = [
+                    "creak", "engine_4", "leak", "propeller", "turbine_4", "fan_6", "waves4", "helicopter", "water_waves_2",
+                ]
+                shorts = [
+                    "beeps", "birds6", "birds5", "horn_2", "infinitely", "canon_short_2", "telephone"
+                ]
+                # 最大振幅平均
+                # LONG: 0.5851542154947916
+                # SHORT: 0.5965837751116071
+                if self._config.SOUND_TYPE == "long_and_short":
+                    episode.info['sounds'] = [np.random.choice(longs, 1)[0], np.random.choice(shorts, 1)[0]]
+                elif self._config.SOUND_TYPE == "long":
+                    episode.info['sounds'] = [np.random.choice(longs, 1)[0]]
+                else:
+                    episode.info['sounds'] = [np.random.choice(shorts, 1)[0]]
+            elif self._config.SOUND_TYPE == "big_and_small" or self._config.SOUND_TYPE == "big" or self._config.SOUND_TYPE == "small":
+                bigs = [
+                    "fan", "telephone"
+                ]
+                smalls = [
+                    "leak", "canon_short_2"
+                ]
+                # fan:           0.839263916015625
+                # telephone:     0.90802001953125
+                # AVE:           0.8736419677734375
+                # leak:          0.244171142578125
+                # canon_short_2: 0.363983154296875
+                # AVE:           0.3040771484375
+                if self._config.SOUND_TYPE == "big_and_small":
+                    episode.info['sounds'] = [np.random.choice(bigs, 1)[0], np.random.choice(smalls, 1)[0]]
+                elif self._config.SOUND_TYPE == "big":
+                    episode.info['sounds'] = [np.random.choice(bigs, 1)[0]]
+                else:
+                    episode.info['sounds'] = [np.random.choice(smalls, 1)[0]]
             else:
                 if self._config.SOUND_TYPE == "multi_train":
                     # num: 73

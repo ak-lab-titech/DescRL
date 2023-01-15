@@ -491,26 +491,25 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         geo_dis_from_goals = self.calc_geo_dis_from_goals(goals)
         self.distance_from_goals = {f"goal_{i}": geo_dis_from_goals[i] for i in range(len(geo_dis_from_goals))} # 各ゴールから、すべてのゴールに到達するときの最短距離
         
-        # overlap
-        # self._current_sample_indexs = [0, 0]
+        timing = "random"
 
-        # not overlap
-        # self._current_sample_indexs = [
-        #     int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.5),
-        #     0,
-        # ]
-
-        # telephone and bell overlap
-        # self._current_sample_indexs = [
-        #     int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.6),
-        #     int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.0),
-        # ]
-        
-        # random
-        self._current_sample_indexs = []
-        for i in range(self._audio_sensor_num):
-            current_sample_index = np.random.randint(self.config.AUDIO.RIR_SAMPLING_RATE)
-            self._current_sample_indexs.append(current_sample_index)
+        if timing == "overlap":
+            self._current_sample_indexs = [
+                0,
+                0,
+            ]
+        elif timing == "not_overlap":
+            self._current_sample_indexs = [
+                int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.5),
+                0,
+            ]
+        elif timing == "random":
+            self._current_sample_indexs = []
+            for i in range(self._audio_sensor_num):
+                current_sample_index = np.random.randint(self.config.AUDIO.RIR_SAMPLING_RATE)
+                self._current_sample_indexs.append(current_sample_index)
+        else:
+            raise Exception(f"timing: {timing}")
 
         self.is_found = False
 
