@@ -191,9 +191,9 @@ class AudioNavDataset(Dataset):
                 if self._config.SOUND_TYPE == "long_and_short":
                     episode.info['sounds'] = [np.random.choice(longs, 1)[0], np.random.choice(shorts, 1)[0]]
                 elif self._config.SOUND_TYPE == "long":
-                    episode.info['sounds'] = [np.random.choice(longs, 1)[0]]
+                    episode.info['sounds'] = list(np.random.choice(longs, n_sound))
                 else:
-                    episode.info['sounds'] = [np.random.choice(shorts, 1)[0]]
+                    episode.info['sounds'] = list(np.random.choice(shorts, n_sound))
             elif self._config.SOUND_TYPE == "big_and_small" or self._config.SOUND_TYPE == "big" or self._config.SOUND_TYPE == "small":
                 bigs = [
                     "fan", "telephone"
@@ -210,9 +210,9 @@ class AudioNavDataset(Dataset):
                 if self._config.SOUND_TYPE == "big_and_small":
                     episode.info['sounds'] = [np.random.choice(bigs, 1)[0], np.random.choice(smalls, 1)[0]]
                 elif self._config.SOUND_TYPE == "big":
-                    episode.info['sounds'] = [np.random.choice(bigs, 1)[0]]
+                    episode.info['sounds'] = list(np.random.choice(bigs, n_sound))
                 else:
-                    episode.info['sounds'] = [np.random.choice(smalls, 1)[0]]
+                    episode.info['sounds'] = list(np.random.choice(smalls, n_sound))
             else:
                 if self._config.SOUND_TYPE == "multi_train":
                     # num: 73
