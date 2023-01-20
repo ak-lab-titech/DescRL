@@ -13,6 +13,7 @@ from collections import deque
 from typing import Dict, List
 import json
 import random
+import datetime
 
 import numpy as np
 import torch
@@ -21,6 +22,7 @@ from tqdm import tqdm
 from numpy.linalg import norm
 from gym import spaces
 import matplotlib.pyplot as plt
+import japanize_matplotlib
 import matplotlib.animation as animation
 
 from habitat import Config, logger
@@ -796,28 +798,85 @@ class PPOTrainer(BaseRLTrainer):
             result['episode_{}_mean'.format(metric_uuid)] = episode_metrics_mean[metric_uuid]
         
         if self.save_gif:
-            flag_legend = True
-            fig = plt.figure()
-            x = np.arange(0, len(gt_pred_dms[0][0]), 1)
-            ims = []
-            for gt_dm, pred_dm in gt_pred_dms:
-                pred, = plt.plot(x, pred_dm, "b", label="Pred")
-    
-                x_gt = []
-                y_gt = []
-                for i in range(len(gt_dm)):
-                    if gt_dm[i] != 0:
-                        x_gt.append(i)
-                        y_gt.append(gt_dm[i])
-                gt = plt.scatter(x_gt, y_gt , c="red", label="GT")
-    
-                if flag_legend:
-                    plt.legend()
-                    flag_legend = False
-                
-                ims.append([pred, gt])
-    
-            ani = animation.ArtistAnimation(fig, ims)
-            ani.save('anim.gif', writer="imagemagick")
+            now = datetime.datetime.now()
+            save_dir_path = f"./imgs/direct_map_visualization/{now.strftime('%Y_%m%d_%H%M%S')}"
+            os.makedirs(save_dir_path, exist_ok=True)
 
+            step_width = 10
+            if len(gt_pred_dms) > 3*step_width:
+                self.visualize_dm_by_four_fig(save_dir_path, gt_pred_dms, step_width)
+                
+            self.plot_dm_loss(save_dir_path, gt_pred_dms)
+            self.make_dm_gif(save_dir_path, gt_pred_dms)
+    
         return result
+    
+
+    def visualize_dm_by_four_fig(self, save_dir_path, gt_pred_dms, step_width):
+        plt.rcParams["font.size"] = 16        # fontのsize
+        plt.rcParams["legend.framealpha"] = 1 # legendの透明度
+    
+        fig = plt.figure(figsize=(14, 14), dpi=300)
+        x = np.arange(0, len(gt_pred_dms[0][0])*45, 45)
+        for i in range(4):
+            gt_dm, pred_dm = gt_pred_dms[i*step_width]
+            ax = fig.add_subplot(2, 2, i+1)
+            ax.plot(x, pred_dm, "b", label="予測したダイレクトマップ")
+
+            x_gt = []
+            y_gt = []
+            for j in range(len(gt_dm)):
+                if gt_dm[j] != 0:
+                    x_gt.append(j*45)
+                    y_gt.append(gt_dm[j])
+            ax.scatter(x_gt, y_gt , c="red", label="真のダイレクトマップ")
+            
+            plt.ylim(0.0, 1.0)
+            plt.xticks([i * 45 for i in range(8)])
+            plt.grid()
+            if i == 1:
+                plt.legend()
+            
+            ax.set_title(f"Step: {i*step_width}")
+
+        fig.savefig(f"{save_dir_path}/visualize_dm_4figs.png")
+
+    
+    def plot_dm_loss(self, save_dir_path, gt_pred_dms):
+        losses = []
+        for gt_dm, pred_dm in gt_pred_dms:
+            losses.append(np.sum((np.array(gt_dm) - np.array(pred_dm))**2))
+        fig = plt.figure()
+        plt.plot([i for i in range(len(losses))], losses)
+        fig.savefig(f"{save_dir_path}/step_and_losses.png")
+
+
+    def make_dm_gif(self, save_dir_path, gt_pred_dms):
+        flag_legend = True
+        plt.rcParams["font.size"] = 16        # fontのsize
+        plt.rcParams["legend.framealpha"] = 1 # legendの透明度
+
+        fig = plt.figure()
+        x = np.arange(0, len(gt_pred_dms[0][0])*45, 45)
+        ims = []
+        for gt_dm, pred_dm in gt_pred_dms:
+            pred, = plt.plot(x, pred_dm, "b", label="予測したダイレクトマップ")
+    
+            x_gt = []
+            y_gt = []
+            for i in range(len(gt_dm)):
+                if gt_dm[i] != 0:
+                    x_gt.append(i*45)
+                    y_gt.append(gt_dm[i])
+            gt = plt.scatter(x_gt, y_gt , c="red", label="真のダイレクトマップ")
+    
+            if flag_legend:
+                plt.legend()
+                plt.grid()
+                plt.xticks([i * 45 for i in range(8)])
+                flag_legend = False
+            
+            ims.append([pred, gt])
+    
+        ani = animation.ArtistAnimation(fig, ims)
+        ani.save(f'{save_dir_path}/anime.gif', writer="imagemagick")
