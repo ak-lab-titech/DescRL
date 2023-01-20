@@ -186,8 +186,8 @@ class AudioNavDataset(Dataset):
                     "beeps", "birds6", "birds5", "horn_2", "infinitely", "canon_short_2", "telephone"
                 ]
                 # 最大振幅平均
-                # LONG: 0.5851542154947916
-                # SHORT: 0.5965837751116071
+                # LONG: 0.664
+                # SHORT: 0.620
                 if self._config.SOUND_TYPE == "long_and_short":
                     episode.info['sounds'] = [np.random.choice(longs, 1)[0], np.random.choice(shorts, 1)[0]]
                 elif self._config.SOUND_TYPE == "long":
@@ -196,17 +196,13 @@ class AudioNavDataset(Dataset):
                     episode.info['sounds'] = list(np.random.choice(shorts, n_sound))
             elif self._config.SOUND_TYPE == "big_and_small" or self._config.SOUND_TYPE == "big" or self._config.SOUND_TYPE == "small":
                 bigs = [
-                    "fan", "telephone"
+                    "fan", "telephone", "horn_2", "propeller", "arrived"
                 ]
                 smalls = [
-                    "leak", "canon_short_2"
+                    "leak", "canon_short_2", "terminal", "engine_4", "radio_static"
                 ]
-                # fan:           0.839263916015625
-                # telephone:     0.90802001953125
-                # AVE:           0.8736419677734375
-                # leak:          0.244171142578125
-                # canon_short_2: 0.363983154296875
-                # AVE:           0.3040771484375
+                # BIG:  0.939
+                # SMALL : 0.385
                 if self._config.SOUND_TYPE == "big_and_small":
                     episode.info['sounds'] = [np.random.choice(bigs, 1)[0], np.random.choice(smalls, 1)[0]]
                 elif self._config.SOUND_TYPE == "big":
