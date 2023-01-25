@@ -765,11 +765,18 @@ class PPOTrainer(BaseRLTrainer):
         episode_metrics_mean = {}
         for metric_uuid in self.metric_uuids:
             episode_metrics_mean[metric_uuid] = aggregated_stats[metric_uuid] / num_episodes
+        
+        episode_metrics_std = {}
+        for metric_uuid in self.metric_uuids:
+            episode_metrics_std[metric_uuid] = np.std([v[metric_uuid] for v in stats_episodes.values()])
 
         logger.info(f"Average episode reward: {episode_reward_mean:.6f}")
         for metric_uuid in self.metric_uuids:
             logger.info(
                 f"Average episode {metric_uuid}: {episode_metrics_mean[metric_uuid]:.6f}"
+            )
+            logger.info(
+                f"STD episode {metric_uuid}: {episode_metrics_std[metric_uuid]:.6f}"
             )
 
         total_num = 0
