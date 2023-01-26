@@ -63,6 +63,7 @@ TASK:
 DATASET:
   TYPE: "AudioNav"
   SPLIT: "test_telephone"
+  SOUND_TYPE: "multi_train"
   CONTENT_SCENES: ["*"]
   VERSION: "v2"
   SAME_SOUND: False

@@ -185,10 +185,14 @@ def main():
     )
     benchmark = Benchmark(task_config)
 
-    metrics = benchmark.evaluate(agent)
+    metrics, all_metrics = benchmark.evaluate(agent)
 
     for k, v in metrics.items():
         habitat.logger.info("{}: {:.3f}".format(k, v))
+        habitat.logger.info("    mean: {:.3f}, sgd: {:.3f}".format(
+            np.mean(all_metrics[k]),
+            np.std(all_metrics[k]),
+        ))
 
 
 if __name__ == "__main__":

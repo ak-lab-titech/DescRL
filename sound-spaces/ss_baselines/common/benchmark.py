@@ -98,6 +98,7 @@ class Benchmark:
         reward_episodes = 0
         step_episodes = 0
         success_count = 0
+        all_metrics = {}
         for count_episodes in tqdm(range(num_episodes)):
             # f = open("debug.txt", "a")
             # f.write(f"---------------------- RESET {count_episodes}/{num_episodes} ----------------------------\n")
@@ -118,12 +119,16 @@ class Benchmark:
             metrics = self._env.habitat_env.get_metrics()
             for m, v in metrics.items():
                 agg_metrics[m] += v
+                if count_episodes == 0:
+                    all_metrics[m] = [v]
+                else:
+                    all_metrics[m].append(v)
             reward_episodes += episode_reward
             success_count += metrics['spl'] > 0
 
-        avg_metrics = {k: v / count_episodes for k, v in agg_metrics.items()}
-        logging.info("Average reward: {} in {} episodes".format(reward_episodes / count_episodes, count_episodes))
-        logging.info("Average episode steps: {}".format(step_episodes / count_episodes))
+        avg_metrics = {k: v / num_episodes for k, v in agg_metrics.items()}
+        logging.info("Average reward: {} in {} episodes".format(reward_episodes / num_episodes, num_episodes))
+        logging.info("Average episode steps: {}".format(step_episodes / num_episodes))
         logging.info('Success rate: {}'.format(success_count / num_episodes))
 
-        return avg_metrics
+        return avg_metrics, all_metrics
