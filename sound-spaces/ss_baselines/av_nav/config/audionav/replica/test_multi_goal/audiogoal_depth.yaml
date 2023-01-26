@@ -6,7 +6,7 @@ TEST_EPISODE_COUNT: 1000
 GIF_VISUALIZATION: False
 VIDEO_OPTION: []
 # VIDEO_OPTION: ["disk"] # video
-VISUALIZATION_OPTION: []
+VISUALIZATION_OPTION: [] # "top_down_map"
 
 EVAL:
   SPLIT: "test_telephone_bell"

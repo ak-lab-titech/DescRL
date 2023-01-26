@@ -694,7 +694,7 @@ class PPOTrainer(BaseRLTrainer):
                             sound = current_episodes[i].info['sound']
                         else:
                             # sound = current_episodes[i].sound_id.split('/')[1][:-4]
-                            sound = "multi"
+                            sound = f"cnt{len(stats_episodes)}"
                         
                         # print(f"audios: {audios}")
 
@@ -720,13 +720,27 @@ class PPOTrainer(BaseRLTrainer):
                         audios[i] = []
 
                     if "top_down_map" in self.config.VISUALIZATION_OPTION:
-                        top_down_map = plot_top_down_map(infos[i],
-                                                         dataset=self.config.TASK_CONFIG.SIMULATOR.SCENE_DATASET)
+                        top_down_map = plot_top_down_map(
+                            infos[i],
+                            dataset=self.config.TASK_CONFIG.SIMULATOR.SCENE_DATASET,
+                        )
+                        fig = plt.figure()
+                        plt.xticks([])
+                        plt.yticks([])
+                        plt.imshow(top_down_map)
+                        fig.savefig(f'./{self.config.VIDEO_DIR}/top_down_map_cnt{len(stats_episodes)}.pdf')
                         scene = current_episodes[i].scene_id.split('/')[3]
-                        writer.add_image('{}_{}_{}/{}'.format(config.EVAL.SPLIT, scene, current_episodes[i].episode_id,
-                                                              config.BASE_TASK_CONFIG_PATH.split('/')[-1][:-5]),
-                                         top_down_map,
-                                         dataformats='WHC')
+                        writer.add_image(
+                            '{}_{}_{}/{}_cnt{}'.format(
+                                config.EVAL.SPLIT,
+                                scene,
+                                current_episodes[i].episode_id,
+                                config.BASE_TASK_CONFIG_PATH.split('/')[-1][:-5],
+                                len(stats_episodes)
+                            ),
+                            top_down_map,
+                            dataformats='WHC'
+                        )
 
             (
                 self.envs,
