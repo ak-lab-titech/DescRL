@@ -80,7 +80,7 @@ class SpectrogramSensor(Sensor):
         return SensorTypes.PATH
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        spectrogram = self.compute_spectrogram(np.ones((2, self._sim.config.AUDIO.RIR_SAMPLING_RATE)))
+        spectrogram = self.compute_spectrogram(np.ones((2, int(self._sim.config.AUDIO.RIR_SAMPLING_RATE/4))))
 
         return spaces.Box(
             low=np.finfo(np.float32).min,
@@ -123,7 +123,7 @@ class SpectrogramSensor(Sensor):
 
             # fig.savefig(f"./imgs/spectrogram.png")
 
-            stft = block_reduce(stft, block_size=(4, 4), func=np.mean)
+            # stft = block_reduce(stft, block_size=(4, 4), func=np.mean)
             return stft
 
         channel1_magnitude = np.log1p(compute_stft(audio_data[0]))

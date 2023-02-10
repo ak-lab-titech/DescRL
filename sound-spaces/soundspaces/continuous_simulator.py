@@ -585,7 +585,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         sampling_rate = self.config.AUDIO.RIR_SAMPLING_RATE
         if self._episode_step_count > self._duration:
             logging.debug('Step count is greater than duration. Empty spectrogram.')
-            audiogoal = np.zeros((2, sampling_rate))
+            audiogoal = np.zeros((2, int(sampling_rate/4)))
         else:
             audiogoal = None
             for i in range(self._audio_sensor_num):
@@ -699,7 +699,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         # f.write(f"audiogoal.shape: {audiogoal.shape}\n")
         # f.close()
 
-        audiogoal = np.pad(audiogoal, [(0, 0), (0, sampling_rate - audiogoal.shape[1])])
+        audiogoal = np.pad(audiogoal, [(0, 0), (0, int(sampling_rate/4) - audiogoal.shape[1])])
         return audiogoal
 
     def get_current_audiogoal_observation(self):
