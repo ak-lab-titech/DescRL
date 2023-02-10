@@ -18,7 +18,8 @@ HabitatSimActions.extend_action_space("MOVE_RIGHT")
 class MoveOnlySpaceConfiguration(ActionSpaceConfiguration):
     def get(self):
         return {
-            HabitatSimActions.STOP: habitat_sim.ActionSpec("stop"),
+            # HabitatSimActions.STOP: habitat_sim.ActionSpec("stop"),
+            HabitatSimActions.FOUND: habitat_sim.ActionSpec("found"),
             HabitatSimActions.MOVE_FORWARD: habitat_sim.ActionSpec(
                 "move_forward",
                 habitat_sim.ActuationSpec(
@@ -43,5 +44,4 @@ class MoveOnlySpaceConfiguration(ActionSpaceConfiguration):
                     amount=self.config.FORWARD_STEP_SIZE
                 ),
             ),
-            HabitatSimActions.FOUND: habitat_sim.ActionSpec("found"),
         }

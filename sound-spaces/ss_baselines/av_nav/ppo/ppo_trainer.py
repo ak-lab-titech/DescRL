@@ -605,13 +605,6 @@ class PPOTrainer(BaseRLTrainer):
                     predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
                 
                 if dones[i]:
-                    # calc not found num
-                    not_found_num = 0
-                    for _, ds in prev_sound_diss[i].items():
-                        for d in ds:
-                            if d is not None: 
-                                not_found_num += 1
-
                     # 到達したかどうかの判定
                     for sound, ds in prev_sound_diss[i].items():
                         if not sound in list(sound_found_nums.keys()):
@@ -620,11 +613,9 @@ class PPOTrainer(BaseRLTrainer):
                             sound_all_nums[sound] = 0
                         
                         for d in ds:
-                            if d is None: # Found
+                            if d is None:
                                 sound_found_nums[sound] += 1
-                            elif d < 1.0 and prev_actions[i] == 0 and not_found_num == 1: # Success
-                                sound_found_nums[sound] += 1
-                            elif d < 1.0 and prev_actions[i] == 4 and not_found_num > 1: # Found
+                            elif d < 1.0 and prev_actions[i] == 0:
                                 sound_found_nums[sound] += 1
                             
                             sound_all_nums[sound] += 1
@@ -677,7 +668,7 @@ class PPOTrainer(BaseRLTrainer):
                     episode_stats['geodesic_distance'] = current_episodes[i].info['geodesic_distance']
                     episode_stats['euclidean_distance'] = norm(np.array(current_episodes[i].goals[0].position) -
                                                                np.array(current_episodes[i].start_position))
-                    logging.debug(episode_stats)
+                    logging.info(episode_stats)
                     current_episode_reward[i] = 0
                     # use scene_id + episode_id as unique id for storing stats
                     stats_episodes[
@@ -794,15 +785,18 @@ class PPOTrainer(BaseRLTrainer):
             )
 
         total_num = 0
+        total_found_num = 0
         for sound, num in sound_found_nums.items():
             total_num += sound_all_nums[sound]
             if sound_all_nums[sound] == 0:
                 logger.info(f"sound_all_nums[{sound}] == 0")
             else:
+                total_found_num += num
                 logger.info(
-                    f"{sound}: {num / sound_all_nums[sound]} (all num: {sound_all_nums[sound]})"
+                    f"{sound}: {num / sound_all_nums[sound]} (all num: {sound_all_nums[sound]}, found num: {num})"
                 )
         logger.info(f"TOTAL NUM: {total_num}")
+        logger.info(f"TOTAL FOUND NUM: {total_found_num}")
 
         if not config.EVAL.SPLIT.startswith('test'):
             writer.add_scalar("{}/reward".format(config.EVAL.SPLIT), episode_reward_mean, checkpoint_index)

@@ -125,7 +125,8 @@ class AudioNavRLEnv(habitat.RLEnv):
             # f.write("success FOUND\n")
             # f.close()
 
-            reward += 1 * self._rl_config.FOUND_REWARD
+            # reward += 1 * self._rl_config.FOUND_REWARD
+            reward += 1 * 10
             self._env.sim.update_goals()
             logging.debug('Found goal!')
 
@@ -146,7 +147,7 @@ class AudioNavRLEnv(habitat.RLEnv):
     def _episode_success(self):
         _, distance_to_closest_target = self._env.sim.closest_goal_id_and_dis()
         if (
-            self._env.task.is_stop_called
+            self._env.task.is_found_called
             and (
                 (self._continuous and distance_to_closest_target < self._success_distance) # 連続用
                 or (not self._continuous and self._env.sim.reaching_goal) # 離散用
@@ -171,7 +172,7 @@ class AudioNavRLEnv(habitat.RLEnv):
 
     def get_done(self, observations):
         done = False
-        if self._env.episode_over or self._episode_success():
+        if self._env.episode_over:
             done = True
         return done
 
