@@ -332,8 +332,14 @@ class PPOTrainer(BaseRLTrainer):
         if self.config.RL.PPO.use_belief_predictor:
             step_observation = {k: v[rollouts.step] for k, v in rollouts.observations.items()}
             self.belief_predictor.update(step_observation, dones)
-            for sensor in [LocationBelief.cls_uuid, CategoryBelief.cls_uuid]:
-                rollouts.observations[sensor][rollouts.step].copy_(step_observation[sensor])
+            if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                rollouts.observations[CategoryBelief.cls_uuid][rollouts.step].copy_(
+                    step_observation[CategoryBelief.cls_uuid]
+                )
+            if self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                rollouts.observations[LocationBelief.cls_uuid][rollouts.step].copy_(
+                    step_observation[LocationBelief.cls_uuid]
+                )
 
         pth_time += time.time() - t_update_stats
 

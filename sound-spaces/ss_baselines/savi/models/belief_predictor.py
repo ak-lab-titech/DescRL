@@ -68,7 +68,7 @@ class BeliefPredictor(nn.Module):
                     self.predictor = custom_resnet18(num_input_channels=23)
                 else:
                     self.predictor = custom_resnet18(num_input_channels=2)
-                self.predictor.fc = nn.Linear(4608, 2)
+                self.predictor.fc = nn.Linear(38016, 2) # おそらくSpectrogramのサイズの影響でdefaultの4608ではダメ
             else:
                 self.predictor = models.resnet18(pretrained=True)
                 self.predictor.conv1 = nn.Conv2d(2, 64, kernel_size=7, stride=2, padding=3, bias=False)

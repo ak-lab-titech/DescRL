@@ -53,7 +53,10 @@ class AudioGoalSensor(Sensor):
         return SensorTypes.PATH
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        sensor_shape = (2, self._sim.config.AUDIO.RIR_SAMPLING_RATE)
+        sensor_shape = (
+            2,
+            int(self._sim.config.AUDIO.RIR_SAMPLING_RATE * self._sim.config.STEP_TIME)
+        )
 
         return spaces.Box(
             low=np.finfo(np.float32).min,
@@ -80,7 +83,11 @@ class SpectrogramSensor(Sensor):
         return SensorTypes.PATH
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        spectrogram = self.compute_spectrogram(np.ones((2, int(self._sim.config.AUDIO.RIR_SAMPLING_RATE/4))))
+        spectrogram = self.compute_spectrogram(
+            np.ones(
+                (2, int(self._sim.config.AUDIO.RIR_SAMPLING_RATE * self._sim.config.STEP_TIME))
+            )
+        )
 
         return spaces.Box(
             low=np.finfo(np.float32).min,
