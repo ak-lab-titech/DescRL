@@ -341,7 +341,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         else:
             self._offset = 0
         if self.config.AUDIO.EVERLASTING:
-            self._duration = 500
+            self._duration = 2500
         else:
             assert hasattr(self.config.AGENT_0, 'DURATION')
             self._duration = int(self.config.AGENT_0.DURATION)
