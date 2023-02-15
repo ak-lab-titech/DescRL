@@ -140,9 +140,9 @@ def init_distrib_slurm(
         torch.distributed.is_available()
     ), "torch.distributed must be available"
 
-    WORLD_SIZE = 4
-    NNODES = 1
-    NPERNODE = int(WORLD_SIZE / NNODES)
+    WORLD_SIZE = int(os.getenv("NP"))
+    NNODES = int(os.getenv("NNODES"))
+    NPERNODE = int(os.getenv("NPERNODE"))
 
     rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
     os.environ["NODE_RANK"]=str(rank//NPERNODE)
