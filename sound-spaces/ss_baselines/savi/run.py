@@ -149,4 +149,7 @@ def find_best_ckpt_idx(event_dir_path, min_step=-1, max_step=10000):
 
 
 if __name__ == "__main__":
+    f = open("debug.txt", "w")
+    f.write(f"RUN SAVi\n")
+    f.close()
     main()

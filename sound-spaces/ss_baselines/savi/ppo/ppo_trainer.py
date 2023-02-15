@@ -75,6 +75,8 @@ class PPOTrainer(BaseRLTrainer):
 
         self._static_smt_encoder = False
         self._encoder = None
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
 
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
         r"""Sets up actor critic and agent for PPO.
@@ -91,6 +93,8 @@ class PPOTrainer(BaseRLTrainer):
             observation_space = self.envs.observation_spaces[0]
 
         if not ppo_cfg.use_external_memory:
+            if self.use_direct_map:
+                raise NotImplementedError()
             self.actor_critic = AudioNavBaselinePolicy(
                 observation_space=observation_space,
                 action_space=self.envs.action_spaces[0],
@@ -103,6 +107,7 @@ class PPOTrainer(BaseRLTrainer):
             self.actor_critic = AudioNavSMTPolicy(
                 observation_space=observation_space,
                 action_space=self.envs.action_spaces[0],
+                direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
                 hidden_size=smt_cfg.hidden_size,
                 nhead=smt_cfg.nhead,
                 num_encoder_layers=smt_cfg.num_encoder_layers,
@@ -132,6 +137,7 @@ class PPOTrainer(BaseRLTrainer):
             num_mini_batch=ppo_cfg.num_mini_batch,
             value_loss_coef=ppo_cfg.value_loss_coef,
             entropy_coef=ppo_cfg.entropy_coef,
+            direct_map_loss_coef=ppo_cfg.direct_map_loss_coef,
             lr=ppo_cfg.lr,
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
@@ -148,6 +154,9 @@ class PPOTrainer(BaseRLTrainer):
             self.actor_critic.net.freeze_encoders()
 
         self.actor_critic.to(self.device)
+
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
 
     @staticmethod
     def search_dict(ckpt_dict, encoder_name):
@@ -273,10 +282,12 @@ class PPOTrainer(BaseRLTrainer):
                 actions,
                 actions_log_probs,
                 recurrent_hidden_states,
-                external_memory_features
+                external_memory_features,
+                predict_direct_map
             ) = self.actor_critic.act(
                 step_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
+                rollouts.prev_direct_map[rollouts.step] if self.use_direct_map else None,
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step],
                 external_memory,
@@ -324,9 +335,11 @@ class PPOTrainer(BaseRLTrainer):
             actions,
             actions_log_probs,
             values,
+            predict_direct_map,
             rewards.to(device=self.device),
             masks.to(device=self.device),
             external_memory_features,
+            dones,
         )
 
         if self.config.RL.PPO.use_belief_predictor:
@@ -364,6 +377,7 @@ class PPOTrainer(BaseRLTrainer):
                 (
                     obs_batch,
                     recurrent_hidden_states_batch,
+                    prev_direct_map_batch,
                     actions_batch,
                     prev_actions_batch,
                     value_preds_batch,
@@ -424,6 +438,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value = self.actor_critic.get_value(
                 last_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
+                rollouts.prev_direct_map[rollouts.step] if self.use_direct_map else None,
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step],
                 external_memory,
@@ -434,7 +449,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value, ppo_cfg.use_gae, ppo_cfg.gamma, ppo_cfg.tau
         )
 
-        value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, direct_map_loss = self.agent.update(rollouts)
 
         rollouts.after_update()
 
@@ -443,6 +458,7 @@ class PPOTrainer(BaseRLTrainer):
             value_loss,
             action_loss,
             dist_entropy,
+            direct_map_loss,
         )
 
     def train(self) -> None:
@@ -763,6 +779,14 @@ class PPOTrainer(BaseRLTrainer):
             ppo_cfg.hidden_size,
             device=self.device,
         )
+        if self.use_direct_map:
+            predict_direct_map = torch.zeros(
+                self.config.NUM_PROCESSES,
+                config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+                device=self.device,
+            )
+        else:
+            predict_direct_map = None
         if ppo_cfg.use_external_memory:
             test_em = ExternalMemory(
                 self.config.NUM_PROCESSES,
@@ -815,16 +839,20 @@ class PPOTrainer(BaseRLTrainer):
             current_episodes = self.envs.current_episodes()
 
             with torch.no_grad():
-                _, actions, _, test_recurrent_hidden_states, test_em_features = self.actor_critic.act(
+                _, actions, _, test_recurrent_hidden_states, test_em_features, predict_direct_map = self.actor_critic.act(
                     batch,
                     test_recurrent_hidden_states,
+                    predict_direct_map,
                     prev_actions,
                     not_done_masks,
                     test_em.memory[:, 0] if ppo_cfg.use_external_memory else None,
                     test_em.masks if ppo_cfg.use_external_memory else None,
                     deterministic=False
                 )
-
+                if self.use_direct_map:
+                    # predict_direct_map.copy_(batch["direct_map"]) # こっちを選択するとGTをいれることになる
+                    predict_direct_map.copy_(predict_direct_map)
+                
                 prev_actions.copy_(actions)
 
             actions = [a[0].item() for a in actions]
@@ -864,6 +892,11 @@ class PPOTrainer(BaseRLTrainer):
                     if 'view_point_goals' in observations[i]:
                         pair += (observations[i]['view_point_goals'],)
                     descriptor_pred_gt[i].append(pair)
+            
+            for i in range(len(dones)):
+                if dones[i] and self.use_direct_map:
+                    predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
+
             for i in range(self.envs.num_envs):
                 if len(self.config.VIDEO_OPTION) > 0:
                     if self.config.RL.PPO.use_belief_predictor:
@@ -912,7 +945,7 @@ class PPOTrainer(BaseRLTrainer):
                         episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
                         episode_stats['descriptor_pred_gt'] = descriptor_pred_gt[i][:-1]
                         descriptor_pred_gt[i] = [descriptor_pred_gt[i][-1]]
-                    logging.debug(episode_stats)
+                    logging.info(episode_stats)
                     current_episode_reward[i] = 0
                     # use scene_id + episode_id as unique id for storing stats
                     stats_episodes[
@@ -974,6 +1007,7 @@ class PPOTrainer(BaseRLTrainer):
                 not_done_masks,
                 test_em,
                 current_episode_reward,
+                predict_direct_map,
                 prev_actions,
                 batch,
                 rgb_frames,
@@ -983,6 +1017,7 @@ class PPOTrainer(BaseRLTrainer):
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
+                predict_direct_map,
                 prev_actions,
                 batch,
                 rgb_frames,
@@ -1009,11 +1044,18 @@ class PPOTrainer(BaseRLTrainer):
         episode_metrics_mean = {}
         for metric_uuid in self.metric_uuids:
             episode_metrics_mean[metric_uuid] = aggregated_stats[metric_uuid] / num_episodes
+        
+        episode_metrics_std = {}
+        for metric_uuid in self.metric_uuids:
+            episode_metrics_std[metric_uuid] = np.std([v[metric_uuid] for v in stats_episodes.values()])
 
         logger.info(f"Average episode reward: {episode_reward_mean:.6f}")
         for metric_uuid in self.metric_uuids:
             logger.info(
                 f"Average episode {metric_uuid}: {episode_metrics_mean[metric_uuid]:.6f}"
+            )
+            logger.info(
+                f"STD episode {metric_uuid}: {episode_metrics_std[metric_uuid]:.6f}"
             )
 
         if not config.EVAL.SPLIT.startswith('test'):

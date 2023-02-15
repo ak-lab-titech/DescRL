@@ -10,6 +10,9 @@ import pdb
 from collections import defaultdict
 
 import torch
+import numpy as np
+
+np.random.seed(0)
 
 
 class RolloutStorage:
@@ -24,6 +27,9 @@ class RolloutStorage:
         observation_space,
         action_space,
         recurrent_hidden_state_size,
+        direct_map_size,
+        use_gt_direct_map,
+        dropout_rate,
         use_external_memory,
         external_memory_size,
         external_memory_capacity,
@@ -49,6 +55,17 @@ class RolloutStorage:
             num_envs,
             recurrent_hidden_state_size,
         )
+
+        self.direct_map_size = direct_map_size
+        self.use_direct_map = (direct_map_size is not None)
+        if self.use_direct_map:
+            self.prev_direct_map = torch.zeros(
+                num_steps + 2,
+                num_envs,
+                direct_map_size,
+            )
+        else:
+            self.prev_direct_map = None
 
         self.rewards = torch.zeros(num_steps, num_envs, 1)
         self.value_preds = torch.zeros(num_steps + 1, num_envs, 1)
@@ -84,12 +101,16 @@ class RolloutStorage:
 
         self.num_steps = num_steps
         self.step = 0
+        self.use_gt_direct_map = use_gt_direct_map
+        self.dropout_rate = dropout_rate
 
     def to(self, device):
         for sensor in self.observations:
             self.observations[sensor] = self.observations[sensor].to(device)
 
         self.recurrent_hidden_states = self.recurrent_hidden_states.to(device)
+        if self.use_direct_map:
+            self.prev_direct_map = self.prev_direct_map.to(device)
         self.rewards = self.rewards.to(device)
         self.value_preds = self.value_preds.to(device)
         self.returns = self.returns.to(device)
@@ -108,9 +129,11 @@ class RolloutStorage:
         actions,
         action_log_probs,
         value_preds,
+        predict_direct_map,
         rewards,
         not_done_masks,
         em_features,
+        dones,
     ):
         for sensor in observations:
             self.observations[sensor][self.step + 1].copy_(
@@ -119,6 +142,26 @@ class RolloutStorage:
         self.recurrent_hidden_states[self.step + 1].copy_(
             recurrent_hidden_states
         )
+
+        for i in range(len(dones)):
+            if not self.use_direct_map:
+                break
+
+            if not self.use_gt_direct_map:
+                if dones[i]:
+                    self.prev_direct_map[self.step + 1][i].copy_(torch.zeros(self.direct_map_size))
+                else:
+                    self.prev_direct_map[self.step + 1][i].copy_(predict_direct_map[i].detach()) # detachはあってもなくてもかわらなそう？
+            else:
+                if dones[i]:
+                    self.prev_direct_map[self.step + 1][i].copy_(torch.zeros(self.direct_map_size))
+                self.prev_direct_map[self.step + 2][i].copy_(observations["direct_map"][i])
+
+            if self.dropout_rate != 0.0:
+                for j in range(self.direct_map_size):
+                    if np.random.rand() < self.dropout_rate:
+                        self.prev_direct_map[self.step + 1][i][j] = 0.0
+
         self.actions[self.step].copy_(actions)
         self.prev_actions[self.step + 1].copy_(actions)
         self.action_log_probs[self.step].copy_(action_log_probs)
@@ -140,6 +183,13 @@ class RolloutStorage:
         self.recurrent_hidden_states[0].copy_(
             self.recurrent_hidden_states[self.step]
         )
+
+        if self.use_direct_map and self.use_gt_direct_map:
+            self.prev_direct_map[0].copy_(self.prev_direct_map[self.step - 1])
+        elif self.use_direct_map:
+            self.prev_direct_map[0].copy_(self.prev_direct_map[self.step - 1])
+            self.prev_direct_map[1].copy_(self.prev_direct_map[self.step])
+        
         self.masks[0].copy_(self.masks[self.step])
         self.prev_actions[0].copy_(self.prev_actions[self.step])
         if self.use_external_memory:
@@ -179,6 +229,10 @@ class RolloutStorage:
             observations_batch = defaultdict(list)
 
             recurrent_hidden_states_batch = []
+            if self.use_direct_map:
+                prev_direct_map_batch = []
+            else:
+                prev_direct_map_batch = None
             actions_batch = []
             prev_actions_batch = []
             value_preds_batch = []
@@ -205,6 +259,9 @@ class RolloutStorage:
                     self.recurrent_hidden_states[0, :, ind]
                 )
 
+                if self.use_direct_map:
+                    prev_direct_map_batch.append(self.prev_direct_map[: self.step, ind])
+
                 actions_batch.append(self.actions[: self.step, ind])
                 prev_actions_batch.append(self.prev_actions[: self.step, ind])
                 value_preds_batch.append(self.value_preds[: self.step, ind])
@@ -225,6 +282,9 @@ class RolloutStorage:
                 observations_batch[sensor] = torch.stack(
                     observations_batch[sensor], 1
                 )
+            
+            if self.use_direct_map:
+                prev_direct_map_batch = torch.stack(prev_direct_map_batch, 1)
 
             actions_batch = torch.stack(actions_batch, 1)
             prev_actions_batch = torch.stack(prev_actions_batch, 1)
@@ -247,10 +307,14 @@ class RolloutStorage:
             )
 
             # Flatten the (T, N, ...) tensors to (T * N, ...)
+            
             for sensor in observations_batch:
                 observations_batch[sensor] = self._flatten_helper(
                     T, N, observations_batch[sensor]
                 )
+
+            if self.use_direct_map:
+                prev_direct_map_batch = self._flatten_helper(T, N, prev_direct_map_batch)
 
             actions_batch = self._flatten_helper(T, N, actions_batch)
             prev_actions_batch = self._flatten_helper(T, N, prev_actions_batch)
@@ -268,6 +332,7 @@ class RolloutStorage:
             yield (
                 observations_batch,
                 recurrent_hidden_states_batch,
+                prev_direct_map_batch,
                 actions_batch,
                 prev_actions_batch,
                 value_preds_batch,

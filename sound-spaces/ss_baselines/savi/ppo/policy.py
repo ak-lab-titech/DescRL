@@ -21,6 +21,7 @@ from ss_baselines.savi.models.visual_cnn import VisualCNN
 from ss_baselines.savi.models.audio_cnn import AudioCNN
 from ss_baselines.savi.models.smt_state_encoder import SMTStateEncoder
 from ss_baselines.savi.models.smt_cnn import SMTCNN
+from ss_baselines.savi.models.direct_map_encoder import DirectMapEncoder
 
 DUAL_GOAL_DELIMITER = ','
 
@@ -43,14 +44,15 @@ class Policy(nn.Module):
         self,
         observations,
         rnn_hidden_states,
+        prev_direct_map,
         prev_actions,
         masks,
         ext_memory,
         ext_memory_masks,
         deterministic=False,
     ):
-        features, rnn_hidden_states, ext_memory_feats = self.net(
-            observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks
+        features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
+            observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
         )
         distribution = self.action_distribution(features)
         value = self.critic(features)
@@ -62,11 +64,11 @@ class Policy(nn.Module):
 
         action_log_probs = distribution.log_probs(action)
 
-        return value, action, action_log_probs, rnn_hidden_states, ext_memory_feats
+        return value, action, action_log_probs, rnn_hidden_states, ext_memory_feats, direct_map
 
-    def get_value(self, observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks):
-        features, _, _ = self.net(
-            observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks
+    def get_value(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks):
+        features, _, _ , _= self.net(
+            observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
         )
         return self.critic(features)
 
@@ -74,14 +76,15 @@ class Policy(nn.Module):
         self,
         observations,
         rnn_hidden_states,
+        prev_direct_map,
         prev_actions,
         masks,
         action,
         ext_memory,
         ext_memory_masks,
     ):
-        features, rnn_hidden_states, ext_memory_feats = self.net(
-            observations, rnn_hidden_states, prev_actions,
+        features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
+            observations, rnn_hidden_states, prev_direct_map, prev_actions,
             masks, ext_memory, ext_memory_masks
         )
         distribution = self.action_distribution(features)
@@ -90,7 +93,7 @@ class Policy(nn.Module):
         action_log_probs = distribution.log_probs(action)
         distribution_entropy = distribution.entropy().mean()
 
-        return value, action_log_probs, distribution_entropy, rnn_hidden_states, ext_memory_feats
+        return value, action_log_probs, distribution_entropy, rnn_hidden_states, ext_memory_feats, direct_map
 
 
 class CriticHead(nn.Module):
@@ -127,11 +130,12 @@ class AudioNavBaselinePolicy(Policy):
 
 
 class AudioNavSMTPolicy(Policy):
-    def __init__(self, observation_space, action_space, hidden_size=128, **kwargs):
+    def __init__(self, observation_space, action_space, direct_map_size, hidden_size=128, **kwargs):
         super().__init__(
             AudioNavSMTNet(
                 observation_space,
                 action_space,
+                direct_map_size,
                 hidden_size=hidden_size,
                 **kwargs
             ),
@@ -292,6 +296,7 @@ class AudioNavSMTNet(Net):
         self,
         observation_space,
         action_space,
+        direct_map_size,
         hidden_size=128,
         use_pretrained=False,
         pretrained_path='',
@@ -314,6 +319,7 @@ class AudioNavSMTNet(Net):
         self._use_belief_encoder = use_belief_encoding
         self._normalize_category_distribution = normalize_category_distribution
         self._use_category_input = use_category_input
+        self.direct_map_size = direct_map_size
 
         assert SpectrogramSensor.cls_uuid in observation_space.spaces
         self.goal_encoder = AudioCNN(observation_space, 128, SpectrogramSensor.cls_uuid)
@@ -325,7 +331,17 @@ class AudioNavSMTNet(Net):
             action_encoding_dims = 16
         else:
             action_encoding_dims = 0
-        nfeats = self.visual_encoder.feature_dims + action_encoding_dims + audio_feature_dims
+        
+        if direct_map_size is not None:
+            self.direct_map_encoder = DirectMapEncoder(
+                input_size=audio_feature_dims + self._action_size + direct_map_size,
+                output_size=direct_map_size,
+                action_num=self._action_size,
+            )
+        
+        nfeats = self.visual_encoder.feature_dims + action_encoding_dims + audio_feature_dims + (
+            direct_map_size if direct_map_size is not None else 0
+        )
 
         if self._use_category_input:
             nfeats += 21
@@ -377,8 +393,8 @@ class AudioNavSMTNet(Net):
     def num_recurrent_layers(self):
         return -1
 
-    def forward(self, observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks):
-        x = self.get_features(observations, prev_actions)
+    def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks):
+        x, direct_map = self.get_features(observations, prev_direct_map, prev_actions)
 
         if self._use_belief_as_goal:
             belief = torch.zeros((x.shape[0], self._hidden_size), device=x.device)
@@ -400,7 +416,7 @@ class AudioNavSMTNet(Net):
         if self._use_residual_connection:
             x_att = torch.cat([x_att, x], 1)
 
-        return x_att, rnn_hidden_states, x
+        return x_att, rnn_hidden_states, x, direct_map
 
     def _get_one_hot(self, actions):
         if actions.shape[1] == self._action_size:
@@ -426,6 +442,8 @@ class AudioNavSMTNet(Net):
         params_to_freeze = []
         params_to_freeze.append(self.goal_encoder.parameters())
         params_to_freeze.append(self.visual_encoder.parameters())
+        if self.direct_map_size is not None:
+            params_to_freeze.append(self.direct_map_encoder.parameters())
         if self._use_action_encoding:
             params_to_freeze.append(self.action_encoder.parameters())
         for p in itertools.chain(*params_to_freeze):
@@ -435,12 +453,18 @@ class AudioNavSMTNet(Net):
         """Sets the goal, visual and fusion encoders to eval mode."""
         self.goal_encoder.eval()
         self.visual_encoder.eval()
+        self.direct_map_encoder.eval()
 
-    def get_features(self, observations, prev_actions):
+    def get_features(self, observations, prev_direct_map, prev_actions):
         x = []
         x.append(self.visual_encoder(observations))
         x.append(self.action_encoder(self._get_one_hot(prev_actions)))
         x.append(self.goal_encoder(observations))
+        if self.direct_map_size is not None:
+            direct_map = self.direct_map_encoder(prev_direct_map, x[2], None, self._get_one_hot(prev_actions))
+            x.append(direct_map)
+        else:
+            direct_map = None
         if self._use_category_input:
             x.append(observations[Category.cls_uuid])
 
@@ -448,4 +472,4 @@ class AudioNavSMTNet(Net):
 
         x = torch.cat(x, dim=1)
 
-        return x
+        return x, direct_map

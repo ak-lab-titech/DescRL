@@ -149,6 +149,11 @@ _TC.TASK.AUDIOGOAL_SENSOR.TYPE = "AudioGoalSensor"
 _TC.TASK.SPECTROGRAM_SENSOR = CN()
 _TC.TASK.SPECTROGRAM_SENSOR.TYPE = "SpectrogramSensor"
 # -----------------------------------------------------------------------------
+# DIRECT_MAP
+# -----------------------------------------------------------------------------
+_TC.TASK.DIRECT_MAP = CN()
+_TC.TASK.DIRECT_MAP.TYPE = "DirectMap"
+# -----------------------------------------------------------------------------
 # soundspaces
 # -----------------------------------------------------------------------------
 _TC.SIMULATOR.GRID_SIZE = 0.5
