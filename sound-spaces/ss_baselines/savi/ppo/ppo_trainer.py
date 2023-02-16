@@ -809,12 +809,21 @@ class PPOTrainer(BaseRLTrainer):
 
             descriptor_pred_gt = [[] for _ in range(self.config.NUM_PROCESSES)]
             for i in range(len(descriptor_pred_gt)):
-                category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
-                location_prediction = batch['location_belief'].cpu().numpy()[i]
-                category_gt = np.argmax(batch['category'].cpu().numpy()[i])
-                location_gt = batch['pointgoal_with_gps_compass'].cpu().numpy()[i]
+                if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                    category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
+                    category_gt = np.argmax(batch['category'].cpu().numpy()[i])
+                if self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                    location_prediction = batch['location_belief'].cpu().numpy()[i]
+                    location_gt = batch['pointgoal_with_gps_compass'].cpu().numpy()[i]
                 geodesic_distance = -1
-                pair = (category_prediction, location_prediction, category_gt, location_gt, geodesic_distance)
+                if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief and self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                    pair = (category_prediction, location_prediction, category_gt, location_gt, geodesic_distance)
+                elif self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                    pair = (category_prediction, category_gt, geodesic_distance)
+                elif self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                    pair = (location_prediction, location_gt, geodesic_distance)
+                else:
+                    pair = (geodesic_distance)
                 if 'view_point_goals' in observations[i]:
                     pair += (observations[i]['view_point_goals'],)
                 descriptor_pred_gt[i].append(pair)
@@ -880,15 +889,21 @@ class PPOTrainer(BaseRLTrainer):
                 self.belief_predictor.update(batch, dones)
 
                 for i in range(len(descriptor_pred_gt)):
-                    category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
+                    if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                        category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
+                        category_gt = np.argmax(batch['category'].cpu().numpy()[i])
                     location_prediction = batch['location_belief'].cpu().numpy()[i]
-                    category_gt = np.argmax(batch['category'].cpu().numpy()[i])
                     location_gt = batch['pointgoal_with_gps_compass'].cpu().numpy()[i]
                     if dones[i]:
                         geodesic_distance = -1
                     else:
                         geodesic_distance = infos[i]['distance_to_goal']
-                    pair = (category_prediction, location_prediction, category_gt, location_gt, geodesic_distance)
+                    if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief and self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                        pair = (category_prediction, location_prediction, category_gt, location_gt, geodesic_distance)
+                    elif self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                        pair = (location_prediction, location_gt, geodesic_distance)
+                    else:
+                        raise NotImplementedError()
                     if 'view_point_goals' in observations[i]:
                         pair += (observations[i]['view_point_goals'],)
                     descriptor_pred_gt[i].append(pair)
@@ -939,13 +954,15 @@ class PPOTrainer(BaseRLTrainer):
                     episode_stats['geodesic_distance'] = current_episodes[i].info['geodesic_distance']
                     episode_stats['euclidean_distance'] = norm(np.array(current_episodes[i].goals[0].position) -
                                                                np.array(current_episodes[i].start_position))
-                    episode_stats['audio_duration'] = int(current_episodes[i].duration)
-                    episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
+                    # episode_stats['audio_duration'] = int(current_episodes[i].duration)
+                    episode_stats['audio_duration'] = 2500
+                    # episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
+                    logging.info(episode_stats)
                     if self.config.RL.PPO.use_belief_predictor:
-                        episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
+                        # episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
                         episode_stats['descriptor_pred_gt'] = descriptor_pred_gt[i][:-1]
                         descriptor_pred_gt[i] = [descriptor_pred_gt[i][-1]]
-                    logging.info(episode_stats)
+                    # logging.info(episode_stats)
                     current_episode_reward[i] = 0
                     # use scene_id + episode_id as unique id for storing stats
                     stats_episodes[

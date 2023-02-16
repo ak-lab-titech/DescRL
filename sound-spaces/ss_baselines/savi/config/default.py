@@ -289,18 +289,20 @@ def get_config(
                         shutil.rmtree(d)
     else:
         # overwrite training configs
-        config.defrost()
-        config.NUM_PROCESSES = 10
-        if config.EVAL.SPLIT.startswith('val'):
-            config.USE_SYNC_VECENV = True
-            config.TEST_EPISODE_COUNT = 500
-        elif config.EVAL.SPLIT.startswith('test'):
-            config.TEST_EPISODE_COUNT = 1000
-        else:
-            raise ValueError('Dataset split must starts with train, val or test!')
-        config.freeze()
+        pass
+        # config.defrost()
+        # config.NUM_PROCESSES = 10
+        # if config.EVAL.SPLIT.startswith('val'):
+        #     config.USE_SYNC_VECENV = True
+        #     config.TEST_EPISODE_COUNT = 500
+        # elif config.EVAL.SPLIT.startswith('test'):
+        #     config.TEST_EPISODE_COUNT = 1000
+        # else:
+        #     raise ValueError('Dataset split must starts with train, val or test!')
+        # config.freeze()
 
     config.TASK_CONFIG.defrost()
+    config.RL.defrost()
     config.TASK_CONFIG.SIMULATOR.USE_SYNC_VECENV = config.USE_SYNC_VECENV
     if config.CONTINUOUS:
         # config.TASK_CONFIG.SIMULATOR.FORWARD_STEP_SIZE = 0.25
@@ -310,6 +312,7 @@ def get_config(
         config.TASK_CONFIG.SIMULATOR.AUDIO.CROSSFADE = True
         config.TASK_CONFIG.DATASET.CONTINUOUS = True
         config.RL.DISTANCE_REWARD_SCALE = 1.0
+    config.RL.freeze()
     config.TASK_CONFIG.freeze()
     config.freeze()
     return config

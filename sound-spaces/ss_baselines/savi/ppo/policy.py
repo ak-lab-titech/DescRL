@@ -453,7 +453,8 @@ class AudioNavSMTNet(Net):
         """Sets the goal, visual and fusion encoders to eval mode."""
         self.goal_encoder.eval()
         self.visual_encoder.eval()
-        self.direct_map_encoder.eval()
+        if self.direct_map_size is not None:
+            self.direct_map_encoder.eval()
 
     def get_features(self, observations, prev_direct_map, prev_actions):
         x = []
