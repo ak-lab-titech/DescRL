@@ -65,5 +65,6 @@ DATASET:
   SOUND_TYPE: "multi_train"
   CONTENT_SCENES: ["*"]
   VERSION: 'v2'
+  # VERSION: 'split_test'
   SCENES_DIR: "data/scene_datasets/replica"
   DATA_PATH: "data/datasets/audionav/replica/{version}/{split}/{split}.json.gz"

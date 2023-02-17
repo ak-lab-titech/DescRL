@@ -62,10 +62,10 @@ TASK:
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "test_telephone"
+  SPLIT: "test_telephone_0"
   SOUND_TYPE: "multi_train"
   CONTENT_SCENES: ["*"]
-  VERSION: "v2"
+  VERSION: "split_test"
   SAME_SOUND: False
   SCENE_DATASET: "replica"
   SCENES_DIR: "data/scene_datasets/replica"

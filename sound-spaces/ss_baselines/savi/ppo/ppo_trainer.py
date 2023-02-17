@@ -1048,8 +1048,14 @@ class PPOTrainer(BaseRLTrainer):
             )
 
         # dump stats for each episode
-        stats_file = os.path.join(config.TENSORBOARD_DIR,
-                                  '{}_stats_{}.json'.format(config.EVAL.SPLIT, config.SEED))
+        stats_file = os.path.join(
+            config.TENSORBOARD_DIR,
+            "{}_{}_{}.json".format(
+                config.EVAL.SPLIT,
+                config.TASK_CONFIG.DATASET.SOUND_TYPE,
+                os.getenv('JOB_ID')
+            )
+        )
         with open(stats_file, 'w') as fo:
             json.dump({','.join(key): value for key, value in stats_episodes.items()}, fo, cls=NpEncoder)
 

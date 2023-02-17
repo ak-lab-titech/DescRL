@@ -8,6 +8,7 @@
 
 import os
 import sys
+import json
 
 sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
 
@@ -26,6 +27,7 @@ from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from ss_baselines.common.benchmark import Benchmark
 from ss_baselines.av_nav.config.default import get_task_config
 # from ss_baselines.av_wan.config.default import get_task_config
+from ss_baselines.common.utils import NpEncoder
 
 
 class RandomAgent(habitat.Agent):
@@ -40,7 +42,11 @@ class RandomAgent(habitat.Agent):
 
     def is_goal_reached(self, observations):
         # because the frame is in with polar coordinates
-        dists = [d[0] for d in observations[self.goal_sensor_uuid]]
+        dists = [
+            observations[self.goal_sensor_uuid][2*i] for i in range(
+                int(len(observations[self.goal_sensor_uuid])/2)
+            )
+        ]
 
         for i, dist in enumerate(dists):
             if not (i in self.found_goal_id) and dist <= self.dist_threshold_to_stop:
@@ -51,9 +57,7 @@ class RandomAgent(habitat.Agent):
     def act(self, observations):
 
         reached = self.is_goal_reached(observations)
-        if reached and len(self.found_goal_id) == self.goal_num:
-            action = HabitatSimActions.STOP
-        elif reached:
+        if reached:
             action = HabitatSimActions.FOUND
         else:
             action = np.random.choice(
@@ -193,6 +197,15 @@ def main():
             np.mean(all_metrics[k]),
             np.std(all_metrics[k]),
         ))
+    stats_file = os.path.join(
+        f"./data/models/ss2/replica/{task_config.SIMULATOR.AUDIO.NUM}g-random",
+        "{}_{}.json".format(
+            task_config.DATASET.SPLIT,
+            os.getenv('JOB_ID')
+        )
+    )
+    with open(stats_file, 'w') as fo:
+        json.dump(all_metrics, fo, cls=NpEncoder)
 
 
 if __name__ == "__main__":
