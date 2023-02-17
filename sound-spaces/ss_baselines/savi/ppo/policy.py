@@ -130,12 +130,13 @@ class AudioNavBaselinePolicy(Policy):
 
 
 class AudioNavSMTPolicy(Policy):
-    def __init__(self, observation_space, action_space, direct_map_size, hidden_size=128, **kwargs):
+    def __init__(self, observation_space, action_space, direct_map_size, goal_num, hidden_size=128, **kwargs):
         super().__init__(
             AudioNavSMTNet(
                 observation_space,
                 action_space,
                 direct_map_size,
+                goal_num,
                 hidden_size=hidden_size,
                 **kwargs
             ),
@@ -297,6 +298,7 @@ class AudioNavSMTNet(Net):
         observation_space,
         action_space,
         direct_map_size,
+        goal_num,
         hidden_size=128,
         use_pretrained=False,
         pretrained_path='',
@@ -320,6 +322,7 @@ class AudioNavSMTNet(Net):
         self._normalize_category_distribution = normalize_category_distribution
         self._use_category_input = use_category_input
         self.direct_map_size = direct_map_size
+        self.goal_num = goal_num
 
         assert SpectrogramSensor.cls_uuid in observation_space.spaces
         self.goal_encoder = AudioCNN(observation_space, 128, SpectrogramSensor.cls_uuid)
@@ -405,7 +408,7 @@ class AudioNavSMTNet(Net):
                     belief[:, :21] = observations[CategoryBelief.cls_uuid]
 
             if self._use_location_belief:
-                belief[:, 21:23] = observations[LocationBelief.cls_uuid]
+                belief[:, 21:21 + 2*self.goal_num] = observations[LocationBelief.cls_uuid]
 
             if self._use_belief_encoder:
                 belief = self.belief_encoder(belief)

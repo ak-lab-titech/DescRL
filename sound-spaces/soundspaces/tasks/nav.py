@@ -745,6 +745,7 @@ class LocationBelief(Sensor):
     def __init__(
         self, sim: Union[Simulator, Config], config: Config, *args: Any, **kwargs: Any
     ):
+        self.location_belief_dim = 2 * sim.config.AUDIO.NUM
         super().__init__(config=config)
         self._sim = sim
 
@@ -758,14 +759,14 @@ class LocationBelief(Sensor):
         return spaces.Box(
             low=0,
             high=1,
-            shape=(2,),
+            shape=(self.location_belief_dim,),
             dtype=bool
         )
 
     def get_observation(
         self, *args: Any, observations, episode: Episode, **kwargs: Any
     ) -> object:
-        belief = np.zeros(2)
+        belief = np.zeros(self.location_belief_dim)
         return belief
 
 

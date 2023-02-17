@@ -35,7 +35,7 @@ SIMULATOR:
   AUDIO:
     # RIR_SAMPLING_RATE: 16000
     RIR_SAMPLING_RATE: 44100
-    NUM: 1
+    NUM: 2
 
 TASK:
   TYPE: AudioNav
@@ -61,7 +61,7 @@ TASK:
 
 DATASET:
   TYPE: "AudioNav"
-  SPLIT: "train_telephone"
+  SPLIT: "train_telephone_bell"
   SOUND_TYPE: "multi_train"
   CONTENT_SCENES: ["*"]
   VERSION: 'v2'

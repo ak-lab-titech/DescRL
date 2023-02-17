@@ -108,6 +108,7 @@ class PPOTrainer(BaseRLTrainer):
                 observation_space=observation_space,
                 action_space=self.envs.action_spaces[0],
                 direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+                goal_num=self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
                 hidden_size=smt_cfg.hidden_size,
                 nhead=smt_cfg.nhead,
                 num_encoder_layers=smt_cfg.num_encoder_layers,
@@ -124,7 +125,7 @@ class PPOTrainer(BaseRLTrainer):
             if ppo_cfg.use_belief_predictor:
                 belief_cfg = ppo_cfg.BELIEF_PREDICTOR
                 smt = self.actor_critic.net.smt_state_encoder
-                self.belief_predictor = BeliefPredictor(belief_cfg, self.device, smt._input_size, smt._pose_indices,
+                self.belief_predictor = BeliefPredictor(belief_cfg, self.device, smt._input_size, smt._pose_indices, self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
                                                         smt.hidden_state_size, self.envs.num_envs,
                                                         ).to(device=self.device)
                 for param in self.belief_predictor.parameters():
@@ -397,7 +398,10 @@ class PPOTrainer(BaseRLTrainer):
                 masks = (torch.sum(torch.reshape(obs_batch[SpectrogramSensor.cls_uuid],
                         (obs_batch[SpectrogramSensor.cls_uuid].shape[0], -1)), dim=1, keepdim=True) != 0).float()
                 gts = obs_batch[IntegratedPointGoalGPSAndCompassSensor.cls_uuid]
-                transformed_gts = torch.stack([gts[:, 1], -gts[:, 0]], dim=1)
+                transformed_gts = []
+                for gn in range(self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM):
+                    transformed_gts = transformed_gts + [gts[:, 2*gn + 1], -gts[:, 2*gn]]
+                transformed_gts = torch.stack(transformed_gts, dim=1)
                 masked_preds = masks.expand_as(preds) * preds
                 masked_gts = masks.expand_as(transformed_gts) * transformed_gts
                 loss = bp.regressor_criterion(masked_preds, masked_gts)

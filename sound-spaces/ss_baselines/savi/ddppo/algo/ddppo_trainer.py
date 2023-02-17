@@ -89,7 +89,7 @@ class DDPPOTrainer(PPOTrainer):
             if ppo_cfg.use_belief_predictor:
                 belief_cfg = ppo_cfg.BELIEF_PREDICTOR
                 bp_class = BeliefPredictorDDP if belief_cfg.online_training else BeliefPredictor
-                self.belief_predictor = bp_class(belief_cfg, self.device, None, None,
+                self.belief_predictor = bp_class(belief_cfg, self.device, None, None, self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
                                                  ppo_cfg.hidden_size, self.envs.num_envs, has_distractor_sound
                                                  ).to(device=self.device)
                 if belief_cfg.online_training:
@@ -108,6 +108,7 @@ class DDPPOTrainer(PPOTrainer):
                 observation_space=self.envs.observation_spaces[0],
                 action_space=self.envs.action_spaces[0],
                 direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+                goal_num=self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
                 hidden_size=smt_cfg.hidden_size,
                 nhead=smt_cfg.nhead,
                 num_encoder_layers=smt_cfg.num_encoder_layers,
@@ -131,7 +132,7 @@ class DDPPOTrainer(PPOTrainer):
             if ppo_cfg.use_belief_predictor:
                 smt = self.actor_critic.net.smt_state_encoder
                 bp_class = BeliefPredictorDDP if belief_cfg.online_training else BeliefPredictor
-                self.belief_predictor = bp_class(belief_cfg, self.device, smt._input_size, smt._pose_indices,
+                self.belief_predictor = bp_class(belief_cfg, self.device, smt._input_size, smt._pose_indices, self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
                                                  smt.hidden_state_size, self.envs.num_envs, has_distractor_sound
                                                  ).to(device=self.device)
                 if belief_cfg.online_training:
