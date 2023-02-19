@@ -9,6 +9,14 @@
 import argparse
 import logging
 import os
+import sys
+
+os.environ['MAGNUM_LOG'] = "quiet"
+os.environ['HABITAT_SIM_LOG'] = "quiet"
+
+sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
+sys.path.append("/home/0/19B30511/av-nav/habitat-lab")
+
 
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
@@ -141,4 +149,7 @@ def find_best_ckpt_idx(event_dir_path, min_step=-1, max_step=10000):
 
 
 if __name__ == "__main__":
+    f = open("debug.txt", "w")
+    f.write(f"RUN SAVi\n")
+    f.close()
     main()

@@ -53,7 +53,7 @@ class DecentralizedDistributedMixinBelief:
 
 
 class BeliefPredictor(nn.Module):
-    def __init__(self, belief_config, device, input_size, pose_indices,
+    def __init__(self, belief_config, device, input_size, pose_indices, goal_num,
                  hidden_state_size, num_env=1, has_distractor_sound=False):
         super(BeliefPredictor, self).__init__()
         self.config = belief_config
@@ -61,6 +61,7 @@ class BeliefPredictor(nn.Module):
         self.predict_label = belief_config.use_label_belief
         self.predict_location = belief_config.use_location_belief
         self.has_distractor_sound = has_distractor_sound
+        self.goal_num = goal_num
 
         if self.predict_location:
             if belief_config.online_training:
@@ -68,7 +69,7 @@ class BeliefPredictor(nn.Module):
                     self.predictor = custom_resnet18(num_input_channels=23)
                 else:
                     self.predictor = custom_resnet18(num_input_channels=2)
-                self.predictor.fc = nn.Linear(4608, 2)
+                self.predictor.fc = nn.Linear(38016, 2*self.goal_num) # おそらくSpectrogramのサイズの影響でdefaultの4608ではダメ
             else:
                 self.predictor = models.resnet18(pretrained=True)
                 self.predictor.conv1 = nn.Conv2d(2, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -156,7 +157,10 @@ class BeliefPredictor(nn.Module):
                 if observations[SpectrogramSensor.cls_uuid][i].sum().item() != 0:
                     # pointgoal_with_gps_compass: X is forward, Y is rightward,
                     # pose: same XY but heading is positive from X to -Y defined based on the initial pose
-                    pointgoal_base = np.array([-pointgoal[1], pointgoal[0]])
+                    pointgoal_base = []
+                    for gn in range(self.goal_num):
+                        pointgoal_base = pointgoal_base + [-pointgoal[2*gn + 1], pointgoal[2*gn]]
+                    pointgoal_base = np.array(pointgoal_base)
                     if self.last_pointgoal[i] is None:
                         pointgoal_avg = pointgoal_base
                     else:
@@ -168,7 +172,7 @@ class BeliefPredictor(nn.Module):
                     self.last_pointgoal[i] = base_to_odom(pointgoal_avg, pose)
                 else:
                     if self.last_pointgoal[i] is None:
-                        pointgoal_avg = np.array([10, 10])
+                        pointgoal_avg = np.array([10 for gn in range(self.goal_num*2)])
                     else:
                         pointgoal_avg = odom_to_base(self.last_pointgoal[i], pose)
 
@@ -209,18 +213,24 @@ class BeliefPredictorDDP(BeliefPredictor, DecentralizedDistributedMixinBelief):
 
 def base_to_odom(pointgoal_base, pose):
     angle = -pose[2]
-    d = np.linalg.norm(pointgoal_base)
-    theta = np.arctan2(pointgoal_base[1], pointgoal_base[0])
-
-    pointgoal_odom = np.array([pose[0] + d*np.cos(theta+angle), pose[1] + d * np.sin(theta+angle)])
+    goal_num = int(len(pointgoal_base) / 2)
+    pointgoal_odom = []
+    for i in range(goal_num):
+        d = np.linalg.norm([pointgoal_base[2*i], pointgoal_base[2*i + 1]])
+        theta = np.arctan2(pointgoal_base[2*i + 1], pointgoal_base[2*i])
+        pointgoal_odom = pointgoal_odom + [pose[0] + d*np.cos(theta+angle), pose[1] + d * np.sin(theta+angle)]
+    pointgoal_odom = np.array(pointgoal_odom)
     return pointgoal_odom
 
 
 def odom_to_base(pointgoal_odom, pose):
     angle = -pose[2]
-    delta = pointgoal_odom - pose[:2]
-    delta_theta = np.arctan2(delta[1], delta[0]) - angle
-    d = np.linalg.norm(delta)
-
-    pointgoal_base = np.array([d * np.cos(delta_theta), d * np.sin(delta_theta)])
+    goal_num = int(len(pointgoal_odom) / 2)
+    pointgoal_base = []
+    for i in range(goal_num):
+        delta = np.array([pointgoal_odom[2*i], pointgoal_odom[2*i+1]]) - pose[:2]
+        delta_theta = np.arctan2(delta[1], delta[0]) - angle
+        d = np.linalg.norm(delta)
+        pointgoal_base = pointgoal_base + [d * np.cos(delta_theta), d * np.sin(delta_theta)]
+    pointgoal_base = np.array(pointgoal_base)
     return pointgoal_base

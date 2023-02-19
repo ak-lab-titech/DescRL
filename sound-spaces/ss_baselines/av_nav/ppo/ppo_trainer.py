@@ -761,7 +761,14 @@ class PPOTrainer(BaseRLTrainer):
             )
         num_episodes = len(stats_episodes)
 
-        stats_file = os.path.join(config.TENSORBOARD_DIR, '{}_stats_{}.json'.format(config.EVAL.SPLIT, config.SEED))
+        stats_file = os.path.join(
+            config.TENSORBOARD_DIR,
+            "{}_{}_{}.json".format(
+                config.EVAL.SPLIT,
+                config.TASK_CONFIG.DATASET.SOUND_TYPE,
+                os.getenv('JOB_ID')
+            )
+        )
         new_stats_episodes = {','.join(key): value for key, value in stats_episodes.items()}
         with open(stats_file, 'w') as fo:
             json.dump(new_stats_episodes, fo)

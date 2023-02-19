@@ -53,7 +53,10 @@ class AudioGoalSensor(Sensor):
         return SensorTypes.PATH
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        sensor_shape = (2, self._sim.config.AUDIO.RIR_SAMPLING_RATE)
+        sensor_shape = (
+            2,
+            int(self._sim.config.AUDIO.RIR_SAMPLING_RATE * self._sim.config.STEP_TIME)
+        )
 
         return spaces.Box(
             low=np.finfo(np.float32).min,
@@ -80,7 +83,11 @@ class SpectrogramSensor(Sensor):
         return SensorTypes.PATH
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        spectrogram = self.compute_spectrogram(np.ones((2, int(self._sim.config.AUDIO.RIR_SAMPLING_RATE/4))))
+        spectrogram = self.compute_spectrogram(
+            np.ones(
+                (2, int(self._sim.config.AUDIO.RIR_SAMPLING_RATE * self._sim.config.STEP_TIME))
+            )
+        )
 
         return spaces.Box(
             low=np.finfo(np.float32).min,
@@ -738,6 +745,7 @@ class LocationBelief(Sensor):
     def __init__(
         self, sim: Union[Simulator, Config], config: Config, *args: Any, **kwargs: Any
     ):
+        self.location_belief_dim = 2 * sim.config.AUDIO.NUM
         super().__init__(config=config)
         self._sim = sim
 
@@ -751,14 +759,14 @@ class LocationBelief(Sensor):
         return spaces.Box(
             low=0,
             high=1,
-            shape=(2,),
+            shape=(self.location_belief_dim,),
             dtype=bool
         )
 
     def get_observation(
         self, *args: Any, observations, episode: Episode, **kwargs: Any
     ) -> object:
-        belief = np.zeros(2)
+        belief = np.zeros(self.location_belief_dim)
         return belief
 
 

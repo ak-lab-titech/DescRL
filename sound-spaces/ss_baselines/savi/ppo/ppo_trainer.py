@@ -75,6 +75,8 @@ class PPOTrainer(BaseRLTrainer):
 
         self._static_smt_encoder = False
         self._encoder = None
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
 
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
         r"""Sets up actor critic and agent for PPO.
@@ -91,6 +93,8 @@ class PPOTrainer(BaseRLTrainer):
             observation_space = self.envs.observation_spaces[0]
 
         if not ppo_cfg.use_external_memory:
+            if self.use_direct_map:
+                raise NotImplementedError()
             self.actor_critic = AudioNavBaselinePolicy(
                 observation_space=observation_space,
                 action_space=self.envs.action_spaces[0],
@@ -103,6 +107,8 @@ class PPOTrainer(BaseRLTrainer):
             self.actor_critic = AudioNavSMTPolicy(
                 observation_space=observation_space,
                 action_space=self.envs.action_spaces[0],
+                direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+                goal_num=self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
                 hidden_size=smt_cfg.hidden_size,
                 nhead=smt_cfg.nhead,
                 num_encoder_layers=smt_cfg.num_encoder_layers,
@@ -119,7 +125,7 @@ class PPOTrainer(BaseRLTrainer):
             if ppo_cfg.use_belief_predictor:
                 belief_cfg = ppo_cfg.BELIEF_PREDICTOR
                 smt = self.actor_critic.net.smt_state_encoder
-                self.belief_predictor = BeliefPredictor(belief_cfg, self.device, smt._input_size, smt._pose_indices,
+                self.belief_predictor = BeliefPredictor(belief_cfg, self.device, smt._input_size, smt._pose_indices, self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
                                                         smt.hidden_state_size, self.envs.num_envs,
                                                         ).to(device=self.device)
                 for param in self.belief_predictor.parameters():
@@ -132,6 +138,7 @@ class PPOTrainer(BaseRLTrainer):
             num_mini_batch=ppo_cfg.num_mini_batch,
             value_loss_coef=ppo_cfg.value_loss_coef,
             entropy_coef=ppo_cfg.entropy_coef,
+            direct_map_loss_coef=ppo_cfg.direct_map_loss_coef,
             lr=ppo_cfg.lr,
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
@@ -148,6 +155,9 @@ class PPOTrainer(BaseRLTrainer):
             self.actor_critic.net.freeze_encoders()
 
         self.actor_critic.to(self.device)
+
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
 
     @staticmethod
     def search_dict(ckpt_dict, encoder_name):
@@ -273,10 +283,12 @@ class PPOTrainer(BaseRLTrainer):
                 actions,
                 actions_log_probs,
                 recurrent_hidden_states,
-                external_memory_features
+                external_memory_features,
+                predict_direct_map
             ) = self.actor_critic.act(
                 step_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
+                rollouts.prev_direct_map[rollouts.step] if self.use_direct_map else None,
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step],
                 external_memory,
@@ -324,16 +336,24 @@ class PPOTrainer(BaseRLTrainer):
             actions,
             actions_log_probs,
             values,
+            predict_direct_map,
             rewards.to(device=self.device),
             masks.to(device=self.device),
             external_memory_features,
+            dones,
         )
 
         if self.config.RL.PPO.use_belief_predictor:
             step_observation = {k: v[rollouts.step] for k, v in rollouts.observations.items()}
             self.belief_predictor.update(step_observation, dones)
-            for sensor in [LocationBelief.cls_uuid, CategoryBelief.cls_uuid]:
-                rollouts.observations[sensor][rollouts.step].copy_(step_observation[sensor])
+            if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                rollouts.observations[CategoryBelief.cls_uuid][rollouts.step].copy_(
+                    step_observation[CategoryBelief.cls_uuid]
+                )
+            if self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                rollouts.observations[LocationBelief.cls_uuid][rollouts.step].copy_(
+                    step_observation[LocationBelief.cls_uuid]
+                )
 
         pth_time += time.time() - t_update_stats
 
@@ -358,6 +378,7 @@ class PPOTrainer(BaseRLTrainer):
                 (
                     obs_batch,
                     recurrent_hidden_states_batch,
+                    prev_direct_map_batch,
                     actions_batch,
                     prev_actions_batch,
                     value_preds_batch,
@@ -377,7 +398,10 @@ class PPOTrainer(BaseRLTrainer):
                 masks = (torch.sum(torch.reshape(obs_batch[SpectrogramSensor.cls_uuid],
                         (obs_batch[SpectrogramSensor.cls_uuid].shape[0], -1)), dim=1, keepdim=True) != 0).float()
                 gts = obs_batch[IntegratedPointGoalGPSAndCompassSensor.cls_uuid]
-                transformed_gts = torch.stack([gts[:, 1], -gts[:, 0]], dim=1)
+                transformed_gts = []
+                for gn in range(self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM):
+                    transformed_gts = transformed_gts + [gts[:, 2*gn + 1], -gts[:, 2*gn]]
+                transformed_gts = torch.stack(transformed_gts, dim=1)
                 masked_preds = masks.expand_as(preds) * preds
                 masked_gts = masks.expand_as(transformed_gts) * transformed_gts
                 loss = bp.regressor_criterion(masked_preds, masked_gts)
@@ -418,6 +442,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value = self.actor_critic.get_value(
                 last_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
+                rollouts.prev_direct_map[rollouts.step] if self.use_direct_map else None,
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step],
                 external_memory,
@@ -428,7 +453,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value, ppo_cfg.use_gae, ppo_cfg.gamma, ppo_cfg.tau
         )
 
-        value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, direct_map_loss = self.agent.update(rollouts)
 
         rollouts.after_update()
 
@@ -437,6 +462,7 @@ class PPOTrainer(BaseRLTrainer):
             value_loss,
             action_loss,
             dist_entropy,
+            direct_map_loss,
         )
 
     def train(self) -> None:
@@ -757,6 +783,14 @@ class PPOTrainer(BaseRLTrainer):
             ppo_cfg.hidden_size,
             device=self.device,
         )
+        if self.use_direct_map:
+            predict_direct_map = torch.zeros(
+                self.config.NUM_PROCESSES,
+                config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+                device=self.device,
+            )
+        else:
+            predict_direct_map = None
         if ppo_cfg.use_external_memory:
             test_em = ExternalMemory(
                 self.config.NUM_PROCESSES,
@@ -779,12 +813,21 @@ class PPOTrainer(BaseRLTrainer):
 
             descriptor_pred_gt = [[] for _ in range(self.config.NUM_PROCESSES)]
             for i in range(len(descriptor_pred_gt)):
-                category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
-                location_prediction = batch['location_belief'].cpu().numpy()[i]
-                category_gt = np.argmax(batch['category'].cpu().numpy()[i])
-                location_gt = batch['pointgoal_with_gps_compass'].cpu().numpy()[i]
+                if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                    category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
+                    category_gt = np.argmax(batch['category'].cpu().numpy()[i])
+                if self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                    location_prediction = batch['location_belief'].cpu().numpy()[i]
+                    location_gt = batch['pointgoal_with_gps_compass'].cpu().numpy()[i]
                 geodesic_distance = -1
-                pair = (category_prediction, location_prediction, category_gt, location_gt, geodesic_distance)
+                if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief and self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                    pair = (category_prediction, location_prediction, category_gt, location_gt, geodesic_distance)
+                elif self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                    pair = (category_prediction, category_gt, geodesic_distance)
+                elif self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                    pair = (location_prediction, location_gt, geodesic_distance)
+                else:
+                    pair = (geodesic_distance)
                 if 'view_point_goals' in observations[i]:
                     pair += (observations[i]['view_point_goals'],)
                 descriptor_pred_gt[i].append(pair)
@@ -809,16 +852,20 @@ class PPOTrainer(BaseRLTrainer):
             current_episodes = self.envs.current_episodes()
 
             with torch.no_grad():
-                _, actions, _, test_recurrent_hidden_states, test_em_features = self.actor_critic.act(
+                _, actions, _, test_recurrent_hidden_states, test_em_features, predict_direct_map = self.actor_critic.act(
                     batch,
                     test_recurrent_hidden_states,
+                    predict_direct_map,
                     prev_actions,
                     not_done_masks,
                     test_em.memory[:, 0] if ppo_cfg.use_external_memory else None,
                     test_em.masks if ppo_cfg.use_external_memory else None,
                     deterministic=False
                 )
-
+                if self.use_direct_map:
+                    # predict_direct_map.copy_(batch["direct_map"]) # こっちを選択するとGTをいれることになる
+                    predict_direct_map.copy_(predict_direct_map)
+                
                 prev_actions.copy_(actions)
 
             actions = [a[0].item() for a in actions]
@@ -846,18 +893,29 @@ class PPOTrainer(BaseRLTrainer):
                 self.belief_predictor.update(batch, dones)
 
                 for i in range(len(descriptor_pred_gt)):
-                    category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
+                    if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                        category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
+                        category_gt = np.argmax(batch['category'].cpu().numpy()[i])
                     location_prediction = batch['location_belief'].cpu().numpy()[i]
-                    category_gt = np.argmax(batch['category'].cpu().numpy()[i])
                     location_gt = batch['pointgoal_with_gps_compass'].cpu().numpy()[i]
                     if dones[i]:
                         geodesic_distance = -1
                     else:
                         geodesic_distance = infos[i]['distance_to_goal']
-                    pair = (category_prediction, location_prediction, category_gt, location_gt, geodesic_distance)
+                    if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief and self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                        pair = (category_prediction, location_prediction, category_gt, location_gt, geodesic_distance)
+                    elif self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                        pair = (location_prediction, location_gt, geodesic_distance)
+                    else:
+                        raise NotImplementedError()
                     if 'view_point_goals' in observations[i]:
                         pair += (observations[i]['view_point_goals'],)
                     descriptor_pred_gt[i].append(pair)
+            
+            for i in range(len(dones)):
+                if dones[i] and self.use_direct_map:
+                    predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
+
             for i in range(self.envs.num_envs):
                 if len(self.config.VIDEO_OPTION) > 0:
                     if self.config.RL.PPO.use_belief_predictor:
@@ -900,13 +958,15 @@ class PPOTrainer(BaseRLTrainer):
                     episode_stats['geodesic_distance'] = current_episodes[i].info['geodesic_distance']
                     episode_stats['euclidean_distance'] = norm(np.array(current_episodes[i].goals[0].position) -
                                                                np.array(current_episodes[i].start_position))
-                    episode_stats['audio_duration'] = int(current_episodes[i].duration)
-                    episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
+                    # episode_stats['audio_duration'] = int(current_episodes[i].duration)
+                    episode_stats['audio_duration'] = 2500
+                    # episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
+                    logging.info(episode_stats)
                     if self.config.RL.PPO.use_belief_predictor:
-                        episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
+                        # episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
                         episode_stats['descriptor_pred_gt'] = descriptor_pred_gt[i][:-1]
                         descriptor_pred_gt[i] = [descriptor_pred_gt[i][-1]]
-                    logging.debug(episode_stats)
+                    # logging.info(episode_stats)
                     current_episode_reward[i] = 0
                     # use scene_id + episode_id as unique id for storing stats
                     stats_episodes[
@@ -923,7 +983,8 @@ class PPOTrainer(BaseRLTrainer):
                         if 'sound' in current_episodes[i].info:
                             sound = current_episodes[i].info['sound']
                         else:
-                            sound = current_episodes[i].sound_id.split('/')[1][:-4]
+                            # sound = current_episodes[i].sound_id.split('/')[1][:-4]
+                            sound = f"epi{len(stats_episodes)}"
                         generate_video(
                             video_option=self.config.VIDEO_OPTION,
                             video_dir=self.config.VIDEO_DIR,
@@ -968,6 +1029,7 @@ class PPOTrainer(BaseRLTrainer):
                 not_done_masks,
                 test_em,
                 current_episode_reward,
+                predict_direct_map,
                 prev_actions,
                 batch,
                 rgb_frames,
@@ -977,6 +1039,7 @@ class PPOTrainer(BaseRLTrainer):
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
+                predict_direct_map,
                 prev_actions,
                 batch,
                 rgb_frames,
@@ -985,8 +1048,14 @@ class PPOTrainer(BaseRLTrainer):
             )
 
         # dump stats for each episode
-        stats_file = os.path.join(config.TENSORBOARD_DIR,
-                                  '{}_stats_{}.json'.format(config.EVAL.SPLIT, config.SEED))
+        stats_file = os.path.join(
+            config.TENSORBOARD_DIR,
+            "{}_{}_{}.json".format(
+                config.EVAL.SPLIT,
+                config.TASK_CONFIG.DATASET.SOUND_TYPE,
+                os.getenv('JOB_ID')
+            )
+        )
         with open(stats_file, 'w') as fo:
             json.dump({','.join(key): value for key, value in stats_episodes.items()}, fo, cls=NpEncoder)
 
@@ -1003,11 +1072,18 @@ class PPOTrainer(BaseRLTrainer):
         episode_metrics_mean = {}
         for metric_uuid in self.metric_uuids:
             episode_metrics_mean[metric_uuid] = aggregated_stats[metric_uuid] / num_episodes
+        
+        episode_metrics_std = {}
+        for metric_uuid in self.metric_uuids:
+            episode_metrics_std[metric_uuid] = np.std([v[metric_uuid] for v in stats_episodes.values()])
 
         logger.info(f"Average episode reward: {episode_reward_mean:.6f}")
         for metric_uuid in self.metric_uuids:
             logger.info(
                 f"Average episode {metric_uuid}: {episode_metrics_mean[metric_uuid]:.6f}"
+            )
+            logger.info(
+                f"STD episode {metric_uuid}: {episode_metrics_std[metric_uuid]:.6f}"
             )
 
         if not config.EVAL.SPLIT.startswith('test'):

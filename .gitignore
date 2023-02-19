@@ -2,6 +2,8 @@ __pycache__
 .DS_Store
 
 test.py
+test2.py
+test3.py
 debug.py
 debug*.txt
 test

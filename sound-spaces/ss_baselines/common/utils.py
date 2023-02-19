@@ -246,6 +246,7 @@ def plot_top_down_map(info, dataset='replica', pred=None):
         agent_radius_px=agent_radius_px
     )
 
+    pred = None # TODO fix
     if pred is not None:
         from habitat.utils.geometry_utils import quaternion_rotate_vector
 
@@ -543,6 +544,7 @@ def observations_to_image(observation: Dict, info: Dict, pred=None) -> np.ndarra
             agent_rotation=info["top_down_map"]["agent_angle"],
             agent_radius_px=top_down_map.shape[0] // 16,
         )
+        pred = None # TODO fix
         if pred is not None:
             from habitat.utils.geometry_utils import quaternion_rotate_vector
 

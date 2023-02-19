@@ -163,7 +163,7 @@ class AudioNavDataset(Dataset):
         episode_cnt = 0
         f = open(f"debug.txt", "a")
         f.write("--------------------------------------------------\n")
-        f.write(f"SAME_TYPE: {self._config.SOUND_TYPE}\n")
+        f.write(f"SOUND_TYPE: {self._config.SOUND_TYPE}\n")
         for episode in deserialized["episodes"]:
             episode = NavigationEpisode(**episode)
 
