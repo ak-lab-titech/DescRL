@@ -35,6 +35,8 @@ SIMULATOR:
   AUDIO:
     RIR_SAMPLING_RATE: 44100
     NUM: 2 # the number of sound source
+  
+  GPS_ZERO_IF_FOUND: False
 
 TASK:
   TYPE: AudioNav

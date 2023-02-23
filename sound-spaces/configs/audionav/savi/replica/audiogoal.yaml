@@ -36,6 +36,8 @@ SIMULATOR:
     # RIR_SAMPLING_RATE: 16000
     RIR_SAMPLING_RATE: 44100
     NUM: 2
+  
+  GPS_ZERO_IF_FOUND: True # ゴール到達後に、pointgoal_with_gps_compassの値をゼロベクトルにするかどうか
 
 TASK:
   TYPE: AudioNav
