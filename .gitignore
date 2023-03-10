@@ -7,7 +7,6 @@ test3.py
 debug.py
 debug*.txt
 test
-job.sh
 *output.out
 
 habitat-sim
