@@ -18,12 +18,6 @@ sound-spaces/scripts/AmbisonicBinauralizer
 
 output
 
-train.sh
-test.sh
-video.sh
-make_dataset.sh
-plot_tb_data.sh
-
 anim*.gif
 apartment_0_*.png
 imgs
