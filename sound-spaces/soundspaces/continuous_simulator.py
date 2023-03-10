@@ -115,6 +115,8 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         self._audio_sensor_num = self.config.AUDIO.NUM
         self.add_acoustic_config()
 
+        self.is_found = False
+
     def add_acoustic_config(self):
         """
         シミュレータ(self._sim)に、audio_sensorを加える
@@ -123,7 +125,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         import pprint
         for i in range(self._audio_sensor_num):
             acoustics_config = habitat_sim.sensor.RLRAudioPropagationConfiguration()
-            acoustics_config.threadCount = 3
+            acoustics_config.threadCount = 7
             acoustics_config.sampleRate = self.config.AUDIO.RIR_SAMPLING_RATE
             acoustics_config.irTime = self.config.AUDIO.IR_TIME
             acoustics_config.indirectRayCount = 500
@@ -339,7 +341,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         else:
             self._offset = 0
         if self.config.AUDIO.EVERLASTING:
-            self._duration = 500
+            self._duration = 2500
         else:
             assert hasattr(self.config.AGENT_0, 'DURATION')
             self._duration = int(self.config.AGENT_0.DURATION)
@@ -488,35 +490,28 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         self.goals_dict = {f"goal_{i}": goal for i, goal in enumerate(goals)}
         geo_dis_from_goals = self.calc_geo_dis_from_goals(goals)
         self.distance_from_goals = {f"goal_{i}": geo_dis_from_goals[i] for i in range(len(geo_dis_from_goals))} # 各ゴールから、すべてのゴールに到達するときの最短距離
-        # goal_time = time.time() - goal_s
-
-        # f = open("debug.txt", "a")
-        # f.write(f"not_found_goals: {self.not_found_goals}\n")
-        # f.write(f"goals_dict: {self.goals_dict}\n")
-        # f.write(f"distance_from_goals: {self.distance_from_goals}\n")
-        # f.close()
-
-        # f = open("debug.txt", "a")
-        # f.write(f"obs_time: {obs_time}\n")
-        # f.write(f"observations_time: {observations_time}\n")
-        # f.write(f"goal_time: {goal_time}\n")
-        # f.write(f"FIN reset in ContinuousSimulator: {time.time() - s}[s]\n")
-        # f.close()
-
-        # self._current_sample_indexs = [
-        #     int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.6),
-        #     int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.0),
-        # ]
         
-        # f = open("debug.txt", "a")
-        # f.write(f"self._current_sample_indexs: {self._current_sample_indexs}¥n")
-        # f.write(f"self.current_source_sound: {self.current_source_sound}¥n")
-        self._current_sample_indexs = []
-        for i in range(self._audio_sensor_num):
-            current_sample_index = np.random.randint(self.config.AUDIO.RIR_SAMPLING_RATE)
-            # f.write(f"current_sample_index: {current_sample_index}\n")
-            self._current_sample_indexs.append(current_sample_index)
-        # f.close()
+        timing = "random"
+
+        if timing == "overlap":
+            self._current_sample_indexs = [
+                0,
+                0,
+            ]
+        elif timing == "not_overlap":
+            self._current_sample_indexs = [
+                int(self.config.AUDIO.RIR_SAMPLING_RATE * 0.5),
+                0,
+            ]
+        elif timing == "random":
+            self._current_sample_indexs = []
+            for i in range(self._audio_sensor_num):
+                current_sample_index = np.random.randint(self.config.AUDIO.RIR_SAMPLING_RATE)
+                self._current_sample_indexs.append(current_sample_index)
+        else:
+            raise Exception(f"timing: {timing}")
+
+        self.is_found = False
 
         return observations
 
@@ -590,7 +585,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         sampling_rate = self.config.AUDIO.RIR_SAMPLING_RATE
         if self._episode_step_count > self._duration:
             logging.debug('Step count is greater than duration. Empty spectrogram.')
-            audiogoal = np.zeros((2, sampling_rate))
+            audiogoal = np.zeros((2, int(sampling_rate/4)))
         else:
             audiogoal = None
             for i in range(self._audio_sensor_num):
@@ -704,7 +699,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         # f.write(f"audiogoal.shape: {audiogoal.shape}\n")
         # f.close()
 
-        audiogoal = np.pad(audiogoal, [(0, 0), (0, sampling_rate - audiogoal.shape[1])])
+        audiogoal = np.pad(audiogoal, [(0, 0), (0, int(sampling_rate/4) - audiogoal.shape[1])])
         return audiogoal
 
     def get_current_audiogoal_observation(self):

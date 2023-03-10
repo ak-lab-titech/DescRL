@@ -8,8 +8,9 @@
 
 import os
 import sys
+import json
 
-sys.path.insert(0, "/home/hkondo/av-nav/myss/sound-spaces")
+sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
 
 os.environ['MAGNUM_LOG'] = "quiet"
 os.environ['HABITAT_SIM_LOG'] = "quiet"
@@ -26,12 +27,14 @@ from habitat.sims.habitat_simulator.actions import HabitatSimActions
 from ss_baselines.common.benchmark import Benchmark
 from ss_baselines.av_nav.config.default import get_task_config
 # from ss_baselines.av_wan.config.default import get_task_config
+from ss_baselines.common.utils import NpEncoder
 
 
 class RandomAgent(habitat.Agent):
-    def __init__(self, success_distance, goal_sensor_uuid):
+    def __init__(self, success_distance, goal_sensor_uuid, goal_num):
         self.dist_threshold_to_stop = success_distance
         self.goal_sensor_uuid = goal_sensor_uuid
+        self.goal_num = goal_num
         self.found_goal_id = []
 
     def reset(self):
@@ -39,29 +42,22 @@ class RandomAgent(habitat.Agent):
 
     def is_goal_reached(self, observations):
         # because the frame is in with polar coordinates
-        dists = [d[0] for d in observations[self.goal_sensor_uuid]]
-        f = open("debug.txt", "a")
-        f.write(f"self.found_goal_id: {self.found_goal_id}\n")
-        f.close()
+        dists = [
+            observations[self.goal_sensor_uuid][2*i] for i in range(
+                int(len(observations[self.goal_sensor_uuid])/2)
+            )
+        ]
 
         for i, dist in enumerate(dists):
-            f = open("debug.txt", "a")
-            f.write(f"dist: {dist}\n")
-            f.close()
             if not (i in self.found_goal_id) and dist <= self.dist_threshold_to_stop:
                 self.found_goal_id.append(i)
                 return True
         return False
 
     def act(self, observations):
-        f = open("debug.txt", "a")
-        f.write("--------------------------------\n")
-        f.close()
 
         reached = self.is_goal_reached(observations)
-        if reached and len(self.found_goal_id) == 0:
-            action = HabitatSimActions.STOP
-        elif reached:
+        if reached:
             action = HabitatSimActions.FOUND
         else:
             action = np.random.choice(
@@ -71,9 +67,10 @@ class RandomAgent(habitat.Agent):
                     HabitatSimActions.TURN_RIGHT,
                 ]
             )
-        f = open("debug.txt", "a")
-        f.write(f"action: {action}\n")
-        f.close()
+        # f = open("debug.txt", "a")
+        # f.write(f"--------------- act ----------------\n")
+        # f.write(f"NUM: {self.goal_num}, found_goal_id: {self.found_goal_id}, reached: {reached}, action: {action}\n")
+        # f.close()
         return {"action": action}
 
 
@@ -178,23 +175,37 @@ def main():
     logging.basicConfig(level=level, format='%(asctime)s, %(levelname)s: %(message)s',
                         datefmt="%Y-%m-%d %H:%M:%S")
 
-    # task_config = get_task_config(args.task_config)
     task_config = get_task_config(args.task_config, args.opts)
-    task_config.defrost()
-    task_config.DATASET.SPLIT = 'test_telephone_bell'
-    task_config.freeze()
+
+    f = open("debug.txt", "a")
+    f.write(f"split: {task_config.DATASET.SPLIT}\n")
+    f.write(f"version: {task_config.DATASET.VERSION}\n")
+    f.close()
 
     agent = get_agent_cls(args.agent_class)(
         success_distance=args.success_distance,
         goal_sensor_uuid=task_config.TASK.GOAL_SENSOR_UUID,
+        goal_num=task_config.SIMULATOR.AUDIO.NUM,
     )
     benchmark = Benchmark(task_config)
 
-    num_episodes = 50
-    metrics = benchmark.evaluate(agent, num_episodes)
+    metrics, all_metrics = benchmark.evaluate(agent)
 
     for k, v in metrics.items():
         habitat.logger.info("{}: {:.3f}".format(k, v))
+        habitat.logger.info("    mean: {:.3f}, sgd: {:.3f}".format(
+            np.mean(all_metrics[k]),
+            np.std(all_metrics[k]),
+        ))
+    stats_file = os.path.join(
+        f"./data/models/ss2/replica/{task_config.SIMULATOR.AUDIO.NUM}g-random",
+        "{}_{}.json".format(
+            task_config.DATASET.SPLIT,
+            os.getenv('JOB_ID')
+        )
+    )
+    with open(stats_file, 'w') as fo:
+        json.dump(all_metrics, fo, cls=NpEncoder)
 
 
 if __name__ == "__main__":

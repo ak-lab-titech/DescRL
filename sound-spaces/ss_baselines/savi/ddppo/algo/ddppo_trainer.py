@@ -57,6 +57,9 @@ class DDPPOTrainer(PPOTrainer):
 
         super().__init__(config)
 
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.use_gt_direct_map = self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP
+
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
         r"""Sets up actor critic and agent for DD-PPO.
 
@@ -72,6 +75,8 @@ class DDPPOTrainer(PPOTrainer):
 
         has_distractor_sound = self.config.TASK_CONFIG.SIMULATOR.AUDIO.HAS_DISTRACTOR_SOUND
         if ppo_cfg.policy_type == 'rnn':
+            if self.use_direct_map:
+                raise NotImplementedError()
             self.actor_critic = AudioNavBaselinePolicy(
                 observation_space=self.envs.observation_spaces[0],
                 action_space=self.action_space,
@@ -84,7 +89,7 @@ class DDPPOTrainer(PPOTrainer):
             if ppo_cfg.use_belief_predictor:
                 belief_cfg = ppo_cfg.BELIEF_PREDICTOR
                 bp_class = BeliefPredictorDDP if belief_cfg.online_training else BeliefPredictor
-                self.belief_predictor = bp_class(belief_cfg, self.device, None, None,
+                self.belief_predictor = bp_class(belief_cfg, self.device, None, None, self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
                                                  ppo_cfg.hidden_size, self.envs.num_envs, has_distractor_sound
                                                  ).to(device=self.device)
                 if belief_cfg.online_training:
@@ -102,6 +107,8 @@ class DDPPOTrainer(PPOTrainer):
             self.actor_critic = AudioNavSMTPolicy(
                 observation_space=self.envs.observation_spaces[0],
                 action_space=self.envs.action_spaces[0],
+                direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+                goal_num=self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
                 hidden_size=smt_cfg.hidden_size,
                 nhead=smt_cfg.nhead,
                 num_encoder_layers=smt_cfg.num_encoder_layers,
@@ -125,7 +132,7 @@ class DDPPOTrainer(PPOTrainer):
             if ppo_cfg.use_belief_predictor:
                 smt = self.actor_critic.net.smt_state_encoder
                 bp_class = BeliefPredictorDDP if belief_cfg.online_training else BeliefPredictor
-                self.belief_predictor = bp_class(belief_cfg, self.device, smt._input_size, smt._pose_indices,
+                self.belief_predictor = bp_class(belief_cfg, self.device, smt._input_size, smt._pose_indices, self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
                                                  smt.hidden_state_size, self.envs.num_envs, has_distractor_sound
                                                  ).to(device=self.device)
                 if belief_cfg.online_training:
@@ -184,7 +191,10 @@ class DDPPOTrainer(PPOTrainer):
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
             use_normalized_advantage=ppo_cfg.use_normalized_advantage,
+            direct_map_loss_coef=ppo_cfg.direct_map_loss_coef,
         )
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.use_gt_direct_map = self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP
 
     def train(self) -> None:
         r"""Main method for DD-PPO.
@@ -278,6 +288,9 @@ class DDPPOTrainer(PPOTrainer):
             obs_space,
             self.action_space,
             ppo_cfg.hidden_size,
+            self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+            self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP,
+            self.config.TASK_CONFIG.SIMULATOR.DROPOUT_RATE,
             ppo_cfg.use_external_memory,
             ppo_cfg.SCENE_MEMORY_TRANSFORMER.memory_size + ppo_cfg.num_steps,
             ppo_cfg.SCENE_MEMORY_TRANSFORMER.memory_size,
@@ -291,6 +304,8 @@ class DDPPOTrainer(PPOTrainer):
 
         for sensor in rollouts.observations:
             rollouts.observations[sensor][0].copy_(batch[sensor])
+            if self.use_direct_map and self.use_gt_direct_map:
+                rollouts.prev_direct_map[1].copy_(batch["direct_map"])
 
         # batch and observations may contain shared PyTorch CUDA
         # tensors.  We must explicitly clear them here otherwise
@@ -432,6 +447,7 @@ class DDPPOTrainer(PPOTrainer):
                     value_loss,
                     action_loss,
                     dist_entropy,
+                    direct_map_loss,
                 ) = self._update_agent(ppo_cfg, rollouts)
                 pth_time += delta_pth_time
 
@@ -445,7 +461,7 @@ class DDPPOTrainer(PPOTrainer):
                     window_episode_stats[k].append(stats[i].clone())
 
                 stats = torch.tensor(
-                    [value_loss, action_loss, dist_entropy, location_predictor_loss, prediction_accuracy, count_steps_delta],
+                    [value_loss, action_loss, dist_entropy, location_predictor_loss, prediction_accuracy, count_steps_delta, direct_map_loss],
                     device=self.device,
                 )
                 distrib.all_reduce(stats)
@@ -460,6 +476,7 @@ class DDPPOTrainer(PPOTrainer):
                         stats[2].item() / self.world_size,
                         stats[3].item() / self.world_size,
                         stats[4].item() / self.world_size,
+                        stats[6].item() / self.world_size,
                     ]
                     deltas = {
                         k: (
@@ -491,6 +508,7 @@ class DDPPOTrainer(PPOTrainer):
                     writer.add_scalar("Policy/entropy_loss", losses[2], count_steps)
                     writer.add_scalar("Policy/predictor_loss", losses[3], count_steps)
                     writer.add_scalar("Policy/predictor_accuracy", losses[4], count_steps)
+                    writer.add_scalar("Policy/direct_map_loss", losses[5], count_steps)
                     writer.add_scalar('Policy/learning_rate', lr_scheduler.get_lr()[0], count_steps)
 
                     # log stats

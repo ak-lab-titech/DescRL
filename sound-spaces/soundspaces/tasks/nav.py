@@ -4,18 +4,24 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Type, Union
+from re import A
+from typing import Any, Type, Union, List
 import logging
+from cv2 import AgastFeatureDetector_NONMAX_SUPPRESSION
 
 import numpy as np
 import torch
 import cv2
 import librosa
+import librosa.display
 from gym import spaces
 from skimage.measure import block_reduce
 
 from habitat.config import Config
 from habitat.core.dataset import Episode
+from habitat_sim.utils.common import quat_to_angle_axis
+import matplotlib.pyplot as plt
+import japanize_matplotlib
 
 from habitat.tasks.nav.nav import DistanceToGoal, Measure, EmbodiedTask, Success
 from habitat.core.registry import registry
@@ -47,7 +53,10 @@ class AudioGoalSensor(Sensor):
         return SensorTypes.PATH
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        sensor_shape = (2, self._sim.config.AUDIO.RIR_SAMPLING_RATE)
+        sensor_shape = (
+            2,
+            int(self._sim.config.AUDIO.RIR_SAMPLING_RATE * self._sim.config.STEP_TIME)
+        )
 
         return spaces.Box(
             low=np.finfo(np.float32).min,
@@ -74,7 +83,11 @@ class SpectrogramSensor(Sensor):
         return SensorTypes.PATH
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        spectrogram = self.compute_spectrogram(np.ones((2, self._sim.config.AUDIO.RIR_SAMPLING_RATE)))
+        spectrogram = self.compute_spectrogram(
+            np.ones(
+                (2, int(self._sim.config.AUDIO.RIR_SAMPLING_RATE * self._sim.config.STEP_TIME))
+            )
+        )
 
         return spaces.Box(
             low=np.finfo(np.float32).min,
@@ -90,7 +103,34 @@ class SpectrogramSensor(Sensor):
             hop_length = 160
             win_length = 400
             stft = np.abs(librosa.stft(signal, n_fft=n_fft, hop_length=hop_length, win_length=win_length))
-            stft = block_reduce(stft, block_size=(4, 4), func=np.mean)
+
+            # plt.rcParams["font.size"] = 16
+            # fig = plt.figure(figsize=(18, 6), dpi=600)
+                
+            # # 波形
+            # ax1 = fig.add_subplot(1, 2, 1)
+            # ax1.plot(np.arange(0, 1, 1/44100), signal, lw=0.1)
+            # ax1.set_xlabel("時間 [s]")
+            # ax1.set_ylabel("振幅")
+            # ax1.set_title("波形")
+
+            # # スペクトログラム
+            # ax2 = fig.add_subplot(1, 2, 2)
+            # img = librosa.display.specshow(
+            #     librosa.amplitude_to_db(librosa.stft(signal), ref=np.max),
+            #     y_axis='hz',
+            #     x_axis='time',
+            #     ax=ax2,
+            #     sr=44100,
+            # )
+            # ax2.set_xlabel("時間 [s]")
+            # ax2.set_ylabel("周波数 [Hz]")
+            # ax2.set_title('スペクトログラム')
+            # fig.colorbar(img, ax=ax2, format="%+2.0f dB")
+
+            # fig.savefig(f"./imgs/spectrogram.png")
+
+            # stft = block_reduce(stft, block_size=(4, 4), func=np.mean)
             return stft
 
         channel1_magnitude = np.log1p(compute_stft(audio_data[0]))
@@ -103,6 +143,220 @@ class SpectrogramSensor(Sensor):
         spectrogram = self._sim.get_current_spectrogram_observation(self.compute_spectrogram)
 
         return spectrogram
+
+@registry.register_sensor
+class DirectMap(Sensor):
+    cls_uuid: str = "direct_map"
+
+    def __init__(self, *args: Any, sim: Simulator, config: Config, **kwargs: Any) -> None:
+        """
+
+        Args:
+            angle_resolution (int): resolution of direct map angle. 4なら90度ずつになる
+
+        """
+        self._sim = sim
+        self.angle_resolution = sim.config.DIRECT_MAP_SIZE
+        self.distance_trans_method = sim.config.DISTANCE_TRANS_METHOD
+        self.clipping = sim.config.CLIPPING
+        self.euclid_or_geodesic = sim.config.DIRECT_MAP_DISTANCE
+        super().__init__(config=config)
+
+    def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
+        return "direct_map"
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        # return SensorTypes.PATH
+        # return SensorTypes.COLOR
+        return SensorTypes.NULL
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        return spaces.Box(
+            low=0,
+            high=np.finfo(np.float32).max,
+            shape=(self.angle_resolution,),
+            dtype=np.float32,
+        )
+    
+    def get_observation(self, *args: Any, **kwargs: Any) -> Any:
+        r"""
+        Returns:
+            current observation for Sensor.
+        """
+        agent_position = self._sim.get_agent_state().position
+        agent_rotation = self._sim.get_agent_state().rotation
+        goals = [self._sim.goals_dict[goal_id] for goal_id in self._sim.not_found_goals]
+        direct_map = self.make_direct_map(agent_position, agent_rotation, goals)
+        return direct_map
+    
+    def make_direct_map(
+        self,
+        agent_position: List[float],
+        agent_rotation: List[float], # Listじゃなくてクオータニオン
+        goals: List[List[float]],
+    ):
+        """
+
+        Args:
+            agent_position (list[float]): agent's position. [x, y, z]
+            agent_rotation (list[float]): agent's rotation.
+            goals (list[list[float]]): list of goal positions
+            is_found (bool): found actionがいま取られているのかどうか
+        """
+        # f = open("debug.txt", "a")
+        # f.write("--- make_direct_map ---\n")
+        # f.write(f"agent_position: {agent_position}\n")
+        # f.write(f"agent_rotation: {agent_rotation}\n")
+        # f.write(f"agent_rotation.w: {agent_rotation.w}\n")
+        # f.write(f"angle: {2 * np.arccos(agent_rotation.w)} [rad]\n")
+        # f.write(f"agent angle: {2 * np.arccos(agent_rotation.w) * 180 / np.pi} [deg]\n")
+        # f.write(f"goals: {goals}, length: {len(goals)}, is_found: {self._sim.is_found}\n")
+        # f.write(f"angle_resolution: {self.angle_resolution}\n")
+        # f.close()
+
+        direct_map = np.full(self.angle_resolution, np.inf)
+        for goal in goals:
+            angle = self.calc_angle(agent_rotation, agent_position, goal)
+            # f = open("debug.txt", "a")
+            # f.write(f"angle from agent: {angle}\n")
+            angle += 180 / self.angle_resolution
+            # f.write(f"angle += 180 / self.angle_resolution: {angle}\n")
+            direct_map_index = int(angle / (360 / self.angle_resolution)) % self.angle_resolution
+            # f.write(f"direct_map_index: {direct_map_index}\n")
+            # f.close()
+            distance = self.calc_distance(agent_position, goal, self.euclid_or_geodesic)
+            
+            if self._sim.is_found and len(goals) != 1:
+                geo_dis = self.calc_distance(agent_position, goal, "geodesic")
+                if geo_dis < 1:
+                    continue
+
+            if distance < direct_map[direct_map_index]:
+                direct_map[direct_map_index] = distance
+
+        for i in range(len(direct_map)):
+            if self.clipping:
+                if direct_map[i] == 0:
+                    direct_map[i] = 1
+                else:
+                    d = self.transform_distance(direct_map[i])
+                    direct_map[i] = max(min(d, 1), 0)
+            else:
+                if direct_map[i] == 0:
+                    direct_map[i] = np.finfo(np.float32).max
+                else:
+                    d = self.transform_distance(direct_map[i])
+                    direct_map[i] = d
+
+        return direct_map
+    
+    def transform_distance(self, d):
+        if self.distance_trans_method == "1d":
+            td = 1 / d
+        elif self.distance_trans_method == "1dd":
+            td = 1 / (d)**2
+        elif self.distance_trans_method == "log10":
+            td = max(np.log10(1 / d) + 1, 0)
+        else:
+            raise Exception(f"distance_trans_method must be '1d', '1dd' or 'log10', not {self.distance_trans_method}")
+        return td
+
+
+    def calc_distance(
+        self,
+        p1: List[float],
+        p2: List[float],
+        euclid_or_geodesic: str,
+    ) -> float:
+        if euclid_or_geodesic == "euclid":
+            distance = np.linalg.norm(np.array(p1) - np.array(p2))
+        elif euclid_or_geodesic == "geodesic":
+            distance = self._sim._calc_geodesic_distance(p1, p2)
+        else:
+            raise Exception(
+                f"euclid_or_geodesic must be 'euclid' or 'geodeic', not {euclid_or_geodesic}."
+            )
+        
+        # f = open("debug.txt", "a")
+        # f.write(f"-- distance: {distance}\n")
+        # f.close()
+
+        return distance
+
+    def calc_angle(
+        self,
+        agent_rotation: List[float], # Listじゃなくてクオータニオン
+        agent_position: List[float],
+        position: List[float],
+    ) -> float:
+        """
+        agentが向いている方向を0度したときに、positionの位置がどの方向にあるかを判定する
+
+        0から360度で返したい
+        """
+        agent_angle = self.calc_angle_from_quaternion(agent_rotation)
+
+        vector = [position[0] - agent_position[0], position[2] - agent_position[2]] # [x, z]
+        vec_angle = self.calc_angle_from_2d_vector(vector)
+        angle = vec_angle - agent_angle
+
+        if angle < 0:
+            angle += 360
+        return angle
+
+    def calc_angle_from_quaternion(self, quat):
+        angle = 2 * np.arccos(quat.w) * 180 / np.pi
+        fix_angle = 360 - angle if quat_to_angle_axis(quat)[1][1] == -1 else angle
+        return fix_angle
+
+    def calc_angle_from_2d_vector(self, vec):
+        """
+        z軸(縦軸)の負の方向(0, -1)を0度とした、時計回りの回転角度
+        0~360 degree
+        """
+        r = np.sqrt(vec[0]**2 + vec[1]**2)
+        cos = vec[0] / r
+
+        angle = np.arccos(cos)
+
+        if vec[1] < 0:
+            angle = 2*np.pi - angle
+        
+        angle = angle * 180 / np.pi
+
+        angle = 270 - angle
+        if angle < 0:
+            angle += 360
+
+        return angle 
+
+
+@registry.register_measure
+class FoundNum(Measure):
+    """the number of Found Action
+    """
+
+    cls_uuid: str = "foundnum"
+    
+    def __init__(
+        self, sim: Simulator, config: Config, *args: Any, **kwargs: Any
+    ):
+        super().__init__(sim, config, args, kwargs)
+        self._metric = 0
+    
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return self.cls_uuid
+    
+    def reset_metric(self, episode, task, *args: Any, **kwargs: Any):
+        self._metric = 0
+    
+    def update_metric(
+        self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any
+    ):
+        if (
+            hasattr(task, "is_found_called") and task.is_found_called
+        ):
+            self._metric += 1
 
 
 @registry.register_measure
@@ -491,6 +745,7 @@ class LocationBelief(Sensor):
     def __init__(
         self, sim: Union[Simulator, Config], config: Config, *args: Any, **kwargs: Any
     ):
+        self.location_belief_dim = 2 * sim.config.AUDIO.NUM
         super().__init__(config=config)
         self._sim = sim
 
@@ -504,14 +759,14 @@ class LocationBelief(Sensor):
         return spaces.Box(
             low=0,
             high=1,
-            shape=(2,),
+            shape=(self.location_belief_dim,),
             dtype=bool
         )
 
     def get_observation(
         self, *args: Any, observations, episode: Episode, **kwargs: Any
     ) -> object:
-        belief = np.zeros(2)
+        belief = np.zeros(self.location_belief_dim)
         return belief
 
 

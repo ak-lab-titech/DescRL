@@ -57,7 +57,7 @@ class AudioNavRLEnv(habitat.RLEnv):
 
     def reset(self):
         # f = open("debug.txt", mode="a")
-        # f.write("RESET AudioNavRLEnv\n")
+        # f.write("==================================================== RESET AudioNavRLEnv ===================================================================\n")
         # f.close()
 
         # f = open("debug.txt", "a")
@@ -86,8 +86,8 @@ class AudioNavRLEnv(habitat.RLEnv):
 
     def step(self, *args, **kwargs):
         # f = open("debug.txt", "a")
-        # f.write("--- start step in AudioNavRL ---\n")
-        # f.write(f"action: {kwargs['action']}\n")
+        # f.write("============================================== STEP AudioNavRL =======================================================\n")
+        # f.write(f"Action: {kwargs['action']}\n")
         # f.close()
         # s = time.time()
         self._previous_action = kwargs["action"]
@@ -125,7 +125,8 @@ class AudioNavRLEnv(habitat.RLEnv):
             # f.write("success FOUND\n")
             # f.close()
 
-            reward += 1 * self._rl_config.FOUND_REWARD
+            # reward += 1 * self._rl_config.FOUND_REWARD
+            reward += 1 * 10
             self._env.sim.update_goals()
             logging.debug('Found goal!')
 
@@ -146,7 +147,7 @@ class AudioNavRLEnv(habitat.RLEnv):
     def _episode_success(self):
         _, distance_to_closest_target = self._env.sim.closest_goal_id_and_dis()
         if (
-            self._env.task.is_stop_called
+            self._env.task.is_found_called
             and (
                 (self._continuous and distance_to_closest_target < self._success_distance) # 連続用
                 or (not self._continuous and self._env.sim.reaching_goal) # 離散用
@@ -171,7 +172,7 @@ class AudioNavRLEnv(habitat.RLEnv):
 
     def get_done(self, observations):
         done = False
-        if self._env.episode_over or self._episode_success():
+        if self._env.episode_over:
             done = True
         return done
 
@@ -181,3 +182,22 @@ class AudioNavRLEnv(habitat.RLEnv):
     # for data collection
     def get_current_episode_id(self):
         return self.habitat_env.current_episode.episode_id
+
+    def get_sound_diss(self):
+        sounds_dict = {}
+        for i, sound in enumerate(self._env.sim._current_sounds):
+            if f"goal_{i}" in self._env.sim.not_found_goals:
+
+                current_position = self._env.sim.get_agent_state().position
+                goals = [self._env.sim.goals_dict[f"goal_{i}"]]
+                geo_dis = self._env.sim.calc_geo_dis_to_goals(current_position, goals)[0]
+                
+            else:
+                geo_dis = None
+            
+            if not sound in sounds_dict.keys():
+                sounds_dict[sound] = [geo_dis]
+            else:
+                sounds_dict[sound].append(geo_dis)
+                
+        return sounds_dict

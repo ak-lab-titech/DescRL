@@ -15,6 +15,8 @@ from ss_baselines.common.utils import CategoricalNet
 from ss_baselines.av_nav.models.rnn_state_encoder import RNNStateEncoder
 from ss_baselines.av_nav.models.visual_cnn import VisualCNN
 from ss_baselines.av_nav.models.audio_cnn import AudioCNN
+from ss_baselines.av_nav.models.direct_map_encoder import DirectMapEncoder
+from ss_baselines.av_nav.models.gru_direct_map_encoder import GRUDirectMapEncoder
 
 DUAL_GOAL_DELIMITER = ','
 
@@ -37,12 +39,17 @@ class Policy(nn.Module):
         self,
         observations,
         rnn_hidden_states,
+        prev_direct_map,
+        dm_hidden_states,
         prev_actions,
         masks,
         deterministic=False,
     ):
-        features, rnn_hidden_states = self.net(
-            observations, rnn_hidden_states, prev_actions, masks
+        # f = open("debug.txt", "a")
+        # f.write("act act act act act act act act act act act\n")
+        # f.close()
+        features, rnn_hidden_states, direct_map, dm_hidden_states = self.net(
+            observations, rnn_hidden_states, prev_direct_map, dm_hidden_states, prev_actions, masks
         )
         # print('Features: ', features.cpu().numpy())
         distribution = self.action_distribution(features)
@@ -59,19 +66,25 @@ class Policy(nn.Module):
 
         action_log_probs = distribution.log_probs(action)
 
-        return value, action, action_log_probs, rnn_hidden_states
+        return value, action, action_log_probs, rnn_hidden_states, direct_map, dm_hidden_states
 
-    def get_value(self, observations, rnn_hidden_states, prev_actions, masks):
-        features, _ = self.net(
-            observations, rnn_hidden_states, prev_actions, masks
+    def get_value(self, observations, rnn_hidden_states, prev_direct_map, dm_hidden_states, prev_actions, masks):
+        # f = open("debug.txt", "a")
+        # f.write("get_value get_value get_value get_value get_value get_value get_value get_value get_value get_value get_value\n")
+        # f.close()
+        features, _, _, _ = self.net(
+            observations, rnn_hidden_states, prev_direct_map, dm_hidden_states, prev_actions, masks
         )
         return self.critic(features)
 
     def evaluate_actions(
-        self, observations, rnn_hidden_states, prev_actions, masks, action
+        self, observations, rnn_hidden_states, prev_direct_map, dm_hidden_states, prev_actions, masks, action
     ):
-        features, rnn_hidden_states = self.net(
-            observations, rnn_hidden_states, prev_actions, masks
+        # f = open("debug.txt", "a")
+        # f.write("evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions evaluate_actions\n")
+        # f.close()
+        features, rnn_hidden_states, direct_map, dm_hidden_states = self.net(
+            observations, rnn_hidden_states, prev_direct_map, dm_hidden_states, prev_actions, masks
         )
         distribution = self.action_distribution(features)
         value = self.critic(features)
@@ -79,7 +92,7 @@ class Policy(nn.Module):
         action_log_probs = distribution.log_probs(action)
         distribution_entropy = distribution.entropy().mean()
 
-        return value, action_log_probs, distribution_entropy, rnn_hidden_states
+        return value, action_log_probs, distribution_entropy, rnn_hidden_states, direct_map, dm_hidden_states
 
 
 class CriticHead(nn.Module):
@@ -99,6 +112,11 @@ class AudioNavBaselinePolicy(Policy):
         observation_space,
         action_space,
         goal_sensor_uuid,
+        direct_map_size,
+        dm_use_visual,
+        dm_use_gru,
+        dm_cgo,
+        use_conv1d,
         hidden_size=512,
         extra_rgb=False
     ):
@@ -107,7 +125,13 @@ class AudioNavBaselinePolicy(Policy):
                 observation_space=observation_space,
                 hidden_size=hidden_size,
                 goal_sensor_uuid=goal_sensor_uuid,
-                extra_rgb=extra_rgb
+                direct_map_size=direct_map_size,
+                action_num=action_space.n,
+                dm_use_visual=dm_use_visual,
+                dm_use_gru=dm_use_gru,
+                dm_cgo=dm_cgo,
+                use_conv1d=use_conv1d,
+                extra_rgb=extra_rgb,
             ),
             action_space.n,
         )
@@ -139,13 +163,29 @@ class AudioNavBaselineNet(Net):
     goal vector with CNN's output and passes that through RNN.
     """
 
-    def __init__(self, observation_space, hidden_size, goal_sensor_uuid, extra_rgb=False):
+    def __init__(
+        self,
+        observation_space,
+        hidden_size,
+        goal_sensor_uuid,
+        direct_map_size,
+        action_num,
+        dm_use_visual,
+        dm_use_gru,
+        dm_cgo,
+        use_conv1d,
+        extra_rgb=False
+    ):
         super().__init__()
         self.goal_sensor_uuid = goal_sensor_uuid
         self._hidden_size = hidden_size
         self._audiogoal = False
         self._pointgoal = False
         self._n_pointgoal = 0
+        self.direct_map_size = direct_map_size
+        self.dm_use_visual = dm_use_visual
+        self.dm_use_gru = dm_use_gru
+        self.dm_cgo = dm_cgo
 
         if DUAL_GOAL_DELIMITER in self.goal_sensor_uuid:
             goal1_uuid, goal2_uuid = self.goal_sensor_uuid.split(DUAL_GOAL_DELIMITER)
@@ -165,9 +205,52 @@ class AudioNavBaselineNet(Net):
             elif 'spectrogram' in self.goal_sensor_uuid:
                 audiogoal_sensor = 'spectrogram'
             self.audio_encoder = AudioCNN(observation_space, hidden_size, audiogoal_sensor)
+        
+        if direct_map_size is not None and not self.dm_cgo:
+            dm_input_size = (
+                    hidden_size + action_num + direct_map_size
+                ) + (
+                    hidden_size if self.dm_use_visual else 0
+                )
+            if dm_use_gru:
+                self.direct_map_encoder = GRUDirectMapEncoder(
+                    input_size=dm_input_size,
+                    output_size=direct_map_size,
+                    hidden_size=hidden_size,
+                    action_num=action_num,
+                )
+            else:
+                self.direct_map_encoder = DirectMapEncoder(
+                    input_size=dm_input_size,
+                    output_size=direct_map_size,
+                    action_num=action_num,
+                    use_conv1d=use_conv1d,
+                )
+        elif direct_map_size is not None:
+            if not dm_use_gru:
+                dm_input_size = (
+                    hidden_size + action_num + direct_map_size
+                )
+                self.direct_map_encoder = DirectMapEncoder(
+                    input_size=dm_input_size,
+                    output_size=direct_map_size,
+                    action_num=action_num,
+                    use_conv1d=use_conv1d,
+                )
+            else:
+                raise NotImplementedError() # TODO NotImplemented
 
-        rnn_input_size = (0 if self.is_blind else self._hidden_size) + \
-                         (self._n_pointgoal if self._pointgoal else 0) + (self._hidden_size if self._audiogoal else 0)
+
+        rnn_input_size = (
+            0 if self.is_blind else self._hidden_size
+        ) + (
+            self._n_pointgoal if self._pointgoal else 0
+        ) + (
+            self._hidden_size if self._audiogoal else 0
+        ) + (
+            direct_map_size if self.direct_map_size is not None and not self.dm_cgo else 0
+        )
+                        
         self.state_encoder = RNNStateEncoder(rnn_input_size, self._hidden_size)
 
         # if 'rgb' in observation_space.spaces and not extra_rgb:
@@ -185,7 +268,11 @@ class AudioNavBaselineNet(Net):
 
     @property
     def output_size(self):
-        return self._hidden_size
+        if self.dm_cgo:
+            output_size = self._hidden_size + self.direct_map_size
+        else:
+            output_size = self._hidden_size
+        return output_size
 
     @property
     def is_blind(self):
@@ -195,7 +282,15 @@ class AudioNavBaselineNet(Net):
     def num_recurrent_layers(self):
         return self.state_encoder.num_recurrent_layers
 
-    def forward(self, observations, rnn_hidden_states, prev_actions, masks):
+    def forward(
+        self,
+        observations,
+        rnn_hidden_states,
+        prev_direct_map,
+        dm_hidden_states,
+        prev_actions,
+        masks,
+    ):
         x = []
 
         if self._pointgoal:
@@ -204,9 +299,56 @@ class AudioNavBaselineNet(Net):
             x.append(self.audio_encoder(observations))
         if not self.is_blind:
             x.append(self.visual_encoder(observations))
+        
+        if self.direct_map_size is not None and not self.dm_cgo:
+            if self._pointgoal and self._audiogoal:
+                raise NotImplementedError("Don't use DirectMap with pointgoal sensor")
+            elif self._audiogoal:
+                if self.dm_use_visual:
+                    if self.dm_use_gru:
+                        direct_map, dm_hidden_states1 = self.direct_map_encoder(
+                            prev_direct_map, x[0], x[1], prev_actions, dm_hidden_states, masks
+                        )
+                    else:
+                        direct_map = self.direct_map_encoder(prev_direct_map, x[0], x[1], prev_actions)
+                        dm_hidden_states1 = None
+                else:
+                    if self.dm_use_gru:
+                        direct_map, dm_hidden_states1 = self.direct_map_encoder(
+                            prev_direct_map, x[0], None, prev_actions, dm_hidden_states, masks
+                        )
+                    else:
+                        direct_map = self.direct_map_encoder(prev_direct_map, x[0], None, prev_actions)
+                        dm_hidden_states1 = None
+                x.append(direct_map)
+            else:
+                direct_map = None
+                dm_hidden_states1 = None
+        elif self.direct_map_size is not None:
+            if self._pointgoal and self._audiogoal:
+                raise NotImplementedError("Don't use DirectMap with pointgoal sensor")
+            elif self._audiogoal:
+                if self.dm_use_gru:
+                    raise NotImplementedError()
+                else:
+                    direct_map = self.direct_map_encoder(prev_direct_map, x[0], None, prev_actions)
+                    dm_hidden_states1 = None
+        else:
+            direct_map = None
+            dm_hidden_states1 = None
+        
+        # f = open("debug.txt", "a")
+        # f.write("----------------------------------------------\n")
+        # f.write(f"previous:\n{prev_direct_map}\n")
+        # f.write(f"predict:\n{direct_map}\n")
+        # f.write(f"GT:\n{observations['direct_map']}\n")
+        # f.close()
 
         x1 = torch.cat(x, dim=1)
         x2, rnn_hidden_states1 = self.state_encoder(x1, rnn_hidden_states, masks)
+
+        if self.dm_cgo:
+            x2 = torch.cat([x2, direct_map], axis=1)
 
         if torch.isnan(x2).any().item():
             for key in observations:
@@ -215,4 +357,18 @@ class AudioNavBaselineNet(Net):
             print('rnn_new', torch.isnan(rnn_hidden_states1).any().item())
             print('mask', torch.isnan(masks).any().item())
             assert True
-        return x2, rnn_hidden_states1
+        return x2, rnn_hidden_states1, direct_map, dm_hidden_states1
+
+    def watch_grad(self):
+        f = open("debug.txt", "a")
+        f.write(f"---------------- watch_grad -------------------\n")
+        f.write(f"audio_encoder_{0}: {self.audio_encoder.cnn[0].weight.grad}\n")
+        f.write(f"audio_encoder_{2}: {self.audio_encoder.cnn[2].weight.grad}\n")
+        f.write(f"audio_encoder_{4}: {self.audio_encoder.cnn[4].weight.grad}\n")
+        f.write(f"audio_encoder_{6}: {self.audio_encoder.cnn[6].weight.grad}\n")
+
+        f.write(f"direct_map_encoder_{0}: {self.direct_map_encoder.mlp[0].weight.grad}\n")
+        f.write(f"direct_map_encoder_{2}: {self.direct_map_encoder.mlp[2].weight.grad}\n")
+        f.write(f"direct_map_encoder_{4}: {self.direct_map_encoder.mlp[4].weight.grad}\n")
+        f.write(f"direct_map_encoder_{6}: {self.direct_map_encoder.mlp[6].weight.grad}\n")
+        f.close()

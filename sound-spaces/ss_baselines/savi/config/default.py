@@ -52,7 +52,7 @@ _C.EXTRA_RGB = False
 _C.DEBUG = False
 _C.USE_LAST_CKPT = False
 _C.DISPLAY_RESOLUTION = 128
-_C.CONTINUOUS = False
+_C.CONTINUOUS = True
 # -----------------------------------------------------------------------------
 # EVAL CONFIG
 # -----------------------------------------------------------------------------
@@ -149,6 +149,11 @@ _TC.TASK.AUDIOGOAL_SENSOR.TYPE = "AudioGoalSensor"
 _TC.TASK.SPECTROGRAM_SENSOR = CN()
 _TC.TASK.SPECTROGRAM_SENSOR.TYPE = "SpectrogramSensor"
 # -----------------------------------------------------------------------------
+# DIRECT_MAP
+# -----------------------------------------------------------------------------
+_TC.TASK.DIRECT_MAP = CN()
+_TC.TASK.DIRECT_MAP.TYPE = "DirectMap"
+# -----------------------------------------------------------------------------
 # soundspaces
 # -----------------------------------------------------------------------------
 _TC.SIMULATOR.GRID_SIZE = 0.5
@@ -167,6 +172,7 @@ _TC.SIMULATOR.AUDIO.METADATA_DIR = "data/metadata"
 _TC.SIMULATOR.AUDIO.POINTS_FILE = 'points.txt'
 _TC.SIMULATOR.AUDIO.GRAPH_FILE = 'graph.pkl'
 _TC.SIMULATOR.AUDIO.HAS_DISTRACTOR_SOUND = False
+_TC.SIMULATOR.AUDIO.IR_TIME = 1.0
 _TC.SIMULATOR.AUDIO.DISTRACTOR_SOUND_DIR = 'data/sounds/1s_all_distractor'
 # -----------------------------------------------------------------------------
 # DistanceToGoal Measure
@@ -186,6 +192,11 @@ _TC.TASK.SUCCESS_WEIGHTED_BY_NUM_ACTION = CN()
 _TC.TASK.SUCCESS_WEIGHTED_BY_NUM_ACTION.TYPE = "SNA"
 _TC.TASK.VIEW_POINT_GOALS = CN()
 _TC.TASK.VIEW_POINT_GOALS.TYPE = "ViewPointGoals"
+# -----------------------------------------------------------------------------
+# FoundNum Measure
+# -----------------------------------------------------------------------------
+_TC.TASK.FOUND_NUM = CN()
+_TC.TASK.FOUND_NUM.TYPE = "FoundNum"
 # -----------------------------------------------------------------------------
 # Intensity estimated from ambisonic
 # -----------------------------------------------------------------------------
@@ -278,19 +289,30 @@ def get_config(
                         shutil.rmtree(d)
     else:
         # overwrite training configs
-        config.defrost()
-        config.NUM_PROCESSES = 10
-        if config.EVAL.SPLIT.startswith('val'):
-            config.USE_SYNC_VECENV = True
-            config.TEST_EPISODE_COUNT = 500
-        elif config.EVAL.SPLIT.startswith('test'):
-            config.TEST_EPISODE_COUNT = 1000
-        else:
-            raise ValueError('Dataset split must starts with train, val or test!')
-        config.freeze()
+        pass
+        # config.defrost()
+        # config.NUM_PROCESSES = 10
+        # if config.EVAL.SPLIT.startswith('val'):
+        #     config.USE_SYNC_VECENV = True
+        #     config.TEST_EPISODE_COUNT = 500
+        # elif config.EVAL.SPLIT.startswith('test'):
+        #     config.TEST_EPISODE_COUNT = 1000
+        # else:
+        #     raise ValueError('Dataset split must starts with train, val or test!')
+        # config.freeze()
 
     config.TASK_CONFIG.defrost()
+    config.RL.defrost()
     config.TASK_CONFIG.SIMULATOR.USE_SYNC_VECENV = config.USE_SYNC_VECENV
+    if config.CONTINUOUS:
+        # config.TASK_CONFIG.SIMULATOR.FORWARD_STEP_SIZE = 0.25
+        config.TASK_CONFIG.SIMULATOR.TYPE = "ContinuousSoundSpacesSim"
+        config.TASK_CONFIG.SIMULATOR.USE_RENDERED_OBSERVATIONS = False
+        # config.TASK_CONFIG.SIMULATOR.STEP_TIME = 0.25
+        config.TASK_CONFIG.SIMULATOR.AUDIO.CROSSFADE = True
+        config.TASK_CONFIG.DATASET.CONTINUOUS = True
+        config.RL.DISTANCE_REWARD_SCALE = 1.0
+    config.RL.freeze()
     config.TASK_CONFIG.freeze()
     config.freeze()
     return config

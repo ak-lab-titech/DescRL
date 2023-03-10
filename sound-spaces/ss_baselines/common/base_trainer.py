@@ -188,6 +188,7 @@ class BaseRLTrainer(BaseTrainer):
         test_recurrent_hidden_states,
         not_done_masks,
         current_episode_reward,
+        prev_direct_map,
         prev_actions,
         batch,
         rgb_frames,
@@ -211,6 +212,12 @@ class BaseRLTrainer(BaseTrainer):
             ]
             not_done_masks = not_done_masks[state_index]
             current_episode_reward = current_episode_reward[state_index]
+
+            if prev_direct_map is not None:
+                prev_direct_map = prev_direct_map[state_index]
+            else:
+                prev_direct_map = None
+            
             prev_actions = prev_actions[state_index]
 
             for k, v in batch.items():
@@ -224,6 +231,7 @@ class BaseRLTrainer(BaseTrainer):
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
+                prev_direct_map,
                 prev_actions,
                 batch,
                 rgb_frames,
@@ -235,6 +243,7 @@ class BaseRLTrainer(BaseTrainer):
                 not_done_masks,
                 test_em,
                 current_episode_reward,
+                prev_direct_map,
                 prev_actions,
                 batch,
                 rgb_frames,

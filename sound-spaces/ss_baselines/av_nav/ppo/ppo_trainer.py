@@ -13,6 +13,7 @@ from collections import deque
 from typing import Dict, List
 import json
 import random
+import datetime
 
 import numpy as np
 import torch
@@ -20,6 +21,9 @@ from torch.optim.lr_scheduler import LambdaLR
 from tqdm import tqdm
 from numpy.linalg import norm
 from gym import spaces
+import matplotlib.pyplot as plt
+import japanize_matplotlib
+import matplotlib.animation as animation
 
 from habitat import Config, logger
 from habitat.utils.visualizations.utils import observations_to_image
@@ -53,6 +57,10 @@ class PPOTrainer(BaseRLTrainer):
         self.actor_critic = None
         self.agent = None
         self.envs = None
+        self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.dm_use_gru = self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU
+        self.save_gif = self.config.GIF_VISUALIZATION
 
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
         r"""Sets up actor critic and agent for PPO.
@@ -70,9 +78,14 @@ class PPOTrainer(BaseRLTrainer):
         self.actor_critic = AudioNavBaselinePolicy(
             observation_space=observation_space,
             action_space=self.envs.action_spaces[0],
+            direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
             hidden_size=ppo_cfg.hidden_size,
             goal_sensor_uuid=self.config.TASK_CONFIG.TASK.GOAL_SENSOR_UUID,
-            extra_rgb=self.config.EXTRA_RGB
+            dm_use_visual=self.config.TASK_CONFIG.SIMULATOR.DM_USE_VISUAL,
+            dm_use_gru=self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU,
+            dm_cgo=self.config.TASK_CONFIG.SIMULATOR.DM_CGO,
+            use_conv1d=self.config.TASK_CONFIG.SIMULATOR.USE_CONV1D,
+            extra_rgb=self.config.EXTRA_RGB,
         )
         self.actor_critic.to(self.device)
 
@@ -83,10 +96,16 @@ class PPOTrainer(BaseRLTrainer):
             num_mini_batch=ppo_cfg.num_mini_batch,
             value_loss_coef=ppo_cfg.value_loss_coef,
             entropy_coef=ppo_cfg.entropy_coef,
+            direct_map_loss_coef=ppo_cfg.direct_map_loss_coef,
             lr=ppo_cfg.lr,
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
         )
+
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.direct_map_size = self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE
+        self.dm_use_gru = self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU
+        self.save_gif = self.config.GIF_VISUALIZATION
 
     def save_checkpoint(self, file_name: str) -> None:
         r"""Save checkpoint with specified name.
@@ -137,9 +156,11 @@ class PPOTrainer(BaseRLTrainer):
                 actions,
                 actions_log_probs,
                 recurrent_hidden_states,
+                direct_map,
             ) = self.actor_critic.act(
                 step_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
+                rollouts.prev_direct_map[rollouts.step] if self.use_direct_map else None,
                 rollouts.prev_actions[rollouts.step],
                 rollouts.masks[rollouts.step],
             )
@@ -202,6 +223,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value = self.actor_critic.get_value(
                 last_observation,
                 rollouts.recurrent_hidden_states[-1],
+                rollouts.prev_direct_map[-1] if self.use_direct_map else None,
                 rollouts.prev_actions[-1],
                 rollouts.masks[-1],
             ).detach()
@@ -210,7 +232,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value, ppo_cfg.use_gae, ppo_cfg.gamma, ppo_cfg.tau
         )
 
-        value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, direct_map_loss = self.agent.update(rollouts)
 
         rollouts.after_update()
 
@@ -219,6 +241,7 @@ class PPOTrainer(BaseRLTrainer):
             value_loss,
             action_loss,
             dist_entropy,
+            direct_map_loss,
         )
 
     def train(self) -> None:
@@ -494,6 +517,21 @@ class PPOTrainer(BaseRLTrainer):
             ppo_cfg.hidden_size,
             device=self.device,
         )
+
+        if self.use_direct_map:
+            predict_direct_map = torch.zeros(
+                self.config.NUM_PROCESSES,
+                config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+                device=self.device,
+            )
+        else:
+            predict_direct_map = None
+        test_dm_hidden_states = torch.zeros(
+            self.actor_critic.net.num_recurrent_layers,
+            self.config.NUM_PROCESSES,
+            ppo_cfg.hidden_size,
+            device=self.device,
+        )
         prev_actions = torch.zeros(
             self.config.NUM_PROCESSES, 1, device=self.device, dtype=torch.long
         )
@@ -512,6 +550,11 @@ class PPOTrainer(BaseRLTrainer):
             os.makedirs(self.config.VIDEO_DIR, exist_ok=True)
 
         t = tqdm(total=self.config.TEST_EPISODE_COUNT)
+
+        if self.save_gif:
+            gt_pred_dms = []
+        sound_found_nums = {}
+        sound_all_nums = {}
         while (
             len(stats_episodes) < self.config.TEST_EPISODE_COUNT
             and self.envs.num_envs > 0
@@ -519,15 +562,32 @@ class PPOTrainer(BaseRLTrainer):
             current_episodes = self.envs.current_episodes()
 
             with torch.no_grad():
-                _, actions, _, test_recurrent_hidden_states = self.actor_critic.act(
+                _, actions, _, test_recurrent_hidden_states, predict_direct_map, dm_hidden_states = self.actor_critic.act(
                     batch,
                     test_recurrent_hidden_states,
+                    predict_direct_map,
+                    test_dm_hidden_states,
                     prev_actions,
                     not_done_masks,
                     deterministic=False
                 )
 
+                if self.use_direct_map:
+                    # predict_direct_map.copy_(batch["direct_map"]) # こっちを選択するとGTをいれることになる
+                    predict_direct_map.copy_(predict_direct_map)
+                    
+                    if self.dm_use_gru:
+                        test_dm_hidden_states.copy_(dm_hidden_states)
+
                 prev_actions.copy_(actions)
+
+            prev_sound_diss = self.envs.get_sound_diss()
+
+            if self.save_gif:
+                gt_pred_dms.append([
+                    batch["direct_map"][0],
+                    predict_direct_map[0],
+                ])
 
             if config.FOLLOW_SHORTEST_PATH:
                 actions = [follower.get_next_action(
@@ -539,6 +599,27 @@ class PPOTrainer(BaseRLTrainer):
             observations, rewards, dones, infos = [
                 list(x) for x in zip(*outputs)
             ]
+
+            for i in range(len(dones)):
+                if dones[i] and self.use_direct_map:
+                    predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
+                
+                if dones[i]:
+                    # 到達したかどうかの判定
+                    for sound, ds in prev_sound_diss[i].items():
+                        if not sound in list(sound_found_nums.keys()):
+                            sound_found_nums[sound] = 0
+                        if not sound in list(sound_all_nums.keys()):
+                            sound_all_nums[sound] = 0
+                        
+                        for d in ds:
+                            if d is None:
+                                sound_found_nums[sound] += 1
+                            elif d < 1.0 and prev_actions[i] == 0:
+                                sound_found_nums[sound] += 1
+                            
+                            sound_all_nums[sound] += 1
+
             for i in range(self.envs.num_envs):
                 if len(self.config.VIDEO_OPTION) > 0:
                     if config.TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE and 'intermediate' in observations[i]:
@@ -587,7 +668,7 @@ class PPOTrainer(BaseRLTrainer):
                     episode_stats['geodesic_distance'] = current_episodes[i].info['geodesic_distance']
                     episode_stats['euclidean_distance'] = norm(np.array(current_episodes[i].goals[0].position) -
                                                                np.array(current_episodes[i].start_position))
-                    logging.debug(episode_stats)
+                    logging.info(episode_stats)
                     current_episode_reward[i] = 0
                     # use scene_id + episode_id as unique id for storing stats
                     stats_episodes[
@@ -604,7 +685,7 @@ class PPOTrainer(BaseRLTrainer):
                             sound = current_episodes[i].info['sound']
                         else:
                             # sound = current_episodes[i].sound_id.split('/')[1][:-4]
-                            sound = "multi"
+                            sound = f"cnt{len(stats_episodes)}"
                         
                         # print(f"audios: {audios}")
 
@@ -630,19 +711,34 @@ class PPOTrainer(BaseRLTrainer):
                         audios[i] = []
 
                     if "top_down_map" in self.config.VISUALIZATION_OPTION:
-                        top_down_map = plot_top_down_map(infos[i],
-                                                         dataset=self.config.TASK_CONFIG.SIMULATOR.SCENE_DATASET)
+                        top_down_map = plot_top_down_map(
+                            infos[i],
+                            dataset=self.config.TASK_CONFIG.SIMULATOR.SCENE_DATASET,
+                        )
+                        fig = plt.figure()
+                        plt.xticks([])
+                        plt.yticks([])
+                        plt.imshow(top_down_map)
+                        fig.savefig(f'./{self.config.VIDEO_DIR}/top_down_map_cnt{len(stats_episodes)}.pdf')
                         scene = current_episodes[i].scene_id.split('/')[3]
-                        writer.add_image('{}_{}_{}/{}'.format(config.EVAL.SPLIT, scene, current_episodes[i].episode_id,
-                                                              config.BASE_TASK_CONFIG_PATH.split('/')[-1][:-5]),
-                                         top_down_map,
-                                         dataformats='WHC')
+                        writer.add_image(
+                            '{}_{}_{}/{}_cnt{}'.format(
+                                config.EVAL.SPLIT,
+                                scene,
+                                current_episodes[i].episode_id,
+                                config.BASE_TASK_CONFIG_PATH.split('/')[-1][:-5],
+                                len(stats_episodes)
+                            ),
+                            top_down_map,
+                            dataformats='WHC'
+                        )
 
             (
                 self.envs,
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
+                predict_direct_map,
                 prev_actions,
                 batch,
                 rgb_frames,
@@ -652,6 +748,7 @@ class PPOTrainer(BaseRLTrainer):
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
+                predict_direct_map,
                 prev_actions,
                 batch,
                 rgb_frames,
@@ -664,7 +761,14 @@ class PPOTrainer(BaseRLTrainer):
             )
         num_episodes = len(stats_episodes)
 
-        stats_file = os.path.join(config.TENSORBOARD_DIR, '{}_stats_{}.json'.format(config.EVAL.SPLIT, config.SEED))
+        stats_file = os.path.join(
+            config.TENSORBOARD_DIR,
+            "{}_{}_{}.json".format(
+                config.EVAL.SPLIT,
+                config.TASK_CONFIG.DATASET.SOUND_TYPE,
+                os.getenv('JOB_ID')
+            )
+        )
         new_stats_episodes = {','.join(key): value for key, value in stats_episodes.items()}
         with open(stats_file, 'w') as fo:
             json.dump(new_stats_episodes, fo)
@@ -673,12 +777,33 @@ class PPOTrainer(BaseRLTrainer):
         episode_metrics_mean = {}
         for metric_uuid in self.metric_uuids:
             episode_metrics_mean[metric_uuid] = aggregated_stats[metric_uuid] / num_episodes
+        
+        episode_metrics_std = {}
+        for metric_uuid in self.metric_uuids:
+            episode_metrics_std[metric_uuid] = np.std([v[metric_uuid] for v in stats_episodes.values()])
 
         logger.info(f"Average episode reward: {episode_reward_mean:.6f}")
         for metric_uuid in self.metric_uuids:
             logger.info(
                 f"Average episode {metric_uuid}: {episode_metrics_mean[metric_uuid]:.6f}"
             )
+            logger.info(
+                f"STD episode {metric_uuid}: {episode_metrics_std[metric_uuid]:.6f}"
+            )
+
+        total_num = 0
+        total_found_num = 0
+        for sound, num in sound_found_nums.items():
+            total_num += sound_all_nums[sound]
+            if sound_all_nums[sound] == 0:
+                logger.info(f"sound_all_nums[{sound}] == 0")
+            else:
+                total_found_num += num
+                logger.info(
+                    f"{sound}: {num / sound_all_nums[sound]} (all num: {sound_all_nums[sound]}, found num: {num})"
+                )
+        logger.info(f"TOTAL NUM: {total_num}")
+        logger.info(f"TOTAL FOUND NUM: {total_found_num}")
 
         if not config.EVAL.SPLIT.startswith('test'):
             writer.add_scalar("{}/reward".format(config.EVAL.SPLIT), episode_reward_mean, checkpoint_index)
@@ -693,5 +818,87 @@ class PPOTrainer(BaseRLTrainer):
         }
         for metric_uuid in self.metric_uuids:
             result['episode_{}_mean'.format(metric_uuid)] = episode_metrics_mean[metric_uuid]
+        
+        if self.save_gif:
+            now = datetime.datetime.now()
+            save_dir_path = f"./imgs/direct_map_visualization/{now.strftime('%Y_%m%d_%H%M%S')}"
+            os.makedirs(save_dir_path, exist_ok=True)
 
+            step_width = 10
+            if len(gt_pred_dms) > 3*step_width:
+                self.visualize_dm_by_four_fig(save_dir_path, gt_pred_dms, step_width)
+                
+            self.plot_dm_loss(save_dir_path, gt_pred_dms)
+            self.make_dm_gif(save_dir_path, gt_pred_dms)
+    
         return result
+    
+
+    def visualize_dm_by_four_fig(self, save_dir_path, gt_pred_dms, step_width):
+        plt.rcParams["font.size"] = 16        # fontのsize
+        plt.rcParams["legend.framealpha"] = 1 # legendの透明度
+    
+        fig = plt.figure(figsize=(14, 14), dpi=300)
+        x = np.arange(0, len(gt_pred_dms[0][0])*45, 45)
+        for i in range(4):
+            gt_dm, pred_dm = gt_pred_dms[i*step_width]
+            ax = fig.add_subplot(2, 2, i+1)
+            ax.plot(x, pred_dm, "b", label="予測したダイレクトマップ")
+
+            x_gt = []
+            y_gt = []
+            for j in range(len(gt_dm)):
+                if gt_dm[j] != 0:
+                    x_gt.append(j*45)
+                    y_gt.append(gt_dm[j])
+            ax.scatter(x_gt, y_gt , c="red", label="真のダイレクトマップ")
+            
+            plt.ylim(0.0, 1.0)
+            plt.xticks([i * 45 for i in range(8)])
+            plt.grid()
+            if i == 1:
+                plt.legend()
+            
+            ax.set_title(f"Step: {i*step_width}")
+
+        fig.savefig(f"{save_dir_path}/visualize_dm_4figs.png")
+
+    
+    def plot_dm_loss(self, save_dir_path, gt_pred_dms):
+        losses = []
+        for gt_dm, pred_dm in gt_pred_dms:
+            losses.append(np.sum((np.array(gt_dm) - np.array(pred_dm))**2))
+        fig = plt.figure()
+        plt.plot([i for i in range(len(losses))], losses)
+        fig.savefig(f"{save_dir_path}/step_and_losses.png")
+
+
+    def make_dm_gif(self, save_dir_path, gt_pred_dms):
+        flag_legend = True
+        plt.rcParams["font.size"] = 16        # fontのsize
+        plt.rcParams["legend.framealpha"] = 1 # legendの透明度
+
+        fig = plt.figure()
+        x = np.arange(0, len(gt_pred_dms[0][0])*45, 45)
+        ims = []
+        for gt_dm, pred_dm in gt_pred_dms:
+            pred, = plt.plot(x, pred_dm, "b", label="予測したダイレクトマップ")
+    
+            x_gt = []
+            y_gt = []
+            for i in range(len(gt_dm)):
+                if gt_dm[i] != 0:
+                    x_gt.append(i*45)
+                    y_gt.append(gt_dm[i])
+            gt = plt.scatter(x_gt, y_gt , c="red", label="真のダイレクトマップ")
+    
+            if flag_legend:
+                plt.legend()
+                plt.grid()
+                plt.xticks([i * 45 for i in range(8)])
+                flag_legend = False
+            
+            ims.append([pred, gt])
+    
+        ani = animation.ArtistAnimation(fig, ims)
+        ani.save(f'{save_dir_path}/anime.gif', writer="imagemagick")

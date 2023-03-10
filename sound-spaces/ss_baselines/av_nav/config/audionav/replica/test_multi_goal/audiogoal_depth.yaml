@@ -1,10 +1,17 @@
 BASE_TASK_CONFIG_PATH: "configs/audionav/av_nav/replica/multi_audiogoal.yaml"
 NUM_PROCESSES: 1
-SENSORS: ["DEPTH_SENSOR"]
-TEST_EPISODE_COUNT: 100 # default: 1000
+SENSORS: ["DEPTH_SENSOR", "RGB_SENSOR"]
+# SENSORS: ["RGB_SENSOR","DEPTH_SENSOR"] # video
+TEST_EPISODE_COUNT: 200
+GIF_VISUALIZATION: False
 VIDEO_OPTION: []
-VISUALIZATION_OPTION: []
+# VIDEO_OPTION: ["disk"] # video
+VISUALIZATION_OPTION: [] # "top_down_map"
 
 EVAL:
-  SPLIT: "test_telephone_bell"
+  SPLIT: "test_telephone_bell_0"
   USE_CKPT_CONFIG: True
+
+RL:
+  PPO:
+    direct_map_loss_coef: 0

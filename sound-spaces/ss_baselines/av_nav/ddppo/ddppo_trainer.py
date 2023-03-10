@@ -54,6 +54,9 @@ class DDPPOTrainer(PPOTrainer):
 
         super().__init__(config)
 
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.use_gt_direct_map = self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP
+
     def _setup_actor_critic_agent(self, ppo_cfg: Config, observation_space=None) -> None:
         r"""Sets up actor critic and agent for DD-PPO.
 
@@ -63,6 +66,7 @@ class DDPPOTrainer(PPOTrainer):
         Returns:
             None
         """
+        time.sleep(10)
         logger.add_filehandler(self.config.LOG_FILE)
 
         # Setup heuristic stop criterion if applicable
@@ -76,6 +80,11 @@ class DDPPOTrainer(PPOTrainer):
             hidden_size=ppo_cfg.hidden_size,
             goal_sensor_uuid=self.config.TASK_CONFIG.TASK.GOAL_SENSOR_UUID,
             extra_rgb=self.config.EXTRA_RGB,
+            dm_use_visual=self.config.TASK_CONFIG.SIMULATOR.DM_USE_VISUAL,
+            dm_use_gru=self.config.TASK_CONFIG.SIMULATOR.DM_USE_GRU,
+            dm_cgo=self.config.TASK_CONFIG.SIMULATOR.DM_CGO,
+            use_conv1d=self.config.TASK_CONFIG.SIMULATOR.USE_CONV1D,
+            direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
         )
 
         self.actor_critic.to(self.device)
@@ -91,11 +100,14 @@ class DDPPOTrainer(PPOTrainer):
             num_mini_batch=ppo_cfg.num_mini_batch,
             value_loss_coef=ppo_cfg.value_loss_coef,
             entropy_coef=ppo_cfg.entropy_coef,
+            direct_map_loss_coef=ppo_cfg.direct_map_loss_coef,
             lr=ppo_cfg.lr,
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
             use_normalized_advantage=ppo_cfg.use_normalized_advantage,
         )
+        self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
+        self.use_gt_direct_map = self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP
 
     def train(self) -> None:
         r"""Main method for DD-PPO.
@@ -174,12 +186,18 @@ class DDPPOTrainer(PPOTrainer):
             obs_space,
             self.action_space,
             ppo_cfg.hidden_size,
+            self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+            self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP,
+            self.config.TASK_CONFIG.SIMULATOR.DROPOUT_RATE,
+            self.config.TASK_CONFIG.SIMULATOR.NOISE_COEF,
             num_recurrent_layers=self.actor_critic.net.num_recurrent_layers,
         )
         rollouts.to(self.device)
 
         for sensor in rollouts.observations:
             rollouts.observations[sensor][0].copy_(batch[sensor])
+            if self.use_direct_map and self.use_gt_direct_map:
+                rollouts.prev_direct_map[1].copy_(batch["direct_map"])
 
         # batch and observations may contain shared PyTorch CUDA
         # tensors.  We must explicitly clear them here otherwise
@@ -196,6 +214,10 @@ class DDPPOTrainer(PPOTrainer):
         )
         window_episode_stats = defaultdict(
             lambda: deque(maxlen=ppo_cfg.reward_window_size)
+        )
+
+        episode100_stats = defaultdict(
+            lambda: deque(maxlen=100)
         )
 
         t_start = time.time()
@@ -274,13 +296,15 @@ class DDPPOTrainer(PPOTrainer):
                 count_steps_delta = 0
                 self.agent.eval()
                 for step in range(ppo_cfg.num_steps):
-
+                    # f = open("debug.txt", "a")
+                    # f.write(f"before _collect_rollout_step in ddppo_trainer.train (step: {step})\n")
+                    # f.close()
                     (
                         delta_pth_time,
                         delta_env_time,
                         delta_steps,
                     ) = self._collect_rollout_step(
-                        rollouts, current_episode_reward, running_episode_stats
+                        rollouts, current_episode_reward, running_episode_stats, episode100_stats,
                     )
                     pth_time += delta_pth_time
                     env_time += delta_env_time
@@ -305,6 +329,7 @@ class DDPPOTrainer(PPOTrainer):
                     value_loss,
                     action_loss,
                     dist_entropy,
+                    direct_map_loss,
                 ) = self._update_agent(ppo_cfg, rollouts)
                 pth_time += delta_pth_time
 
@@ -318,11 +343,18 @@ class DDPPOTrainer(PPOTrainer):
                     window_episode_stats[k].append(stats[i].clone())
 
                 stats = torch.tensor(
-                    [value_loss, action_loss, dist_entropy, count_steps_delta],
+                    [value_loss, action_loss, dist_entropy, count_steps_delta, direct_map_loss],
                     device=self.device,
                 )
                 distrib.all_reduce(stats)
                 count_steps += stats[3].item()
+
+                epi100_stats_ordering = list(sorted(episode100_stats.keys()))
+                epi100_stats = torch.stack(
+                    [torch.tensor([np.mean(episode100_stats[k])]) for k in epi100_stats_ordering], 0
+                )
+
+                distrib.all_reduce(epi100_stats)
 
                 if self.world_rank == 0:
                     num_rollouts_done_store.set("num_done", "0")
@@ -331,6 +363,7 @@ class DDPPOTrainer(PPOTrainer):
                         stats[0].item() / self.world_size,
                         stats[1].item() / self.world_size,
                         stats[2].item() / self.world_size,
+                        stats[4].item() / self.world_size,
                     ]
                     deltas = {
                         k: (
@@ -360,7 +393,11 @@ class DDPPOTrainer(PPOTrainer):
                     writer.add_scalar("Policy/value_loss", losses[0], count_steps)
                     writer.add_scalar("Policy/policy_loss", losses[1], count_steps)
                     writer.add_scalar("Policy/entropy_loss", losses[2], count_steps)
+                    writer.add_scalar("Policy/direct_map_loss", losses[3], count_steps)
                     writer.add_scalar('Policy/learning_rate', lr_scheduler.get_lr()[0], count_steps)
+
+                    for i in range(len(epi100_stats_ordering)):
+                        writer.add_scalar(f"MeanEpisode100/{epi100_stats_ordering[i]}", epi100_stats[i].item() / self.world_size, count_steps)
 
                     # log stats
                     if update > 0 and update % self.config.LOG_INTERVAL == 0:

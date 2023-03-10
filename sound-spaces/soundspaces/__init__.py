@@ -16,3 +16,4 @@ from soundspaces.tasks.nav import SpectrogramSensor
 from soundspaces.tasks.nav import Collision
 from soundspaces.challenge import Challenge
 from soundspaces.benchmark import Benchmark
+from soundspaces.tasks.nav import DirectMap

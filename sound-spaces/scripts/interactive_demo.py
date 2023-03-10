@@ -74,9 +74,9 @@ def interactive_demo(config, env):
                         elif event.key == pygame.K_d:  # d
                             action = HabitatSimActions.TURN_RIGHT
                             keys.append('d')
-                        elif event.key == pygame.K_f:  # f
-                            action = HabitatSimActions.STOP
-                            keys.append('f')
+                        # elif event.key == pygame.K_f:  # f
+                        #     action = HabitatSimActions.STOP
+                        #     keys.append('f')
                         elif event.key == pygame.K_g:  # g
                             action = HabitatSimActions.FOUND
                             keys.append('g')
@@ -146,8 +146,8 @@ def following(config, env, keys):
             action = HabitatSimActions.TURN_LEFT
         elif key == 'd':  # d
             action = HabitatSimActions.TURN_RIGHT
-        elif key == 'f':  # f
-            action = HabitatSimActions.STOP
+        # elif key == 'f':  # f
+        #     action = HabitatSimActions.STOP
         elif key == 'g':  # g
             action = HabitatSimActions.FOUND
 
