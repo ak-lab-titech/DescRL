@@ -11,9 +11,14 @@ test
 
 habitat-sim
 habitat-lab
-data
 build
 sound-spaces/scripts/AmbisonicBinauralizer
+
+sound-spaces/data/metadata
+sound-spaces/data/models
+sound-spaces/data/sounds
+sound-spaces/data/scene_datasets
+sound-spaces/data/my_datasets
 
 output
 
