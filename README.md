@@ -3,7 +3,31 @@
 
 ## 環境構築
 
-[Building SoundSpaces](https://hackmd.io/OpC7hx88R9ajUacevcOzuw)
+1. habitat-labのセットアップ
+    ```
+    cd habitat-lab
+    python setup.py develop --all
+    ```
+2. habitat-simのセットアップ
+    * [参考](https://github.com/facebookresearch/habitat-sim/blob/main/BUILD_FROM_SOURCE.md#build-from-source)
+    * 卒論で用いたのはコミットID: 80f8e31140eaf50fe6c5ab488525ae1bdf250bd9
+3. `anaconda3/envs/av-nav/lib/python3.9/site-packages/habitat_sim-0.2.2-py3.9-linux-x86_64.egg/habitat_sim`の一部変更
+    * `habitat_sim/simulator.py`をこのリポジトリの`my_habitat_sim/simulator.py`に移し替える
+4. soundspacesのセットアップ
+    ```
+    cd sound-spaces
+    pip install -e .
+    ```
+5. データセットのダウンロード ([参考](https://github.com/haru425/myss/blob/main/sound-spaces/soundspaces/README.md))
+    1. 以下を実行。SoundSpaces2を使う場合は`binaural_rirs.tar`は必要ない。
+        ```
+        mkdir data
+        cd data
+        wget http://dl.fbaipublicfiles.com/SoundSpaces/metadata.tar.xz && tar xvf metadata.tar.xz
+        wget http://dl.fbaipublicfiles.com/SoundSpaces/sounds.tar.xz && tar xvf sounds.tar.xz
+        ```
+    2. Replicaを`./data/scene_datasets`にダウンロード ([参考](https://github.com/facebookresearch/Replica-Dataset#download-on-mac-os-and-linux))
+
 
 
 ## 実行方法
