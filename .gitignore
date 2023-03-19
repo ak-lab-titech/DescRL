@@ -10,7 +10,6 @@ test
 *output.out
 
 habitat-sim
-habitat-lab
 build
 sound-spaces/scripts/AmbisonicBinauralizer
 
