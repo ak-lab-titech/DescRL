@@ -10,6 +10,7 @@ test
 *output.out
 
 habitat-sim
+soundspaces-challenge
 build
 sound-spaces/scripts/AmbisonicBinauralizer
 
@@ -19,6 +20,10 @@ sound-spaces/data/sounds
 sound-spaces/data/scene_datasets
 sound-spaces/data/my_datasets
 sound-spaces/data/datasets/audionav/mp3d
+sound-spaces/data/binaural_rirs
+sound-spaces/data/datasets/audionav/replica/v1
+sound-spaces/data/scene_observations
+sound-spaces/data/mp3d_material_config.json
 
 output
 

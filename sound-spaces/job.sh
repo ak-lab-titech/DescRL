@@ -1,6 +1,6 @@
 #!/bin/sh
 #$ -cwd
-#$ -l q_node=1
+#$ -l f_node=1
 #$ -j y
 #$ -l h_rt=00:30:00
 #$ -o output/o.$JOB_ID
@@ -25,26 +25,50 @@ echo MASTERADDR=$MASTER_ADDR
 echo MASTERPORT=$MASTER_PORT
 
 # multi-gpu-train
-# mpirun -np $NP -npernode $NPERNODE \
-#     singularity exec --nv --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/  ~/nvidia_cudagl.img \
-#     ./train.sh
+mpirun -np $NP -npernode $NPERNODE \
+    singularity exec --nv \
+    --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
+    --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+    --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
+    /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
+    ./train.sh
 
 # single-gpu-train
-# singularity exec --nv --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/  ~/nvidia_cudagl.img \
+# singularity exec --nv \
+#     --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
+#     --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+#     --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
+#     /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
 #     ./train.sh
 
 # test
-# singularity exec --nv --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/  ~/nvidia_cudagl.img \
+# singularity exec --nv \
+#     --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
+#     --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+#     --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
+#     ~/nvidia_cudagl.img \
 #     ./test.sh
 
 # video
-singularity exec --nv --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/  ~/nvidia_cudagl.img \
-    ./video.sh
+# singularity exec --nv \
+#     --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
+#     --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+#     --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
+#     /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
+#     ./video.sh
 
 # make dataset
-# singularity exec --nv --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/  ~/nvidia_cudagl.img \
+# singularity exec --nv \
+#     --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
+#     --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+#     --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
+#     /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
 #     ./make_dataset.sh
 
 # plot tb data
-# singularity exec --nv --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/  ~/nvidia_cudagl.img \
+# singularity exec --nv \
+#     --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
+#     --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+#     --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
+#     /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
 #     ./plot_tb_data.sh
