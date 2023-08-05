@@ -1,5 +1,16 @@
 # Multi-Goal Audio-Visual Navigation using Sound Direction Map
 
+## ブランチ
+
+### main
+* メインのブランチ
+* Multi-Goal Audio-Visual NavigationやSound Direction Mapを実装してきたブランチ
+* soundspaces2を動かすことを想定している
+
+### ss1
+* コンペティションに参加するための実装がされているブランチ
+* soundspaces1を動かすことを想定している
+
 
 ## 環境構築
 
