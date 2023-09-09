@@ -46,7 +46,13 @@
 ### 基本的な実行方法 (TSUBAME)
 1. `./sound-spaces`に移動
 2. `job.sh`の変更
-    * コメントアウトを外すことで、何を実行するか決定する
+    * 目的に応じて`CMD`を変更する
+        * `multi-gpu-train`: マルチGPUで訓練
+        * `single-gpu-train`: 一つのGPUで訓練
+        * `test`: 学習したモデルのテスト
+        * `video`: エージェントが室内環境で動いているvideoを生成する
+        * `make_dataset`: datasetを作る
+        * `plot_tb_data`: tensorboardのデータをpythonのpltでplotする
     * ノードの種類、実行時間、outputファイル名を変更する
 3. 実行するシェルスクリプトの中身(train.sh, test.sh, video.shなど)を必要に応じて変更する
     * videoとtestの場合はファイル頭部の変数と、AV-NavなのかSAViなのか
@@ -73,11 +79,11 @@
 3. `DATASET.SOUND_TYPE`は`multi_test`にしなければ未聴音にならない
 
 #### タイミングのテストする際の注意点
-* タイミングの変更はconfigで行わない (※ TODO: confidで行うように変更するべき)
+* タイミングの変更はconfigで行わない
 * `myss/sound-spaces/soundspaces/continuous_simulator.py`の494行目の`timing`を変更する
 
 #### 同一音と不同音のテストする際の注意点
-* こちらもconfigで行わない (※ TODO: confidで行うように変更するべき)
+* こちらもconfigで行わない
 * `myss/sound-spaces/soundspaces/datasets/audionav_dataset.py`の231~239行目のコメントアウトによって変更する
 
 #### videoを作成するための変更点
