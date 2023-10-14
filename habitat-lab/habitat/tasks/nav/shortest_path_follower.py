@@ -55,7 +55,7 @@ class ShortestPathFollower:
             self._follower = self._sim.make_greedy_follower(
                 0,
                 self._goal_radius,
-                stop_key=HabitatSimActions.STOP,
+                stop_key=HabitatSimActions.FOUND,
                 forward_key=HabitatSimActions.MOVE_FORWARD,
                 left_key=HabitatSimActions.TURN_LEFT,
                 right_key=HabitatSimActions.TURN_RIGHT,
@@ -78,7 +78,7 @@ class ShortestPathFollower:
             next_action = self._follower.next_action_along(goal_pos)
         except habitat_sim.errors.GreedyFollowerError as e:
             if self._stop_on_error:
-                next_action = HabitatSimActions.STOP
+                next_action = HabitatSimActions.FOUND
             else:
                 raise e
 

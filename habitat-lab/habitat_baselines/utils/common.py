@@ -242,7 +242,8 @@ def batch_obs(
         obs.keys(),
         key=lambda name: 1
         if isinstance(obs[name], numbers.Number)
-        else np.prod(obs[name].shape),  # type: ignore
+        # else np.prod(obs[name].shape),  # type: ignore
+        else np.prod(np.shape(obs[name])),
         reverse=True,
     )
 

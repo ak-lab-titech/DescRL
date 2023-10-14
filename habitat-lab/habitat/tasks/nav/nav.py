@@ -576,15 +576,26 @@ class Success(Measure):
     def update_metric(
         self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any
     ):
-        # distance_to_target = task.measurements.measures[
-        #     DistanceToGoal.cls_uuid
-        # ].get_metric()
-        _, distance_to_closest_target = self._sim.closest_goal_id_and_dis()
+        # _, distance_to_closest_target = self._sim.closest_goal_id_and_dis()
+
+        # if (
+        #     hasattr(task, "is_found_called")
+        #     and task.is_found_called  # type: ignore
+        #     and distance_to_closest_target < self._config.SUCCESS_DISTANCE
+        # ):
+        #     self._metric = 1.0
+        # else:
+        #     self._metric = 0.0
+
+
+        distance_to_target = task.measurements.measures[
+            DistanceToGoal.cls_uuid
+        ].get_metric()
 
         if (
             hasattr(task, "is_found_called")
             and task.is_found_called  # type: ignore
-            and distance_to_closest_target < self._config.SUCCESS_DISTANCE
+            and distance_to_target < self._config.SUCCESS_DISTANCE
         ):
             self._metric = 1.0
         else:
@@ -1465,18 +1476,20 @@ class NavigationTask(EmbodiedTask):
         return merge_sim_episode_config(sim_config, episode)
 
     def _check_episode_is_active(self, *args: Any, **kwargs: Any) -> bool:
-        _, distance_to_closest_target = self._sim.closest_goal_id_and_dis()
-        failed_found = (
-            getattr(self, "is_found_called", False)
-        ) and (
-            distance_to_closest_target >= 1
-        )
-        reached_all_goals = (
-            getattr(self, "is_found_called", False)
-        ) and (
-            distance_to_closest_target < 1
-        ) and (
-            len(self._sim.not_found_goals) == 1
-        )
-        return not (failed_found or reached_all_goals)
+        # _, distance_to_closest_target = self._sim.closest_goal_id_and_dis()
+        # failed_found = (
+        #     getattr(self, "is_found_called", False)
+        # ) and (
+        #     distance_to_closest_target >= 1
+        # )
+        # reached_all_goals = (
+        #     getattr(self, "is_found_called", False)
+        # ) and (
+        #     distance_to_closest_target < 1
+        # ) and (
+        #     len(self._sim.not_found_goals) == 1
+        # )
+        # return not (failed_found or reached_all_goals)
+
+        return not getattr(self, "is_found_called", False)
 

@@ -57,7 +57,7 @@ class VLNEpisode(NavigationEpisode):
 class InstructionSensor(Sensor):
     def __init__(self, **kwargs):
         self.uuid = "instruction"
-        self.observation_space = spaces.Discrete(0)
+        self.observation_space = spaces.Discrete(4) # TODO This is temporary and needs to be changed to an appropriate one
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return self.uuid
@@ -68,13 +68,21 @@ class InstructionSensor(Sensor):
         episode: VLNEpisode,
         **kwargs
     ):
+        # f = open("debug.txt", "a")
+        # f.write("-- InstructionSensor observation --\n")
+        # f.write(f"text: {episode.instruction.instruction_text}\n")
+        # f.write(f"tokens: {episode.instruction.instruction_tokens}\n")
+        # f.write(f"trajectory_id: {episode.trajectory_id}\n")
+        # f.write("------------------------------------\n")
+        # f.close()
+
         return {
             "text": episode.instruction.instruction_text,
             "tokens": episode.instruction.instruction_tokens,
             "trajectory_id": episode.trajectory_id,
         }
 
-    def get_observation(self, **kwargs):
+    def get_observation(self, *args, **kwargs):
         return self._get_observation(**kwargs)
 
 
