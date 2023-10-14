@@ -5,11 +5,15 @@
 ### main
 * メインのブランチ
 * Multi-Goal Audio-Visual NavigationやSound Direction Mapを実装してきたブランチ
-* soundspaces2を動かすことを想定している
+* soundspaces2でaudio-visual navigationを動かすことを想定している
 
 ### ss1
 * コンペティションに参加するための実装がされているブランチ
-* soundspaces1を動かすことを想定している
+* soundspaces1でaudio-visual navigationを動かすことを想定している
+
+### iprl-discrete
+* 離散環境下で、インストラクション予測を補助タスクにした強化学習を行うためのブランチ
+* soundspaces1でsemantic audio-visual navigationを動かすことを想定している
 
 
 ## 環境構築
