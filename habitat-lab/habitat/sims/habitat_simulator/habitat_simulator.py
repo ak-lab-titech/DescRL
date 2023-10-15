@@ -587,6 +587,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         position: Optional[List[float]] = None,
         rotation: Optional[List[float]] = None,
         keep_agent_at_new_pose: bool = False,
+        found: bool = False,
     ) -> Optional[Observations]:
         current_state = self.get_agent_state()
         if position is None or rotation is None:
