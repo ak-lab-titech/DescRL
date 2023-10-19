@@ -1,0 +1,23 @@
+model:
+  vocab_embedding_size: 50
+  hidden_size: 512
+  dropout_ratio: 0.5
+  use_input_att_feed: False
+  world_embedding_size: 2176 # 2048 (RGB) + 128 (Depth)
+  bidirectional: False
+
+train:
+  data_path: "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma_dagger_gtaction_us100/trajectories.lmdb"
+  batch_size: 100
+  use_image_feature: True
+  dataset_shuffle: True
+  dataset_drop_last: True
+  learning_rate: 0.0001
+  weight_decay: 0.0005
+  max_instruction_length: 80
+  feedback: "teacher" # "teacher", "argmax", "sample"
+  n_iters: 20000
+  save_every: 1000
+  log_every: 100
+  
+  
