@@ -75,43 +75,32 @@ def get_all_lmdb_data(dir_name: str):
 class R2RDataset(Dataset):
     def __init__(self, data_path: str, use_image_feature: bool):
         self.data_path = data_path
-        self.use_image_feature = use_image_feature
-        
-        self.data_num = None
-        self.image_seqs = None
-        self.action_seqs = None
-        self.instructions = None
-        self.load_data()
+        self.use_image_feature = use_image_feature        
+        self.data_num = len(get_lmdb_keys(self.data_path))
     
     def __len__(self):
         return self.data_num
 
     def __getitem__(self, index):
-        x = {
-            "image_seq": self.image_seqs[index],
-            "action_seq": self.action_seqs[index],
-        }
-        y = self.instructions[index]
-        return x, y
-    
-    def load_data(self):
-        """
-        data_pathのデータを読み込んでinputsとtargetsを作成
-        """
-        observations, actions, _ = get_all_lmdb_data(self.data_path)
-        self.data_num = len(actions)
-    
+        observation_seq, _, action_seq, _ = get_a_lmdb_data(
+            self.data_path, str(index).encode('latin-1')
+        )
         if not self.use_image_feature:
-            self.image_seqs = [
-                np.concatenate([obs["rgb"], obs["depth"]], 3) for obs in observations
-            ] # (data_num, seq_len, h, w, 4)
+            image_seq = np.concatenate(
+                [observation_seq["rgb"], observation_seq["depth"]], 3
+            ) # (seq_len, h, w, 4)
         else:
-            self.image_seqs = [
-                np.concatenate([obs["rgb_features"], obs["depth_features"]], 1) for obs in observations
-            ] # (data_num, seq_len, fea_dim, 4, 4)
-        self.action_seqs = [np.eye(4)[np.array(action)] for action in actions] # (data_num, seq_len, 4)
+            image_seq = np.concatenate(
+                [observation_seq["rgb_features"], observation_seq["depth_features"]], 1
+            ) # (seq_len, fea_dim, 4, 4)
+        action_seq = np.eye(4)[np.array(action_seq)]
         
-        self.instructions = [obs["instruction"][0] for obs in observations] # (data_num, instr_len)
+        x = {
+            "image_seq": image_seq,
+            "action_seq": action_seq,
+        }
+        y = observation_seq["instruction"][0]
+        return x, y
 
 
 def my_collate_fn(batch):

@@ -35,19 +35,8 @@ def save_model(encoder, decoder, save_dir):
     torch.save(encoder.state_dict(), encoder_path)
     torch.save(decoder.state_dict(), decoder_path)
 
-def train_one_step(
-    encoder,
-    decoder,
-    encoder_optimizer,
-    decoder_optimizer,
-    inputs,
-    targets,
-    max_instruction_length,
-    feedback,
-):
-    encoder_optimizer.zero_grad()
-    decoder_optimizer.zero_grad()
-    
+
+def rollout(logger, encoder, decoder, inputs, targets, max_instruction_length, feedback):
     action_embeddings = inputs["action_seqs"]
     image_features = inputs["image_seqs"]
     path_mask = inputs["mask"]
@@ -86,7 +75,7 @@ def train_one_step(
         else:
             sys.exit('Invalid feedback option')
         
-        all_seq_end = (w_t == 0).all()
+        all_seq_end = (target == 0).all()# TODO
         if all_seq_end:
             break
         
@@ -97,11 +86,53 @@ def train_one_step(
             ignore_index=EOS_IDX,
             reduction="mean",
         )
-    
+    return loss
+
+
+def eval(
+    logger,
+    encoder,
+    decoder,
+    seen_dataloader,
+    unseen_dataloader,
+    max_instruction_length,
+):
+    encoder.eval()
+    decoder.eval()
+    s = time.time()
+    seen_losses = []
+    for inputs, targets in seen_dataloader:
+        loss = rollout(logger, encoder, decoder, inputs, targets, max_instruction_length, "argmax")
+        seen_losses.append(loss.item())
+    unseen_losses = []
+    for inputs, targets in unseen_dataloader:
+        loss = rollout(logger, encoder, decoder, inputs, targets, max_instruction_length, "argmax")
+        unseen_losses.append(loss.item())
+    logger.info(f"========== Evaluation ==========")
+    logger.info(f"Seen Loss:  {np.mean(seen_losses):.5f}")
+    logger.info(f"Unseen Loss:{np.mean(unseen_losses):.5f}")
+    logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
+    logger.info(f"================================")
+
+
+def train_one_step(
+    encoder,
+    decoder,
+    encoder_optimizer,
+    decoder_optimizer,
+    inputs,
+    targets,
+    max_instruction_length,
+    feedback,
+):
+    encoder.train()
+    decoder.train()
+    encoder_optimizer.zero_grad()
+    decoder_optimizer.zero_grad()
+    loss = rollout(None, encoder, decoder, inputs, targets, max_instruction_length, feedback)
     loss.backward()
     encoder_optimizer.step()
     decoder_optimizer.step()
-    
     return loss
 
 
@@ -110,7 +141,9 @@ def train(
     encoder: torch.nn.Module,
     decoder: torch.nn.Module,
     model_name: str,
-    data_path: str,
+    train_data_path: str,
+    val_seen_data_path: str,
+    val_unseen_data_path: str,
     use_image_feature: bool,
     dataset_shuffle: bool,
     dataset_drop_last: bool,
@@ -122,6 +155,7 @@ def train(
     n_iters: int,
     save_every: int,
     log_every: int,
+    eval_every: int,
 ):
     encoder_optimizer = optim.Adam(
         filter_param(encoder.parameters()),
@@ -137,22 +171,40 @@ def train(
     decoder.train()
     
     logger.info("LOADING DATA...")
-    dataset = R2RDataset(data_path, use_image_feature)
-    dataloader = DataLoader(
-        dataset,
+    train_dataset = R2RDataset(train_data_path, use_image_feature)
+    logger.info(f"The number of train data: {len(train_dataset)}")
+    val_seen_dataset = R2RDataset(val_seen_data_path, use_image_feature)
+    logger.info(f"The number of val_seen data: {len(val_seen_dataset)}")
+    val_unseen_dataset = R2RDataset(val_unseen_data_path, use_image_feature)
+    logger.info(f"The number of val_unseen data: {len(val_unseen_dataset)}")
+    train_dataloader = DataLoader(
+        train_dataset,
         batch_size=batch_size,
         shuffle=dataset_shuffle,
         drop_last=dataset_drop_last,
+        collate_fn=my_collate_fn,
+    )
+    val_seen_dataloader = DataLoader(
+        val_seen_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        drop_last=False,
+        collate_fn=my_collate_fn,
+    )
+    val_unseen_dataloader = DataLoader(
+        val_unseen_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        drop_last=False,
         collate_fn=my_collate_fn,
     )
     logger.info("FINISH LOADING DATA!")
     logger.info("START TRAINING...")
     s = time.time()
     for i in range(1, n_iters + 1):
-        cnt = 0
-        loss = 0
-        for j, (inputs, targets) in enumerate(dataloader):
-            loss_j = train_one_step(
+        losses = []
+        for _, (inputs, targets) in enumerate(train_dataloader):
+            loss = train_one_step(
                 encoder,
                 decoder,
                 encoder_optimizer,
@@ -162,15 +214,16 @@ def train(
                 max_instruction_length,
                 feedback,
             )
-            loss += loss_j
-            cnt += 1
+            losses.append(loss.item())
         if i % save_every == 0:
             save_model(encoder, decoder, f"./data/models/{model_name}/{i}")
         if i == 1 or i % log_every == 0:
             logger.info(f"---------- Iteration {i}/{n_iters} ----------")
-            logger.info(f"loss:{loss/cnt:.5f}")
+            logger.info(f"loss:{np.mean(losses):.5f}")
             logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
             s = time.time()
+        if i == 1 or i % eval_every == 0:
+            eval(logger, encoder, decoder, val_seen_dataloader, val_unseen_dataloader, max_instruction_length)
 
 
 def main(config, model_name, logger):
@@ -195,7 +248,9 @@ def main(config, model_name, logger):
         encoder=encoder,
         decoder=decoder,
         model_name=model_name,
-        data_path=config["train"]["data_path"],
+        train_data_path=config["train"]["train_data_path"],
+        val_seen_data_path=config["train"]["val_seen_data_path"],
+        val_unseen_data_path=config["train"]["val_unseen_data_path"],
         use_image_feature=config["train"]["use_image_feature"],
         dataset_shuffle=config["train"]["dataset_shuffle"],
         dataset_drop_last=config["train"]["dataset_drop_last"],
@@ -206,7 +261,8 @@ def main(config, model_name, logger):
         feedback=config["train"]["feedback"],
         n_iters=config["train"]["n_iters"],
         save_every=config["train"]["save_every"],
-        log_every=config["train"]["log_every"]
+        log_every=config["train"]["log_every"],
+        eval_every=config["train"]["eval_every"],
     )
 
 

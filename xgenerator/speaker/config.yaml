@@ -7,7 +7,9 @@ model:
   bidirectional: False
 
 train:
-  data_path: "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma_dagger_gtaction_us100/trajectories.lmdb"
+  train_data_path: "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma/train_trajectories.lmdb"
+  val_seen_data_path: "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma/val_seen_trajectories.lmdb"
+  val_unseen_data_path: /home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma/val_unseen_trajectories.lmdb
   batch_size: 100
   use_image_feature: True
   dataset_shuffle: True
@@ -17,7 +19,8 @@ train:
   max_instruction_length: 80
   feedback: "teacher" # "teacher", "argmax", "sample"
   n_iters: 20000
-  save_every: 1000
-  log_every: 100
+  save_every: 10
+  log_every: 1
+  eval_every: 1
   
   
