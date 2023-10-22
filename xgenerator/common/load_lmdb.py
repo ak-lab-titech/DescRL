@@ -13,15 +13,13 @@ from torch.utils.data import DataLoader
 
 sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
 
-from common.utils import try_cuda
-
 
 def get_lmdb_keys(dir_name: str):
     """
     lmdbデータのキーを全て取得する
     """
     keys = []
-    env = lmdb.open(dir_name, readonly=True)
+    env = lmdb.open(dir_name, readonly=True, lock=False)
     txn = env.begin()
     cursor = txn.cursor()
 
@@ -40,7 +38,7 @@ def get_a_lmdb_data(dir_name: str, key: str):
     """
     lmdbのデータを一つ取得する
     """
-    env = lmdb.open(dir_name, readonly=True)
+    env = lmdb.open(dir_name, readonly=True, lock=False)
     txn = env.begin()
 
     value = txn.get(key)
@@ -135,28 +133,13 @@ def my_collate_fn(batch):
             batched_action_seqs[t][i] = action
         
         targets.append(y)
-                
-    batched_action_seqs = [
-        try_cuda(Variable(
-            torch.from_numpy(act),
-            requires_grad=False,
-        )) for act in batched_action_seqs
-    ]
-    batched_image_seqs = [
-        try_cuda(Variable(
-            torch.from_numpy(img),
-            requires_grad=False,
-        )) for img in batched_image_seqs
-    ]
-    path_masks = try_cuda(torch.from_numpy(path_masks))
     
     inputs = {
-        "image_seqs": batched_image_seqs,    # (max_l, (b, 2176, 4, 4))
-        "action_seqs": batched_action_seqs,  # (max_l, (b, 4))
+        "image_seqs": batched_image_seqs,    # (max_l, b, 2176, 4, 4))
+        "action_seqs": batched_action_seqs,  # (max_l, b, 4))
         "mask": path_masks,          # (b, max_l)
     }
-    targets = try_cuda(torch.from_numpy(np.array(targets))) # (b, 200)
-    
+    # targets: (b, 200)
     return inputs, targets
     
 

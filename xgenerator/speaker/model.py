@@ -26,11 +26,6 @@ class SoftDotAttention(nn.Module):
         self.sm = nn.Softmax(dim=1)
         self.linear_out = nn.Linear(dim * 2, dim, bias=False)
         self.tanh = nn.Tanh()
-        
-        self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-        self.linear_in.to(self.device)
-        self.linear_out.to(self.device)
-
     def forward(self, h, context, mask=None):
         '''Propagate h through the network.
 
@@ -68,9 +63,6 @@ class ContextOnlySoftDotAttention(nn.Module):
             context_dim = dim
         self.linear_in = nn.Linear(dim, context_dim, bias=False)
         self.sm = nn.Softmax(dim=1)
-        
-        self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-        self.linear_in.to(self.device)
 
     def forward(self, h, context, mask=None):
         '''Propagate h through the network.
@@ -101,10 +93,6 @@ class VisualSoftDotAttention(nn.Module):
         self.linear_in_h = nn.Linear(h_dim, dot_dim, bias=True)
         self.linear_in_v = nn.Linear(v_dim, dot_dim, bias=True)
         self.sm = nn.Softmax(dim=1)
-        
-        self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-        self.linear_in_h.to(self.device)
-        self.linear_in_v.to(self.device)
 
     def forward(self, h, visual_context, mask=None):
         '''Propagate h through the network.
@@ -131,9 +119,6 @@ class VisualEncoder(nn.Module):
         self.flatten = nn.Flatten()
         self.mlp = nn.Linear(np.prod(input_shape), output_dim)
         self.relu = nn.ReLU()
-        
-        self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-        self.mlp.to(self.device)
 
     def forward(self, images):
         x = self.flatten(images)
@@ -152,18 +137,14 @@ class SpeakerEncoderLSTM(nn.Module):
         self.word_embedding_size = world_embedding_size
         self.hidden_size = hidden_size
         self.drop = nn.Dropout(p=dropout_ratio)
-        self.visual_attention_layer = VisualSoftDotAttention(
-            hidden_size, world_embedding_size
-        )
+        # self.visual_attention_layer = VisualSoftDotAttention(
+        #     hidden_size, world_embedding_size
+        # )
         self.visual_encoder = VisualEncoder((2176, 4, 4), world_embedding_size)
         self.lstm = nn.LSTMCell(
             action_embedding_size + world_embedding_size, hidden_size
         )
         self.encoder2decoder = nn.Linear(hidden_size, hidden_size)
-        
-        self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-        self.lstm.to(self.device)
-        self.encoder2decoder.to(self.device)
 
     def init_state(self, batch_size):
         ''' Initialize to zero cell states and hidden states.'''
@@ -232,14 +213,7 @@ class SpeakerDecoderLSTM(nn.Module):
             self.lstm = nn.LSTMCell(vocab_embedding_size, hidden_size)
             self.attention_layer = SoftDotAttention(hidden_size)
         self.decoder2action = nn.Linear(hidden_size, vocab_size)
-        
-        self.device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
-        self.embedding.to(self.device)
-        self.lstm.to(self.device)
-        self.decoder2action.to(self.device)
-        if self.use_input_att_feed:
-            self.output_l1.to(self.device)
-            
+         
 
     def forward(self, previous_word, h_0, c_0, ctx, ctx_mask=None):
         ''' Takes a single step in the decoder LSTM (allowing sampling).

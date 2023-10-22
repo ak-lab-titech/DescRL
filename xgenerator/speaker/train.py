@@ -11,7 +11,11 @@ from torch import optim
 from torch.autograd import Variable
 import torch.nn.functional as F
 import torch.distributions as D
+import torch.multiprocessing as multiprocessing
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel
+from torch.distributed import all_reduce
 
 sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
 
@@ -32,14 +36,26 @@ def save_model(encoder, decoder, save_dir):
     os.makedirs(save_dir, exist_ok=True)
     encoder_path = f"{save_dir}/encoder.pth"
     decoder_path = f"{save_dir}/decoder.pth"
-    torch.save(encoder.state_dict(), encoder_path)
-    torch.save(decoder.state_dict(), decoder_path)
+    torch.save(encoder.module.state_dict(), encoder_path)
+    torch.save(decoder.module.state_dict(), decoder_path)
 
 
-def rollout(logger, encoder, decoder, inputs, targets, max_instruction_length, feedback):
-    action_embeddings = inputs["action_seqs"]
-    image_features = inputs["image_seqs"]
-    path_mask = inputs["mask"]
+def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback):
+    action_embeddings = [
+        try_cuda(Variable(
+            torch.from_numpy(act),
+            requires_grad=False,
+        )) for act in inputs["action_seqs"]
+    ]
+    image_features = [
+        try_cuda(Variable(
+            torch.from_numpy(img),
+            requires_grad=False,
+        )) for img in inputs["image_seqs"]
+    ]
+    path_mask = try_cuda(torch.from_numpy(inputs["mask"]))
+    targets = try_cuda(torch.from_numpy(np.array(targets)))
+    
     batch_size = image_features[0].shape[0]
     
     ctx, h_t, c_t = encoder(action_embeddings, image_features)
@@ -90,7 +106,8 @@ def rollout(logger, encoder, decoder, inputs, targets, max_instruction_length, f
 
 
 def eval(
-    logger,
+    rank,
+    world_size,
     encoder,
     decoder,
     seen_dataloader,
@@ -102,17 +119,24 @@ def eval(
     s = time.time()
     seen_losses = []
     for inputs, targets in seen_dataloader:
-        loss = rollout(logger, encoder, decoder, inputs, targets, max_instruction_length, "argmax")
+        loss = rollout(encoder, decoder, inputs, targets, max_instruction_length, "argmax")
         seen_losses.append(loss.item())
     unseen_losses = []
     for inputs, targets in unseen_dataloader:
-        loss = rollout(logger, encoder, decoder, inputs, targets, max_instruction_length, "argmax")
+        loss = rollout(encoder, decoder, inputs, targets, max_instruction_length, "argmax")
         unseen_losses.append(loss.item())
-    logger.info(f"========== Evaluation ==========")
-    logger.info(f"Seen Loss:  {np.mean(seen_losses):.5f}")
-    logger.info(f"Unseen Loss:{np.mean(unseen_losses):.5f}")
-    logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
-    logger.info(f"================================")
+    seen_loss = torch.from_numpy(np.array([np.mean(seen_losses)])).to(rank)
+    all_reduce(seen_loss)
+    unseen_loss = torch.from_numpy(np.array([np.mean(unseen_losses)])).to(rank)
+    all_reduce(unseen_loss)
+    if rank == 0:
+        seen_loss = seen_loss.item() / world_size
+        unseen_loss = unseen_loss.item() / world_size
+        logger.info(f"========== Evaluation ==========")
+        logger.info(f"Seen Loss:  {seen_loss:.5f}")
+        logger.info(f"Unseen Loss:{unseen_loss:.5f}")
+        logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
+        logger.info(f"================================")
 
 
 def train_one_step(
@@ -129,7 +153,7 @@ def train_one_step(
     decoder.train()
     encoder_optimizer.zero_grad()
     decoder_optimizer.zero_grad()
-    loss = rollout(None, encoder, decoder, inputs, targets, max_instruction_length, feedback)
+    loss = rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback)
     loss.backward()
     encoder_optimizer.step()
     decoder_optimizer.step()
@@ -137,6 +161,8 @@ def train_one_step(
 
 
 def train(
+    rank: int,
+    world_size: int,
     logger: logging.Logger,
     encoder: torch.nn.Module,
     decoder: torch.nn.Module,
@@ -145,7 +171,6 @@ def train(
     val_seen_data_path: str,
     val_unseen_data_path: str,
     use_image_feature: bool,
-    dataset_shuffle: bool,
     dataset_drop_last: bool,
     batch_size: int,
     learning_rate: float,
@@ -170,36 +195,54 @@ def train(
     encoder.train()
     decoder.train()
     
-    logger.info("LOADING DATA...")
+    if multiprocessing.get_start_method() == 'fork':
+        multiprocessing.set_start_method('spawn', force=True)
+    if rank == 0:
+        logger.info("LOADING DATA...")
     train_dataset = R2RDataset(train_data_path, use_image_feature)
-    logger.info(f"The number of train data: {len(train_dataset)}")
-    val_seen_dataset = R2RDataset(val_seen_data_path, use_image_feature)
-    logger.info(f"The number of val_seen data: {len(val_seen_dataset)}")
-    val_unseen_dataset = R2RDataset(val_unseen_data_path, use_image_feature)
-    logger.info(f"The number of val_unseen data: {len(val_unseen_dataset)}")
+    train_sampler = DistributedSampler(train_dataset, rank=rank)
     train_dataloader = DataLoader(
         train_dataset,
+        num_workers=2,
         batch_size=batch_size,
-        shuffle=dataset_shuffle,
+        # shuffle=dataset_shuffle,
         drop_last=dataset_drop_last,
         collate_fn=my_collate_fn,
+        sampler=train_sampler,
+        pin_memory=True,
     )
+    if rank == 0:
+        logger.info(f"The number of train data: {len(train_dataset)}, batch: {len(train_dataloader)}")
+    val_seen_dataset = R2RDataset(val_seen_data_path, use_image_feature)
+    val_seen_sampler = DistributedSampler(val_seen_dataset, rank=rank)
     val_seen_dataloader = DataLoader(
         val_seen_dataset,
+        num_workers=2,
         batch_size=batch_size,
-        shuffle=False,
+        # shuffle=False,
         drop_last=False,
         collate_fn=my_collate_fn,
+        sampler=val_seen_sampler,
+        pin_memory=True,
     )
+    if rank == 0:
+        logger.info(f"The number of val_seen data: {len(val_seen_dataset)}, batch: {len(val_seen_dataloader)}")
+    val_unseen_dataset = R2RDataset(val_unseen_data_path, use_image_feature)
+    val_unseen_sampler = DistributedSampler(val_unseen_dataset, rank=rank)
     val_unseen_dataloader = DataLoader(
         val_unseen_dataset,
+        num_workers=2,
         batch_size=batch_size,
-        shuffle=False,
+        # shuffle=False,
         drop_last=False,
         collate_fn=my_collate_fn,
+        sampler=val_unseen_sampler,
+        pin_memory=True,
     )
-    logger.info("FINISH LOADING DATA!")
-    logger.info("START TRAINING...")
+    if rank == 0:
+        logger.info(f"The number of val_unseen data: {len(val_unseen_dataset)}, batch: {len(val_unseen_dataloader)}")
+        logger.info("FINISH LOADING DATA!")
+        logger.info("START TRAINING...")
     s = time.time()
     for i in range(1, n_iters + 1):
         losses = []
@@ -218,15 +261,19 @@ def train(
         if i % save_every == 0:
             save_model(encoder, decoder, f"./data/models/{model_name}/{i}")
         if i == 1 or i % log_every == 0:
-            logger.info(f"---------- Iteration {i}/{n_iters} ----------")
-            logger.info(f"loss:{np.mean(losses):.5f}")
-            logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
+            train_loss = torch.from_numpy(np.array([np.mean(losses)])).to(rank)
+            all_reduce(train_loss)
+            if rank == 0:
+                logger.info(f"---------- Iteration {i}/{n_iters} ----------")
+                train_loss = train_loss.item() / world_size
+                logger.info(f"train loss:{train_loss:.5f}")
+                logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
             s = time.time()
         if i == 1 or i % eval_every == 0:
-            eval(logger, encoder, decoder, val_seen_dataloader, val_unseen_dataloader, max_instruction_length)
+            eval(rank, world_size, encoder, decoder, val_seen_dataloader, val_unseen_dataloader, max_instruction_length)
 
 
-def main(config, model_name, logger):
+def main(config, model_name, logger, rank, world_size):
     lang = R2RLang(name="r2r_train")
     encoder = SpeakerEncoderLSTM(
         action_embedding_size=4,
@@ -235,6 +282,7 @@ def main(config, model_name, logger):
         dropout_ratio=config["model"]["dropout_ratio"],
         bidirectional=config["model"]["bidirectional"],
     )
+    encoder = DistributedDataParallel(encoder.to(rank), device_ids=[rank])
     decoder = SpeakerDecoderLSTM(
         vocab_size=lang.vocab_size,
         vocab_embedding_size=config["model"]["vocab_embedding_size"],
@@ -243,7 +291,10 @@ def main(config, model_name, logger):
         glove=lang.glove_vec,
         use_input_att_feed=config["model"]["use_input_att_feed"],
     )
+    decoder = DistributedDataParallel(decoder.to(rank), device_ids=[rank])
     train(
+        rank=rank,
+        world_size=world_size,
         logger=logger,
         encoder=encoder,
         decoder=decoder,
@@ -252,7 +303,6 @@ def main(config, model_name, logger):
         val_seen_data_path=config["train"]["val_seen_data_path"],
         val_unseen_data_path=config["train"]["val_unseen_data_path"],
         use_image_feature=config["train"]["use_image_feature"],
-        dataset_shuffle=config["train"]["dataset_shuffle"],
         dataset_drop_last=config["train"]["dataset_drop_last"],
         batch_size=config["train"]["batch_size"],
         learning_rate=config["train"]["learning_rate"],
@@ -267,6 +317,12 @@ def main(config, model_name, logger):
 
 
 if __name__=="__main__":
+    rank = int(os.environ["LOCAL_RANK"])
+    torch.cuda.set_device(rank)
+    world_size = torch.cuda.device_count()
+    torch.distributed.init_process_group(backend='nccl', init_method='env://', world_size=world_size)
+    print(f"rank: {rank}, world_size: {world_size}")
+    
     parser = argparse.ArgumentParser()
     parser.add_argument('--config-path', help='the path to config.')
     parser.add_argument('--model-name', help='the name of model to train.')
@@ -287,6 +343,7 @@ if __name__=="__main__":
     formatter = logging.Formatter("[%(levelname)s] %(asctime)s: %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    logger.info("Start!")
+    if rank == 0:
+        logger.info("Start!")
     
-    main(config, args.model_name, logger)
+    main(config, args.model_name, logger, rank, world_size)
