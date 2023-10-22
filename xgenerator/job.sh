@@ -15,6 +15,7 @@ module load openmpi/3.1.4-opa10.10
 
 
 MODEL_NAME="speaker"
+export NP=8
 
 
 cd ~/av-nav/myss/xgenerator
@@ -22,9 +23,12 @@ pwd
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate av-nav
 
+echo MODEL_NAME=$MODEL_NAME
+echo NP=$NP
+
 CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
         --nnodes=1 \
-        --nproc_per_node=4 \
+        --nproc_per_node=$NP \
         speaker/train.py \
         --config-path \
         ./speaker/config.yaml \

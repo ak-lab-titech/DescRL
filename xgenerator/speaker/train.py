@@ -106,8 +106,7 @@ def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback)
 
 
 def eval(
-    rank,
-    world_size,
+    gpu_id,
     encoder,
     decoder,
     seen_dataloader,
@@ -125,13 +124,13 @@ def eval(
     for inputs, targets in unseen_dataloader:
         loss = rollout(encoder, decoder, inputs, targets, max_instruction_length, "argmax")
         unseen_losses.append(loss.item())
-    seen_loss = torch.from_numpy(np.array([np.mean(seen_losses)])).to(rank)
+    seen_loss = torch.from_numpy(np.array([np.mean(seen_losses)])).to(gpu_id)
     all_reduce(seen_loss)
-    unseen_loss = torch.from_numpy(np.array([np.mean(unseen_losses)])).to(rank)
+    unseen_loss = torch.from_numpy(np.array([np.mean(unseen_losses)])).to(gpu_id)
     all_reduce(unseen_loss)
-    if rank == 0:
-        seen_loss = seen_loss.item() / world_size
-        unseen_loss = unseen_loss.item() / world_size
+    if int(os.environ["LOCAL_RANK"]) == 0:
+        seen_loss = seen_loss.item() / int(os.environ["NP"])
+        unseen_loss = unseen_loss.item() / int(os.environ["NP"])
         logger.info(f"========== Evaluation ==========")
         logger.info(f"Seen Loss:  {seen_loss:.5f}")
         logger.info(f"Unseen Loss:{unseen_loss:.5f}")
@@ -161,8 +160,7 @@ def train_one_step(
 
 
 def train(
-    rank: int,
-    world_size: int,
+    gpu_id: int,
     logger: logging.Logger,
     encoder: torch.nn.Module,
     decoder: torch.nn.Module,
@@ -197,10 +195,15 @@ def train(
     
     if multiprocessing.get_start_method() == 'fork':
         multiprocessing.set_start_method('spawn', force=True)
-    if rank == 0:
+    if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info("LOADING DATA...")
     train_dataset = R2RDataset(train_data_path, use_image_feature)
-    train_sampler = DistributedSampler(train_dataset, rank=rank)
+    train_sampler = DistributedSampler(
+        train_dataset,
+        num_replicas=int(os.environ["NP"]),
+        shuffle=True,
+        rank=gpu_id,
+    )
     train_dataloader = DataLoader(
         train_dataset,
         num_workers=2,
@@ -211,10 +214,15 @@ def train(
         sampler=train_sampler,
         pin_memory=True,
     )
-    if rank == 0:
+    if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of train data: {len(train_dataset)}, batch: {len(train_dataloader)}")
     val_seen_dataset = R2RDataset(val_seen_data_path, use_image_feature)
-    val_seen_sampler = DistributedSampler(val_seen_dataset, rank=rank)
+    val_seen_sampler = DistributedSampler(
+        val_seen_dataset,
+        num_replicas=int(os.environ["NP"]),
+        shuffle=False,
+        rank=gpu_id,
+    )
     val_seen_dataloader = DataLoader(
         val_seen_dataset,
         num_workers=2,
@@ -225,10 +233,15 @@ def train(
         sampler=val_seen_sampler,
         pin_memory=True,
     )
-    if rank == 0:
+    if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of val_seen data: {len(val_seen_dataset)}, batch: {len(val_seen_dataloader)}")
     val_unseen_dataset = R2RDataset(val_unseen_data_path, use_image_feature)
-    val_unseen_sampler = DistributedSampler(val_unseen_dataset, rank=rank)
+    val_unseen_sampler = DistributedSampler(
+        val_unseen_dataset,
+        num_replicas=int(os.environ["NP"]),
+        shuffle=False,
+        rank=gpu_id,
+    )
     val_unseen_dataloader = DataLoader(
         val_unseen_dataset,
         num_workers=2,
@@ -239,7 +252,7 @@ def train(
         sampler=val_unseen_sampler,
         pin_memory=True,
     )
-    if rank == 0:
+    if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of val_unseen data: {len(val_unseen_dataset)}, batch: {len(val_unseen_dataloader)}")
         logger.info("FINISH LOADING DATA!")
         logger.info("START TRAINING...")
@@ -261,19 +274,19 @@ def train(
         if i % save_every == 0:
             save_model(encoder, decoder, f"./data/models/{model_name}/{i}")
         if i == 1 or i % log_every == 0:
-            train_loss = torch.from_numpy(np.array([np.mean(losses)])).to(rank)
+            train_loss = torch.from_numpy(np.array([np.mean(losses)])).to(gpu_id)
             all_reduce(train_loss)
-            if rank == 0:
+            if int(os.environ["LOCAL_RANK"]) == 0:
                 logger.info(f"---------- Iteration {i}/{n_iters} ----------")
-                train_loss = train_loss.item() / world_size
+                train_loss = train_loss.item() / int(os.environ["NP"])
                 logger.info(f"train loss:{train_loss:.5f}")
                 logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
             s = time.time()
         if i == 1 or i % eval_every == 0:
-            eval(rank, world_size, encoder, decoder, val_seen_dataloader, val_unseen_dataloader, max_instruction_length)
+            eval(gpu_id, encoder, decoder, val_seen_dataloader, val_unseen_dataloader, max_instruction_length)
 
 
-def main(config, model_name, logger, rank, world_size):
+def main(config, model_name, logger, gpu_id):
     lang = R2RLang(name="r2r_train")
     encoder = SpeakerEncoderLSTM(
         action_embedding_size=4,
@@ -282,7 +295,7 @@ def main(config, model_name, logger, rank, world_size):
         dropout_ratio=config["model"]["dropout_ratio"],
         bidirectional=config["model"]["bidirectional"],
     )
-    encoder = DistributedDataParallel(encoder.to(rank), device_ids=[rank])
+    encoder = DistributedDataParallel(encoder.to(gpu_id), device_ids=[gpu_id])
     decoder = SpeakerDecoderLSTM(
         vocab_size=lang.vocab_size,
         vocab_embedding_size=config["model"]["vocab_embedding_size"],
@@ -291,10 +304,9 @@ def main(config, model_name, logger, rank, world_size):
         glove=lang.glove_vec,
         use_input_att_feed=config["model"]["use_input_att_feed"],
     )
-    decoder = DistributedDataParallel(decoder.to(rank), device_ids=[rank])
+    decoder = DistributedDataParallel(decoder.to(gpu_id), device_ids=[gpu_id])
     train(
-        rank=rank,
-        world_size=world_size,
+        gpu_id=gpu_id,
         logger=logger,
         encoder=encoder,
         decoder=decoder,
@@ -318,10 +330,12 @@ def main(config, model_name, logger, rank, world_size):
 
 if __name__=="__main__":
     rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(rank)
     world_size = torch.cuda.device_count()
-    torch.distributed.init_process_group(backend='nccl', init_method='env://', world_size=world_size)
-    print(f"rank: {rank}, world_size: {world_size}")
+    n_proc = int(os.environ["NP"])
+    gpu_id = rank % world_size
+    torch.cuda.set_device(gpu_id)
+    torch.distributed.init_process_group(backend="GLOO", init_method="env://", world_size=n_proc)
+    print(f"rank: {rank}, world_size: {world_size}, gpu_id: {gpu_id}, n_proc: {n_proc}\n")
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--config-path', help='the path to config.')
@@ -346,4 +360,4 @@ if __name__=="__main__":
     if rank == 0:
         logger.info("Start!")
     
-    main(config, args.model_name, logger, rank, world_size)
+    main(config, args.model_name, logger, gpu_id)
