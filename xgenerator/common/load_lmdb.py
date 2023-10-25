@@ -13,6 +13,10 @@ from torch.utils.data import DataLoader
 
 sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
 
+PAD_IDX = 0
+BOS_IDX = 2504
+EOS_IDX = 2505
+
 
 def get_lmdb_keys(dir_name: str):
     """
@@ -97,7 +101,11 @@ class R2RDataset(Dataset):
             "image_seq": image_seq,
             "action_seq": action_seq,
         }
-        y = observation_seq["instruction"][0]
+        y = observation_seq["instruction"][0].copy()
+        for i in range(len(y)):
+            if y[i] == 0:
+                y[i] = EOS_IDX
+                break
         return x, y
 
 

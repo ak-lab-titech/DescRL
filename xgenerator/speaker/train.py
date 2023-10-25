@@ -21,11 +21,8 @@ sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
 
 from common.utils import try_cuda
 from common.lang import R2RLang
-from common.load_lmdb import R2RDataset, my_collate_fn
+from common.load_lmdb import R2RDataset, my_collate_fn, PAD_IDX, BOS_IDX, EOS_IDX
 from model import SpeakerEncoderLSTM, SpeakerDecoderLSTM
-
-EOS_IDX = 0
-BOS_IDX = 1 # TODO 要修正。元にしているgloveから取ってきた方が良さそう
 
 
 def filter_param(param_list):
@@ -72,6 +69,7 @@ def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback)
     ))
     
     loss = 0
+    ended = np.array([False] * batch_size)
     for t in range(max_instruction_length):
         h_t, c_t, _, logit = decoder(
             w_t.view(-1, 1), h_t, c_t, ctx, path_mask
@@ -91,17 +89,19 @@ def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback)
         else:
             sys.exit('Invalid feedback option')
         
-        all_seq_end = (target == 0).all()# TODO
-        if all_seq_end:
-            break
-        
         log_probs = F.log_softmax(logit, dim=1)
         loss += F.nll_loss(
             log_probs,
             target,
-            ignore_index=EOS_IDX,
+            ignore_index=PAD_IDX,
             reduction="mean",
         )
+
+        tmp = target.to("cpu").detach().numpy().copy()
+        ended[tmp == EOS_IDX] = True
+        if ended.all():
+            break
+    
     return loss
 
 

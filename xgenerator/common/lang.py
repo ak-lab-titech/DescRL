@@ -16,7 +16,7 @@ class R2RLang:
         # self.word2count = {}
 
         with gzip.open(
-            "/home/0/19B30511/av-nav/VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/train/train.json.gz",
+            "/home/0/19B30511/av-nav/VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/train/train-boseos.json.gz",
             "rt",
             encoding="utf-8",
         ) as f:
@@ -25,7 +25,7 @@ class R2RLang:
             self.vocab_size = data["instruction_vocab"]["num_vocab"]
 
         with gzip.open(
-            "/home/0/19B30511/av-nav/VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/embeddings.json.gz",
+            "/home/0/19B30511/av-nav/VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/embeddings_gauss.json.gz",
             'rt',
             encoding='utf-8',
         ) as f:

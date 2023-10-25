@@ -16,7 +16,7 @@ train:
   dataset_drop_last: True
   learning_rate: 0.001
   weight_decay: 0.0005
-  max_instruction_length: 80
+  max_instruction_length: 200
   feedback: "teacher" # "teacher", "argmax", "sample"
   n_iters: 20000
   save_every: 10
