@@ -3,6 +3,7 @@ import sys
 import time
 import argparse
 import logging
+import contextlib
 
 import yaml
 import numpy as np
@@ -14,6 +15,7 @@ import torch.distributions as D
 import torch.multiprocessing as multiprocessing
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
+from torch.utils.tensorboard import SummaryWriter
 from torch.nn.parallel import DistributedDataParallel
 from torch.distributed import all_reduce
 
@@ -112,6 +114,8 @@ def eval(
     seen_dataloader,
     unseen_dataloader,
     max_instruction_length,
+    writer,
+    now_epoch,
 ):
     encoder.eval()
     decoder.eval()
@@ -131,6 +135,8 @@ def eval(
     if int(os.environ["LOCAL_RANK"]) == 0:
         seen_loss = seen_loss.item() / int(os.environ["NP"])
         unseen_loss = unseen_loss.item() / int(os.environ["NP"])
+        writer.add_scalar("eval/seen_loss", seen_loss, now_epoch)
+        writer.add_scalar("eval/unseen_loss", unseen_loss, now_epoch)
         logger.info(f"========== Evaluation ==========")
         logger.info(f"Seen Loss:  {seen_loss:.5f}")
         logger.info(f"Unseen Loss:{unseen_loss:.5f}")
@@ -252,38 +258,53 @@ def train(
         sampler=val_unseen_sampler,
         pin_memory=True,
     )
+    tb_log_dir = f"./data/models/{model_name}/tb"
+    os.makedirs(tb_log_dir, exist_ok=True)
+
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of val_unseen data: {len(val_unseen_dataset)}, batch: {len(val_unseen_dataloader)}")
         logger.info("FINISH LOADING DATA!")
         logger.info("START TRAINING...")
     s = time.time()
-    for i in range(1, n_iters + 1):
-        losses = []
-        for _, (inputs, targets) in enumerate(train_dataloader):
-            loss = train_one_step(
-                encoder,
-                decoder,
-                encoder_optimizer,
-                decoder_optimizer,
-                inputs,
-                targets,
-                max_instruction_length,
-                feedback,
-            )
-            losses.append(loss.item())
-        if i % save_every == 0:
-            save_model(encoder, decoder, f"./data/models/{model_name}/{i}")
-        if i == 1 or i % log_every == 0:
+
+    with (
+            SummaryWriter(log_dir=tb_log_dir)
+            if int(os.environ["LOCAL_RANK"]) == 0
+            else contextlib.suppress()
+    ) as writer:
+        for i in range(1, n_iters + 1):
+            losses = []
+            for _, (inputs, targets) in enumerate(train_dataloader):
+                loss = train_one_step(
+                    encoder,
+                    decoder,
+                    encoder_optimizer,
+                    decoder_optimizer,
+                    inputs,
+                    targets,
+                    max_instruction_length,
+                    feedback,
+                )
+                losses.append(loss.item())
+
             train_loss = torch.from_numpy(np.array([np.mean(losses)])).to(gpu_id)
             all_reduce(train_loss)
+            train_loss = train_loss.item() / int(os.environ["NP"])
+
             if int(os.environ["LOCAL_RANK"]) == 0:
-                logger.info(f"---------- Iteration {i}/{n_iters} ----------")
-                train_loss = train_loss.item() / int(os.environ["NP"])
-                logger.info(f"train loss:{train_loss:.5f}")
-                logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
-            s = time.time()
-        if i == 1 or i % eval_every == 0:
-            eval(gpu_id, encoder, decoder, val_seen_dataloader, val_unseen_dataloader, max_instruction_length)
+                writer.add_scalar("train/loss", train_loss, i)
+
+            if i % save_every == 0:
+                save_model(encoder, decoder, f"./data/models/{model_name}/{i}")
+            if i == 1 or i % log_every == 0:
+
+                if int(os.environ["LOCAL_RANK"]) == 0:
+                    logger.info(f"---------- Iteration {i}/{n_iters} ----------")
+                    logger.info(f"train loss:{train_loss:.5f}")
+                    logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
+                s = time.time()
+            if i == 1 or i % eval_every == 0:
+                eval(gpu_id, encoder, decoder, val_seen_dataloader, val_unseen_dataloader, max_instruction_length, writer, i)
 
 
 def main(config, model_name, logger, gpu_id):
