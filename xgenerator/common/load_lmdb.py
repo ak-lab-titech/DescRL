@@ -75,10 +75,10 @@ def get_all_lmdb_data(dir_name: str):
 
 
 class R2RDataset(Dataset):
-    def __init__(self, data_path: str, use_image_feature: bool):
+    def __init__(self, data_path: str, use_image_feature: bool, data_num: int):
         self.data_path = data_path
         self.use_image_feature = use_image_feature        
-        self.data_num = len(get_lmdb_keys(self.data_path))
+        self.data_num = data_num
     
     def __len__(self):
         return self.data_num

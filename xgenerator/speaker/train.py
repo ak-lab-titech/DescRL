@@ -172,8 +172,11 @@ def train(
     decoder: torch.nn.Module,
     model_name: str,
     train_data_path: str,
+    train_data_num: int,
     val_seen_data_path: str,
+    val_seen_data_num: int,
     val_unseen_data_path: str,
+    val_unseen_data_num: int,
     use_image_feature: bool,
     dataset_drop_last: bool,
     batch_size: int,
@@ -203,7 +206,7 @@ def train(
         multiprocessing.set_start_method('spawn', force=True)
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info("LOADING DATA...")
-    train_dataset = R2RDataset(train_data_path, use_image_feature)
+    train_dataset = R2RDataset(train_data_path, use_image_feature, train_data_num)
     train_sampler = DistributedSampler(
         train_dataset,
         num_replicas=int(os.environ["NP"]),
@@ -222,7 +225,7 @@ def train(
     )
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of train data: {len(train_dataset)}, batch: {len(train_dataloader)}")
-    val_seen_dataset = R2RDataset(val_seen_data_path, use_image_feature)
+    val_seen_dataset = R2RDataset(val_seen_data_path, use_image_feature, val_seen_data_num)
     val_seen_sampler = DistributedSampler(
         val_seen_dataset,
         num_replicas=int(os.environ["NP"]),
@@ -241,7 +244,7 @@ def train(
     )
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of val_seen data: {len(val_seen_dataset)}, batch: {len(val_seen_dataloader)}")
-    val_unseen_dataset = R2RDataset(val_unseen_data_path, use_image_feature)
+    val_unseen_dataset = R2RDataset(val_unseen_data_path, use_image_feature, val_unseen_data_num)
     val_unseen_sampler = DistributedSampler(
         val_unseen_dataset,
         num_replicas=int(os.environ["NP"]),
@@ -333,8 +336,11 @@ def main(config, model_name, logger, gpu_id):
         decoder=decoder,
         model_name=model_name,
         train_data_path=config["train"]["train_data_path"],
+        train_data_num=config["train"]["train_data_num"],
         val_seen_data_path=config["train"]["val_seen_data_path"],
+        val_seen_data_num=config["train"]["val_seen_data_num"],
         val_unseen_data_path=config["train"]["val_unseen_data_path"],
+        val_unseen_data_num=config["train"]["val_unseen_data_num"],
         use_image_feature=config["train"]["use_image_feature"],
         dataset_drop_last=config["train"]["dataset_drop_last"],
         batch_size=config["train"]["batch_size"],
