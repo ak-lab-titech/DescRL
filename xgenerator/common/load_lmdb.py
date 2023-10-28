@@ -129,6 +129,7 @@ def my_collate_fn(batch):
         ) for _ in range(max_path_length)
     ]
     path_masks = np.full((batch_size, max_path_length), True)
+    seq_lengths = []
     targets = []
     
     for i, (x, y) in enumerate(batch):
@@ -139,13 +140,14 @@ def my_collate_fn(batch):
         for t, (image, action) in enumerate(zip(image_seq, action_seq)):
             batched_image_seqs[t][i] = image
             batched_action_seqs[t][i] = action
-        
+        seq_lengths.append(len(image_seq))
         targets.append(y)
     
     inputs = {
         "image_seqs": batched_image_seqs,    # (max_l, b, 2176, 4, 4))
         "action_seqs": batched_action_seqs,  # (max_l, b, 4))
         "mask": path_masks,          # (b, max_l)
+        "seq_lengths": np.array(seq_lengths),
     }
     # targets: (b, 200)
     return inputs, targets

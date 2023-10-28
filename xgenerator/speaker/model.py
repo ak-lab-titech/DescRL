@@ -163,7 +163,7 @@ class SpeakerEncoderLSTM(nn.Module):
         h_1, c_1 = self.lstm(drop, (h_0, c_0)) # h: (b, h_dim), c: (b, h_dim)
         return h_1, c_1
 
-    def forward(self, batched_action_embeddings, world_state_embeddings):
+    def forward(self, batched_action_embeddings, world_state_embeddings, seq_lengths):
         ''' Expects action indices as (batch, seq_len). Also requires a
             list of lengths for dynamic batching. '''
         assert isinstance(batched_action_embeddings, list)
@@ -180,7 +180,9 @@ class SpeakerEncoderLSTM(nn.Module):
             )
             h_list.append(h)
 
-        decoder_init = nn.Tanh()(self.encoder2decoder(h)) # (batch, hidden_size)
+        decoder_init = nn.Tanh()(self.encoder2decoder(
+            torch.stack([h_list[seq_length-1][i] for i, seq_length in enumerate(seq_lengths)])
+        )) # (batch, hidden_size)
 
         ctx = torch.stack(h_list, dim=1)  # (batch, seq_len, hidden_size)
         ctx = self.drop(ctx)

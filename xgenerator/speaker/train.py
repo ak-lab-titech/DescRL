@@ -57,7 +57,7 @@ def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback)
     
     batch_size = image_features[0].shape[0]
     
-    ctx, h_t, c_t = encoder(action_embeddings, image_features)
+    ctx, h_t, c_t = encoder(action_embeddings, image_features, inputs["seq_lengths"])
     
     w_t = try_cuda(Variable(
         torch.from_numpy(
