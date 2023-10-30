@@ -317,6 +317,7 @@ def main(config, model_name, logger, gpu_id):
         world_embedding_size=config["model"]["world_embedding_size"],
         hidden_size=config["model"]["hidden_size"],
         dropout_ratio=config["model"]["dropout_ratio"],
+        use_image_feature=config["train"]["use_image_feature"],
         bidirectional=config["model"]["bidirectional"],
     )
     encoder = DistributedDataParallel(encoder.to(gpu_id), device_ids=[gpu_id])

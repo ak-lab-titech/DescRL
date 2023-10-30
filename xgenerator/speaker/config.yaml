@@ -16,7 +16,7 @@ train:
   val_unseen_data_path: "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma/val_unseen_trajectories.lmdb"
   val_unseen_data_num: 1839
   batch_size: 64
-  use_image_feature: True
+  use_image_feature: True # if False, memory error
   dataset_drop_last: True
   learning_rate: 0.001
   weight_decay: 0.0005
