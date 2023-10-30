@@ -309,7 +309,7 @@ def train(
                 writer.add_scalar("train/loss", train_loss, i)
 
             if i % save_every == 0:
-                save_model(encoder, decoder, f"./data/models/{model_name}/{i}")
+                save_model(encoder, decoder, f"./data/models/{model_name}/data/{i}")
             if i == 1 or i % log_every == 0:
 
                 if int(os.environ["LOCAL_RANK"]) == 0:

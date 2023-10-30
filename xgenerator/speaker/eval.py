@@ -31,8 +31,8 @@ def load_model(model_path, ckpt_num, train_config, lang):
         glove=lang.glove_vec,
         use_input_att_feed=train_config["model"]["use_input_att_feed"],
     )
-    encoder.load_state_dict(torch.load(f"{model_path}/{ckpt_num}/encoder.pth", torch.device("cpu")))
-    decoder.load_state_dict(torch.load(f"{model_path}/{ckpt_num}/decoder.pth", torch.device("cpu")))
+    encoder.load_state_dict(torch.load(f"{model_path}/data/{ckpt_num}/encoder.pth", torch.device("cpu")))
+    decoder.load_state_dict(torch.load(f"{model_path}/data/{ckpt_num}/decoder.pth", torch.device("cpu")))
     return encoder, decoder
 
 
