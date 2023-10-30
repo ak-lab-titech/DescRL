@@ -14,22 +14,42 @@ module load cudnn
 module load openmpi/3.1.4-opa10.10
 
 
+CMD="eval" 
+
 MODEL_NAME="speaker"
-export NP=8
+TRAIN_NP=8
+EVAL_NUM=3
+EVAL_CKPT_NUM=70
+EVAL_SEED=0
 
 
 cd ~/av-nav/myss/xgenerator
 pwd
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate av-nav
+echo CMD=$CMD
 
-echo MODEL_NAME=$MODEL_NAME
-echo NP=$NP
-
-CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
-        --nnodes=1 \
-        --nproc_per_node=$NP \
-        speaker/train.py \
-        --config-path \
-        ./speaker/config.yaml \
-        --model-name $MODEL_NAME
+if [ $CMD = "train" ]; then
+        export NP=$TRAIN_NP
+        echo MODEL_NAME=$MODEL_NAME
+        echo NP=$NP
+        CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
+                --nnodes=1 \
+                --nproc_per_node=$NP \
+                speaker/train.py \
+                --config-path \
+                ./speaker/config.yaml \
+                --model-name $MODEL_NAME
+elif [ $CMD = "eval" ]; then
+        echo MODEL_NAME=$MODEL_NAME
+        echo EVAL_NUM=$EVAL_NUM
+        echo CKPT_NUM=$EVAL_CKPT_NUM
+        echo EVAL_SEED=$EVAL_SEED
+        python speaker/eval.py \
+            --eval-num $EVAL_NUM \
+            --ckpt-num $EVAL_CKPT_NUM \
+            --model-path ./data/models/$MODEL_NAME \
+            --random-seed $EVAL_SEED
+else
+    echo ERROR: CMD must be 'train' or 'eval', not $CMD.
+fi

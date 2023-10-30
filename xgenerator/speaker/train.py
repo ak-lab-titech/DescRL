@@ -39,7 +39,7 @@ def save_model(encoder, decoder, save_dir):
     torch.save(decoder.module.state_dict(), decoder_path)
 
 
-def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback):
+def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback, return_words=False):
     action_embeddings = [
         try_cuda(Variable(
             torch.from_numpy(act),
@@ -72,6 +72,8 @@ def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback)
     
     loss = 0
     ended = np.array([False] * batch_size)
+    words = []
+    target_words = []
     for t in range(max_instruction_length):
         h_t, c_t, _, logit = decoder(
             w_t.view(-1, 1), h_t, c_t, ctx, path_mask
@@ -91,6 +93,12 @@ def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback)
         else:
             sys.exit('Invalid feedback option')
         
+        if return_words:
+            _, word = logit.max(1)
+            word = word.detach()
+            words.append(word)
+            target_words.append(target)
+        
         log_probs = F.log_softmax(logit, dim=1)
         loss += F.nll_loss(
             log_probs,
@@ -104,7 +112,10 @@ def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback)
         if ended.all():
             break
     
-    return loss
+    if return_words:
+        return loss, words, target_words
+    else:
+        return loss
 
 
 def eval(

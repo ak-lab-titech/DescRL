@@ -21,7 +21,8 @@ class R2RLang:
             encoding="utf-8",
         ) as f:
             data = json.load(f)
-            self.index2word = data["instruction_vocab"]["word2idx_dict"]
+            self.word2index = data["instruction_vocab"]["word2idx_dict"]
+            self.index2word = data["instruction_vocab"]["word_list"]
             self.vocab_size = data["instruction_vocab"]["num_vocab"]
 
         with gzip.open(
