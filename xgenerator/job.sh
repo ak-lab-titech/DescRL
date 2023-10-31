@@ -14,7 +14,7 @@ module load cudnn
 module load openmpi/3.1.4-opa10.10
 
 
-CMD="eval" 
+CMD="train" 
 
 MODEL_NAME="speaker"
 TRAIN_NP=8

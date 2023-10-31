@@ -227,16 +227,19 @@ class SpeakerEncoderLSTM(nn.Module):
 
         h, c = self.init_state(batch_size) # h: (batch, hidden_size), c: (batch, hidden_size)
         h_list = []
+        c_list = []
         for t, (action_embedding, world_state_embedding) in enumerate(
                 zip(batched_action_embeddings, world_state_embeddings)):
             h, c = self._forward_one_step(
                 h, c, action_embedding, world_state_embedding
             )
             h_list.append(h)
+            c_list.append(c)
 
         decoder_init = nn.Tanh()(self.encoder2decoder(
             torch.stack([h_list[seq_length-1][i] for i, seq_length in enumerate(seq_lengths)])
         )) # (batch, hidden_size)
+        c = torch.stack([c_list[seq_length-1][i] for i, seq_length in enumerate(seq_lengths)])
 
         ctx = torch.stack(h_list, dim=1)  # (batch, seq_len, hidden_size)
         ctx = self.drop(ctx)
