@@ -501,7 +501,7 @@ class SoundSpacesSim(Simulator, ABC):
 
         self._previous_step_collided = False
         # STOP: 0, FORWARD: 1, LEFT: 2, RIGHT: 2
-        if action == HabitatSimActions.STOP:
+        if action == HabitatSimActions.FOUND:
             self._is_episode_active = False
         else:
             prev_position_index = self._receiver_position_index
@@ -758,7 +758,7 @@ class SoundSpacesSim(Simulator, ABC):
                 oracle_actions.append(HabitatSimActions.TURN_RIGHT)
                 oracle_actions.append(HabitatSimActions.TURN_RIGHT)
             oracle_actions.append(HabitatSimActions.MOVE_FORWARD)
-        oracle_actions.append(HabitatSimActions.STOP)
+        oracle_actions.append(HabitatSimActions.FOUND)
         return oracle_actions
 
     def get_oracle_action(self):

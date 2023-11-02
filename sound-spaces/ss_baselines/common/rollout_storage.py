@@ -171,17 +171,6 @@ class RolloutStorage:
         self.value_preds[self.step].copy_(value_preds)
         self.rewards[self.step].copy_(rewards)
         self.masks[self.step + 1].copy_(masks)
-
-
-        # f = open("debug.txt", "a")
-        # f.write(f"-------------------------- self.step: {self.step} ----------------------------\n")
-        # f.write(f"self.obervations['direct_map']:\n{self.observations['direct_map'][:5]}\n")
-        # f.write(f"self.prev_direct_map:\n{self.prev_direct_map[:5]}\n")
-        # f.write(f"self.prev_actions:\n{self.prev_actions[:5]}\n")
-        # f.write(f"self.actions:\n{self.actions[:5]}\n")
-        # f.write("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n")
-        # f.close()
-
         self.step = (self.step + 1) % self.num_steps
 
     def after_update(self):

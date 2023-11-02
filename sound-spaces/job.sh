@@ -26,6 +26,7 @@ echo NPERNODE=$NPERNODE
 echo NP=$NP
 echo MASTERADDR=$MASTER_ADDR
 echo MASTERPORT=$MASTER_PORT
+echo CMD=$CMD
 
 if [ $CMD = "multi-gpu-train" ]; then
     mpirun -np $NP -npernode $NPERNODE \

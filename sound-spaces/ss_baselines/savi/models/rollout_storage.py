@@ -136,9 +136,14 @@ class RolloutStorage:
         dones,
     ):
         for sensor in observations:
-            self.observations[sensor][self.step + 1].copy_(
-                observations[sensor]
-            )
+            if sensor == "depth":
+                self.observations[sensor][self.step + 1].copy_(
+                    np.squeeze(observations[sensor], axis=4)
+                )
+            else:
+                self.observations[sensor][self.step + 1].copy_(
+                    observations[sensor]
+                )
         self.recurrent_hidden_states[self.step + 1].copy_(
             recurrent_hidden_states
         )

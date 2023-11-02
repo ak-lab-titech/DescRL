@@ -52,7 +52,7 @@ _C.EXTRA_RGB = False
 _C.DEBUG = False
 _C.USE_LAST_CKPT = False
 _C.DISPLAY_RESOLUTION = 128
-_C.CONTINUOUS = True
+_C.CONTINUOUS = False
 # -----------------------------------------------------------------------------
 # EVAL CONFIG
 # -----------------------------------------------------------------------------
@@ -312,6 +312,10 @@ def get_config(
         config.TASK_CONFIG.SIMULATOR.AUDIO.CROSSFADE = True
         config.TASK_CONFIG.DATASET.CONTINUOUS = True
         config.RL.DISTANCE_REWARD_SCALE = 1.0
+    else:
+        config.TASK_CONFIG.SIMULATOR.STEP_TIME = 1.0
+        config.TASK_CONFIG.SIMULATOR.FORWARD_STEP_SIZE = 1.0
+        config.TASK_CONFIG.SIMULATOR.TURN_ANGLE = 90
     config.RL.freeze()
     config.TASK_CONFIG.freeze()
     config.freeze()

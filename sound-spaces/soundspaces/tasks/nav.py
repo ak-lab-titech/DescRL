@@ -19,6 +19,7 @@ from skimage.measure import block_reduce
 
 from habitat.config import Config
 from habitat.core.dataset import Episode
+import habitat_sim
 from habitat_sim.utils.common import quat_to_angle_axis
 import matplotlib.pyplot as plt
 import japanize_matplotlib
@@ -83,11 +84,7 @@ class SpectrogramSensor(Sensor):
         return SensorTypes.PATH
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        spectrogram = self.compute_spectrogram(
-            np.ones(
-                (2, int(self._sim.config.AUDIO.RIR_SAMPLING_RATE * self._sim.config.STEP_TIME))
-            )
-        )
+        spectrogram = self.compute_spectrogram(np.ones((2, self._sim.config.AUDIO.RIR_SAMPLING_RATE)))
 
         return spaces.Box(
             low=np.finfo(np.float32).min,
@@ -103,34 +100,7 @@ class SpectrogramSensor(Sensor):
             hop_length = 160
             win_length = 400
             stft = np.abs(librosa.stft(signal, n_fft=n_fft, hop_length=hop_length, win_length=win_length))
-
-            # plt.rcParams["font.size"] = 16
-            # fig = plt.figure(figsize=(18, 6), dpi=600)
-                
-            # # 波形
-            # ax1 = fig.add_subplot(1, 2, 1)
-            # ax1.plot(np.arange(0, 1, 1/44100), signal, lw=0.1)
-            # ax1.set_xlabel("時間 [s]")
-            # ax1.set_ylabel("振幅")
-            # ax1.set_title("波形")
-
-            # # スペクトログラム
-            # ax2 = fig.add_subplot(1, 2, 2)
-            # img = librosa.display.specshow(
-            #     librosa.amplitude_to_db(librosa.stft(signal), ref=np.max),
-            #     y_axis='hz',
-            #     x_axis='time',
-            #     ax=ax2,
-            #     sr=44100,
-            # )
-            # ax2.set_xlabel("時間 [s]")
-            # ax2.set_ylabel("周波数 [Hz]")
-            # ax2.set_title('スペクトログラム')
-            # fig.colorbar(img, ax=ax2, format="%+2.0f dB")
-
-            # fig.savefig(f"./imgs/spectrogram.png")
-
-            # stft = block_reduce(stft, block_size=(4, 4), func=np.mean)
+            stft = block_reduce(stft, block_size=(4, 4), func=np.mean)
             return stft
 
         channel1_magnitude = np.log1p(compute_stft(audio_data[0]))
@@ -271,7 +241,7 @@ class DirectMap(Sensor):
         if euclid_or_geodesic == "euclid":
             distance = np.linalg.norm(np.array(p1) - np.array(p2))
         elif euclid_or_geodesic == "geodesic":
-            distance = self._sim._calc_geodesic_distance(p1, p2)
+            distance = self._sim.geodesic_distance(p1, [p2])
         else:
             raise Exception(
                 f"euclid_or_geodesic must be 'euclid' or 'geodeic', not {euclid_or_geodesic}."

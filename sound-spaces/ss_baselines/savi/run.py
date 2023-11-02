@@ -151,5 +151,6 @@ def find_best_ckpt_idx(event_dir_path, min_step=-1, max_step=10000):
 if __name__ == "__main__":
     f = open("debug.txt", "w")
     f.write(f"RUN SAVi\n")
+    f.write(f"cuda is available in run.py: {torch.cuda.is_available()}\n")
     f.close()
     main()

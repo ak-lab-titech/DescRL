@@ -325,16 +325,6 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
 
     def _get_uuid(self, *args: Any, **kwargs: Any) -> str:
         return self.cls_uuid
-    
-    def _get_observation_space(self, *args: Any, **kwargs: Any):
-        sensor_shape = (2 * self._sim.config.AUDIO.NUM,)
-
-        return spaces.Box(
-            low=np.finfo(np.float32).min,
-            high=np.finfo(np.float32).max,
-            shape=sensor_shape,
-            dtype=np.float32,
-        )
 
     def get_observation(
         self, observations, episode, *args: Any, **kwargs: Any
@@ -342,34 +332,11 @@ class IntegratedPointGoalGPSAndCompassSensor(PointGoalSensor):
         agent_state = self._sim.get_agent_state()
         agent_position = agent_state.position
         rotation_world_agent = agent_state.rotation
+        goal_position = np.array(episode.goals[0].position, dtype=np.float32)
+        return self._compute_pointgoal(
+            agent_position, rotation_world_agent, goal_position
+        )
 
-        not_found_goals = self._sim.not_found_goals
-        goals_dict = self._sim.goals_dict
-        closest_goal_id, distance_to_closest_target = self._sim.closest_goal_id_and_dis()
-        is_found_called = self._sim.is_found
-
-        observations = []
-        if self._sim.config.GPS_ZERO_IF_FOUND:
-            for i in range(len(goals_dict)):
-                already_found = not f"goal_{i}" in not_found_goals
-                now_found = is_found_called and f"goal_{i}" == closest_goal_id and distance_to_closest_target < 1
-                if already_found or now_found:
-                    observations = observations + [0.0, 0.0]
-                else:
-                    goal_position = np.array(goals_dict[f"goal_{i}"], dtype=np.float32)
-                    obs = self._compute_pointgoal(
-                        agent_position, rotation_world_agent, goal_position
-                    )
-                    observations = observations + list(obs)
-        else:
-            for goal in episode.goals:
-                goal_position = np.array(goal.position, dtype=np.float32)
-                obs = self._compute_pointgoal(
-                    agent_position, rotation_world_agent, goal_position
-                )
-                observations = observations + list(obs)
-                
-        return observations
 
 
 @registry.register_sensor
@@ -576,18 +543,6 @@ class Success(Measure):
     def update_metric(
         self, episode, task: EmbodiedTask, *args: Any, **kwargs: Any
     ):
-        # _, distance_to_closest_target = self._sim.closest_goal_id_and_dis()
-
-        # if (
-        #     hasattr(task, "is_found_called")
-        #     and task.is_found_called  # type: ignore
-        #     and distance_to_closest_target < self._config.SUCCESS_DISTANCE
-        # ):
-        #     self._metric = 1.0
-        # else:
-        #     self._metric = 0.0
-
-
         distance_to_target = task.measurements.measures[
             DistanceToGoal.cls_uuid
         ].get_metric()
@@ -1246,7 +1201,7 @@ class FoundAction(SimulatorTaskAction):
         """
         task.is_found_called = True
         self._sim.is_found = True
-        return self._sim.get_observations_at(found=True)
+        return self._sim.get_observations_at()
 
 
 @registry.register_task_action
@@ -1476,20 +1431,5 @@ class NavigationTask(EmbodiedTask):
         return merge_sim_episode_config(sim_config, episode)
 
     def _check_episode_is_active(self, *args: Any, **kwargs: Any) -> bool:
-        # _, distance_to_closest_target = self._sim.closest_goal_id_and_dis()
-        # failed_found = (
-        #     getattr(self, "is_found_called", False)
-        # ) and (
-        #     distance_to_closest_target >= 1
-        # )
-        # reached_all_goals = (
-        #     getattr(self, "is_found_called", False)
-        # ) and (
-        #     distance_to_closest_target < 1
-        # ) and (
-        #     len(self._sim.not_found_goals) == 1
-        # )
-        # return not (failed_found or reached_all_goals)
-
         return not getattr(self, "is_found_called", False)
 
