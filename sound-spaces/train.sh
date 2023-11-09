@@ -3,6 +3,7 @@
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi
 MODEL="savi-1st"   # avnav, avwan, savi-1st, savi-2nd
 MODEL_NAME="ss1savi-savi"
+START_CKPT="100"
 
 pwd
 cd ~/av-nav/myss/sound-spaces
@@ -13,6 +14,7 @@ conda activate av-nav
 echo ENV=$ENV
 echo MODEL=$MODEL
 echo MODEL_NAME=$MODEL_NAME
+echo START_CKPT=$START_CKPT
 
 
 if [ $ENV = "ss2-avnav" ] && [ $MODEL = "avnav" ]; then
@@ -39,6 +41,11 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-1st" ]; then
     python ss_baselines/savi/run.py \
         --exp-config ss_baselines/savi/config/semantic_audionav/savi_pretraining.yaml \
         --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-2nd" ]; then
+    python ss_baselines/savi/run.py \
+        --exp-config ss_baselines/savi/config/semantic_audionav/savi.yaml \
+        --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
+        RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$MODEL_NAME/data/ckpt.$START_CKPT.pth"
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
 fi
