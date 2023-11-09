@@ -8,6 +8,7 @@
 
 import torch
 import torch.nn as nn
+import numpy as np
 
 from ss_baselines.common.utils import ResizeCenterCropper
 from ss_baselines.savi.models.smt_resnet import custom_resnet18
@@ -86,6 +87,8 @@ class SMTCNN(nn.Module):
 
         if "depth" in self.input_modalities:
             depth_observations = observations["depth"]
+            if len(np.shape(depth_observations)) == 5:
+                depth_observations = np.squeeze(depth_observations, axis=4)
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             depth_observations = depth_observations.permute(0, 3, 1, 2)
             if self.obs_transform:

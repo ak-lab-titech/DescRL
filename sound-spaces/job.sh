@@ -6,7 +6,7 @@
 #$ -o output/o.$JOB_ID
 
 
-CMD="multi-gpu-train" 
+CMD="multi-gpu-train"
 
 
 module load cuda
@@ -45,13 +45,21 @@ elif [ $CMD = "single-gpu-train" ]; then
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
         /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
         ./train.sh
+elif [ $CMD = "eval" ]; then
+    singularity exec --nv \
+        --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
+        --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+        --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
+        --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
+        /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
+        ./eval.sh
 elif [ $CMD = "test" ]; then
     singularity exec --nv \
         --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
-        ~/nvidia_cudagl.img \
+        /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
         ./test.sh
 elif [ $CMD = "video" ]; then
     singularity exec --nv \

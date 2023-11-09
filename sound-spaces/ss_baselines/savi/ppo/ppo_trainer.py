@@ -1050,9 +1050,8 @@ class PPOTrainer(BaseRLTrainer):
         # dump stats for each episode
         stats_file = os.path.join(
             config.TENSORBOARD_DIR,
-            "{}_{}_{}.json".format(
+            "{}_{}.json".format(
                 config.EVAL.SPLIT,
-                config.TASK_CONFIG.DATASET.SOUND_TYPE,
                 os.getenv('JOB_ID')
             )
         )
