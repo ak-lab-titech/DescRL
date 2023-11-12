@@ -246,7 +246,6 @@ def plot_top_down_map(info, dataset='replica', pred=None):
         agent_radius_px=agent_radius_px
     )
 
-    pred = None # TODO fix
     if pred is not None:
         from habitat.utils.geometry_utils import quaternion_rotate_vector
 
@@ -490,6 +489,58 @@ class NpEncoder(json.JSONEncoder):
             return super(NpEncoder, self).default(obj)
 
 
+def add_vector(vector, top_down_map, source_rotation, grid_size, map_agent_pos, color):
+    rot = np.array([
+        [np.cos(source_rotation), -np.sin(source_rotation)],
+        [np.sin(source_rotation),  np.cos(source_rotation)],
+    ])
+    vector = np.array([vector[0], -vector[1]])
+    direction_vector = np.dot(rot, vector)
+    delta_x = int(direction_vector[0] / grid_size[0])
+    delta_y = int(direction_vector[1] / grid_size[1])
+
+    x = np.clip(map_agent_pos[0] + delta_x, a_min=0, a_max=top_down_map.shape[0])
+    y = np.clip(map_agent_pos[1] + delta_y, a_min=0, a_max=top_down_map.shape[1])
+    point_padding = 12
+    for m in range(x - point_padding, x + point_padding + 1):
+        for n in range(y - point_padding, y + point_padding + 1):
+            if np.linalg.norm(np.array([m - x, n - y])) <= point_padding and \
+                    0 <= m < top_down_map.shape[0] and 0 <= n < top_down_map.shape[1]:
+                top_down_map[m, n] = color
+    return top_down_map
+
+
+def add_category_text(label, top_down_map, observation_size, color):
+    text_height = int(observation_size * 0.1)
+    old_h, old_w, _ = top_down_map.shape
+    top_down_height = observation_size - text_height
+    top_down_width = int(float(top_down_height) / old_h * old_w)
+    top_down_map = cv2.resize(
+        top_down_map.astype(np.float32),
+        (top_down_width, top_down_height),
+        interpolation=cv2.INTER_CUBIC,
+    )
+
+    top_down_map = np.concatenate(
+        [
+            np.ones([text_height, top_down_map.shape[1], 3], dtype=np.int32) * 255,
+            top_down_map,
+        ],
+        axis=0,
+    )
+    top_down_map = cv2.putText(
+        top_down_map,
+        text=label.replace('_', ' '),
+        org=(10, text_height - 10),
+        fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+        fontScale=1.4,
+        color=color,
+        thickness=2,
+        lineType=cv2.LINE_AA,
+    )
+    return top_down_map
+
+
 def observations_to_image(observation: Dict, info: Dict, pred=None) -> np.ndarray:
     r"""Generate image of single frame from observation and info
     returned from a single environment step().
@@ -544,36 +595,26 @@ def observations_to_image(observation: Dict, info: Dict, pred=None) -> np.ndarra
             agent_rotation=info["top_down_map"]["agent_angle"],
             agent_radius_px=top_down_map.shape[0] // 16,
         )
-        pred = None # TODO fix
         if pred is not None:
-            from habitat.utils.geometry_utils import quaternion_rotate_vector
-
-            # current_position = sim.get_agent_state().position
-            # agent_state = sim.get_agent_state()
-            source_rotation = info["top_down_map"]["agent_rotation"]
-
-            rounded_pred = np.round(pred[1])
-            direction_vector_agent = np.array([rounded_pred[1], 0, -rounded_pred[0]])
-            direction_vector = quaternion_rotate_vector(source_rotation, direction_vector_agent)
-            # pred_goal_location = source_position + direction_vector.astype(np.float32)
-
-            grid_size = (
-                (maps.COORDINATE_MAX - maps.COORDINATE_MIN) / 10000,
-                (maps.COORDINATE_MAX - maps.COORDINATE_MIN) / 10000,
+            # prediction
+            top_down_map = add_vector(
+                vector=np.round(pred[1]),
+                top_down_map=top_down_map,
+                source_rotation=info["top_down_map"]["agent_angle"],
+                grid_size=info["top_down_map"]["grid_size"],
+                map_agent_pos=map_agent_pos,
+                color=(0, 255, 255),
             )
-            delta_x = int(-direction_vector[0] / grid_size[0])
-            delta_y = int(direction_vector[2] / grid_size[1])
 
-            x = np.clip(map_agent_pos[0] + delta_x, a_min=0, a_max=top_down_map.shape[0])
-            y = np.clip(map_agent_pos[1] + delta_y, a_min=0, a_max=top_down_map.shape[1])
-            point_padding = 12
-            for m in range(x - point_padding, x + point_padding + 1):
-                for n in range(y - point_padding, y + point_padding + 1):
-                    if np.linalg.norm(np.array([m - x, n - y])) <= point_padding and \
-                            0 <= m < top_down_map.shape[0] and 0 <= n < top_down_map.shape[1]:
-                        top_down_map[m, n] = (0, 255, 255)
-            if np.linalg.norm(rounded_pred) < 1:
-                assert delta_x == 0 and delta_y == 0
+            # goal
+            top_down_map = add_vector(
+                vector=np.round(pred[3]),
+                top_down_map=top_down_map,
+                source_rotation=info["top_down_map"]["agent_angle"],
+                grid_size=info["top_down_map"]["grid_size"],
+                map_agent_pos=map_agent_pos,
+                color=(255, 0, 0),
+            )
 
         if top_down_map.shape[0] > top_down_map.shape[1]:
             top_down_map = np.rot90(top_down_map, 1)
@@ -615,23 +656,11 @@ def observations_to_image(observation: Dict, info: Dict, pred=None) -> np.ndarra
                 'clothes': 20
             }
             index2label = {v: k for k, v in CATEGORY_INDEX_MAPPING.items()}
+            true_label = index2label[pred[2]]
             pred_label = index2label[pred[0]]
-            text_height = int(observation_size * 0.1)
-
-            old_h, old_w, _ = top_down_map.shape
-            top_down_height = observation_size - text_height
-            top_down_width = int(float(top_down_height) / old_h * old_w)
-            # cv2 resize (dsize is width first)
-            top_down_map = cv2.resize(
-                top_down_map.astype(np.float32),
-                (top_down_width, top_down_height),
-                interpolation=cv2.INTER_CUBIC,
-            )
-
-            top_down_map = np.concatenate(
-                [np.ones([text_height, top_down_map.shape[1], 3], dtype=np.int32) * 255, top_down_map], axis=0)
-            top_down_map = cv2.putText(top_down_map, 'C_t: ' + pred_label.replace('_', ' '), (10, text_height - 10),
-                                       cv2.FONT_HERSHEY_SIMPLEX, 1.4, (0, 0, 0), 2, cv2.LINE_AA)
+            top_down_map = add_category_text(true_label, top_down_map, observation_size, (255, 0, 0))
+            top_down_map = add_category_text(pred_label, top_down_map, observation_size, (0, 255, 255))
 
         frame = np.concatenate((egocentric_view, top_down_map), axis=1)
     return frame
+                

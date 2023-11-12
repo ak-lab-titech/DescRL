@@ -14,10 +14,12 @@ from typing import Dict, List, Any
 import json
 import random
 import glob
+import copy
 
 import numpy as np
 import torch
 from torch.optim.lr_scheduler import LambdaLR
+from gym import spaces
 from tqdm import tqdm
 from numpy.linalg import norm
 
@@ -740,8 +742,10 @@ class PPOTrainer(BaseRLTrainer):
         )
         if self.config.DISPLAY_RESOLUTION != model_resolution:
             observation_space = self.envs.observation_spaces[0]
-            observation_space.spaces['depth'].shape = (model_resolution, model_resolution, 1)
-            observation_space.spaces['rgb'].shape = (model_resolution, model_resolution, 3)
+            observation_space.spaces['depth'] = spaces.Box(low=0, high=1, shape=(model_resolution,
+                                                           model_resolution, 1), dtype=np.uint8)
+            observation_space.spaces['rgb'] = spaces.Box(low=0, high=1, shape=(model_resolution,
+                                                         model_resolution, 3), dtype=np.uint8)
         else:
             observation_space = self.envs.observation_spaces[0]
         self._setup_actor_critic_agent(ppo_cfg, observation_space)
@@ -763,10 +767,8 @@ class PPOTrainer(BaseRLTrainer):
 
         observations = self.envs.reset()
         if config.DISPLAY_RESOLUTION != model_resolution:
-            obs_copy = resize_observation(observations, model_resolution)
-        else:
-            obs_copy = observations
-        batch = batch_obs(obs_copy, self.device, skip_list=['view_point_goals', 'intermediate',
+            resize_observation(observations, model_resolution)
+        batch = batch_obs(observations, self.device, skip_list=['view_point_goals', 'intermediate',
                                                             'oracle_action_sensor'])
 
         current_episode_reward = torch.zeros(
@@ -875,10 +877,9 @@ class PPOTrainer(BaseRLTrainer):
                 list(x) for x in zip(*outputs)
             ]
             if config.DISPLAY_RESOLUTION != model_resolution:
-                obs_copy = resize_observation(observations, model_resolution)
-            else:
-                obs_copy = observations
-            batch = batch_obs(obs_copy, self.device, skip_list=['view_point_goals', 'intermediate',
+                original_observations = copy.deepcopy(observations)
+                resize_observation(observations, model_resolution)
+            batch = batch_obs(observations, self.device, skip_list=['view_point_goals', 'intermediate',
                                                                 'oracle_action_sensor'])
 
             not_done_masks = torch.tensor(
@@ -923,17 +924,17 @@ class PPOTrainer(BaseRLTrainer):
                     else:
                         pred = None
                     if config.TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE and 'intermediate' in observations[i]:
-                        for observation in observations[i]['intermediate']:
+                        for observation in original_observations[i]['intermediate']:
                             frame = observations_to_image(observation, infos[i], pred=pred)
                             rgb_frames[i].append(frame)
-                        del observations[i]['intermediate']
+                        del original_observations[i]['intermediate']
 
-                    if "rgb" not in observations[i]:
-                        observations[i]["rgb"] = np.zeros((self.config.DISPLAY_RESOLUTION,
+                    if "rgb" not in original_observations[i]:
+                        original_observations[i]["rgb"] = np.zeros((self.config.DISPLAY_RESOLUTION,
                                                            self.config.DISPLAY_RESOLUTION, 3))
-                    frame = observations_to_image(observations[i], infos[i], pred=pred)
+                    frame = observations_to_image(original_observations[i], infos[i], pred=pred)
                     rgb_frames[i].append(frame)
-                    audios[i].append(observations[i]['audiogoal'])
+                    audios[i].append(original_observations[i]['audiogoal'])
 
             rewards = torch.tensor(
                 rewards, dtype=torch.float, device=self.device
@@ -958,8 +959,7 @@ class PPOTrainer(BaseRLTrainer):
                     episode_stats['geodesic_distance'] = current_episodes[i].info['geodesic_distance']
                     episode_stats['euclidean_distance'] = norm(np.array(current_episodes[i].goals[0].position) -
                                                                np.array(current_episodes[i].start_position))
-                    # episode_stats['audio_duration'] = int(current_episodes[i].duration)
-                    episode_stats['audio_duration'] = 2500
+                    episode_stats['audio_duration'] = int(current_episodes[i].duration)
                     # episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
                     logging.info(episode_stats)
                     if self.config.RL.PPO.use_belief_predictor:

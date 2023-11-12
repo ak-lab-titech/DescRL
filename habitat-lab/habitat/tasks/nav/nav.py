@@ -1019,11 +1019,18 @@ class TopDownMap(Measure):
             self._sim.get_agent_state().position
         )
 
+        lower_bound, upper_bound = self._sim.pathfinder.get_bounds()
+        grid_resolution = (self._top_down_map.shape[0], self._top_down_map.shape[1])
+        grid_size = (
+            abs(upper_bound[2] - lower_bound[2]) / grid_resolution[0],
+            abs(upper_bound[0] - lower_bound[0]) / grid_resolution[1],
+        )
         self._metric = {
             "map": house_map,
             "fog_of_war_mask": self._fog_of_war_mask,
             "agent_map_coord": (map_agent_x, map_agent_y),
             "agent_angle": self.get_polar_angle(),
+            "grid_size": grid_size,
         }
 
     def get_polar_angle(self):
