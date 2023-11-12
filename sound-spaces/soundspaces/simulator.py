@@ -688,10 +688,11 @@ class SoundSpacesSim(Simulator, ABC):
             # by default, does not cache for distractor sound
             audiogoal = self._compute_audiogoal()
         else:
-            joint_index = (self._source_position_index, self._receiver_position_index, self.azimuth_angle)
-            if joint_index not in self._audiogoal_cache:
-                self._audiogoal_cache[joint_index] = self._compute_audiogoal()
-            audiogoal = self._audiogoal_cache[joint_index]
+            # joint_index = (self._source_position_index, self._receiver_position_index, self.azimuth_angle)
+            # if joint_index not in self._audiogoal_cache:
+            #     self._audiogoal_cache[joint_index] = self._compute_audiogoal()
+            # audiogoal = self._audiogoal_cache[joint_index]
+            audiogoal = self._compute_audiogoal()
 
         return audiogoal
 
@@ -700,11 +701,13 @@ class SoundSpacesSim(Simulator, ABC):
             audiogoal = self.get_current_audiogoal_observation()
             spectrogram = audiogoal2spectrogram(audiogoal)
         else:
-            joint_index = (self._source_position_index, self._receiver_position_index, self.azimuth_angle)
-            if joint_index not in self._spectrogram_cache:
-                audiogoal = self.get_current_audiogoal_observation()
-                self._spectrogram_cache[joint_index] = audiogoal2spectrogram(audiogoal)
-            spectrogram = self._spectrogram_cache[joint_index]
+            # joint_index = (self._source_position_index, self._receiver_position_index, self.azimuth_angle)
+            # if joint_index not in self._spectrogram_cache:
+            #     audiogoal = self.get_current_audiogoal_observation()
+            #     self._spectrogram_cache[joint_index] = audiogoal2spectrogram(audiogoal)
+            # spectrogram = self._spectrogram_cache[joint_index]
+            audiogoal = self.get_current_audiogoal_observation()
+            spectrogram = audiogoal2spectrogram(audiogoal)
 
         return spectrogram
 
