@@ -75,11 +75,22 @@ def get_all_lmdb_data(dir_name: str):
 
 
 class R2RDataset(Dataset):
-    def __init__(self, data_path: str, use_image_feature: bool, data_num: int):
+    def __init__(
+        self,
+        data_path: str,
+        use_image_feature: bool,
+        data_num: int,
+        add_bos: bool,
+        skip_frame_per: int,
+        max_instruction_length: int,
+    ):
         self.data_path = data_path
         self.use_image_feature = use_image_feature        
         self.data_num = data_num
-    
+        self.add_bos = add_bos
+        self.skip_frame_per = skip_frame_per
+        self.max_instruction_length = max_instruction_length
+
     def __len__(self):
         return self.data_num
 
@@ -98,15 +109,19 @@ class R2RDataset(Dataset):
         action_seq = np.eye(4)[np.array(action_seq)]
         
         x = {
-            "image_seq": image_seq,
-            "action_seq": action_seq,
+            "image_seq": image_seq[::self.skip_frame_per],
+            "action_seq": action_seq[::self.skip_frame_per],
         }
         y = observation_seq["instruction"][0].copy()
+        
+        if self.add_bos:
+            y = np.concatenate([[BOS_IDX], y[:-1]])
+
         for i in range(len(y)):
             if y[i] == 0:
                 y[i] = EOS_IDX
                 break
-        return x, y
+        return x, y[:self.max_instruction_length]
 
 
 def my_collate_fn(batch):
@@ -158,7 +173,7 @@ if __name__=="__main__":
     s = time.time()
     # observations, actions, instructions = get_all_lmdb_data(lmdb_dir)
     print(f"start!")
-    dataset = R2RDataset(lmdb_dir, True)
+    dataset = R2RDataset(lmdb_dir, True, 100, True)
     print(f"define dataset! (time: {time.time() - s} [sec])")
     s = time.time()
     dataloader = DataLoader(

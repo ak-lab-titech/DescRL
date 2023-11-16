@@ -24,120 +24,72 @@ sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
 from common.utils import try_cuda
 from common.lang import R2RLang
 from common.load_lmdb import R2RDataset, my_collate_fn, PAD_IDX, BOS_IDX, EOS_IDX
-from model import SpeakerEncoderLSTM, SpeakerDecoderLSTM
+from model import Seq2SeqTransformer
 
 
 def filter_param(param_list):
     return [p for p in param_list if p.requires_grad]
 
 
-def save_model(encoder, decoder, save_dir):
+def save_model(seq2seq_model, save_dir):
     os.makedirs(save_dir, exist_ok=True)
-    encoder_path = f"{save_dir}/encoder.pth"
-    decoder_path = f"{save_dir}/decoder.pth"
-    torch.save(encoder.module.state_dict(), encoder_path)
-    torch.save(decoder.module.state_dict(), decoder_path)
+    model_path = f"{save_dir}/seq2seq.pth"
+    torch.save(seq2seq_model.module.state_dict(), model_path)
 
 
-def rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback, return_words=False):
-    action_embeddings = [
-        try_cuda(Variable(
-            torch.from_numpy(act),
+def rollout(seq2seq_model, inputs, targets, return_words=False):
+    action_embeddings = try_cuda(Variable(
+            torch.from_numpy(np.array(inputs["action_seqs"])),
             requires_grad=False,
-        )) for act in inputs["action_seqs"]
-    ]
-    image_features = [
-        try_cuda(Variable(
-            torch.from_numpy(img),
-            requires_grad=False,
-        )) for img in inputs["image_seqs"]
-    ]
-    path_mask = try_cuda(torch.from_numpy(inputs["mask"]))
-    targets = try_cuda(torch.from_numpy(np.array(targets)))
-    
-    batch_size = image_features[0].shape[0]
-    
-    ctx, h_t, c_t = encoder(action_embeddings, image_features, inputs["seq_lengths"])
-    
-    w_t = try_cuda(Variable(
-        torch.from_numpy(
-            np.full(
-                (batch_size,),
-                BOS_IDX,
-                dtype='int64',
-            )
-        ).long(),
-        requires_grad=False,
     ))
+    image_features = try_cuda(Variable(
+            torch.from_numpy(np.array(inputs["image_seqs"])),
+            requires_grad=False,
+    ))
+    path_mask = try_cuda(torch.from_numpy(inputs["mask"]))
+    targets = try_cuda(torch.from_numpy(np.array(targets))).permute(1,0)
     
-    loss = 0
-    ended = np.array([False] * batch_size)
-    words = []
-    target_words = []
-    for t in range(max_instruction_length):
-        h_t, c_t, _, logit = decoder(
-            w_t.view(-1, 1), h_t, c_t, ctx, path_mask
-        )
-        target = targets[:,t].contiguous()
-
-        # Determine next model inputs
-        if feedback == 'teacher':
-            w_t = target
-        elif feedback == 'argmax':
-            _, w_t = logit.max(1)
-            w_t = w_t.detach()
-        elif feedback == 'sample':
-            probs = F.softmax(logit)
-            m = D.Categorical(probs)
-            w_t = m.sample()
-        else:
-            sys.exit('Invalid feedback option')
-        
-        if return_words:
-            _, word = logit.max(1)
-            word = word.detach()
-            words.append(word)
-            target_words.append(target)
-        
-        log_probs = F.log_softmax(logit, dim=1)
-        loss += F.nll_loss(
-            log_probs,
-            target,
-            ignore_index=PAD_IDX,
-            reduction="mean",
-        )
-
-        tmp = target.to("cpu").detach().numpy().copy()
-        ended[tmp == EOS_IDX] = True
-        if ended.all():
-            break
+    image_seqs_max_l= len(image_features)
+    word_seqs_max_l = len(targets)-1
     
-    if return_words:
-        return loss, words, target_words
-    else:
-        return loss
+    logits = seq2seq_model(
+        src_image=image_features, # (max_l, b, image_shape)
+        src_action=action_embeddings,      # (max_l, b, 4)
+        trg=targets[:-1, :], # (199, b)
+        src_mask=torch.zeros((image_seqs_max_l, image_seqs_max_l), dtype=bool), # (max_l, max_l)
+        memory_mask=None, # (max_l, 200)?
+        tgt_mask=torch.triu(torch.full((word_seqs_max_l, word_seqs_max_l), 1), diagonal=1).type(torch.bool),
+        src_padding_mask=path_mask, # (b, max_l)
+        tgt_padding_mask=(targets[:-1 :].permute(1,0)==PAD_IDX), # (b, 199)
+        memory_key_padding_mask=path_mask, # (b, max_l)
+    )
+
+    targets = targets[1:,:]
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)
+    loss = loss_fn(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1))
+    
+    # TODO logits to words
+
+    return loss
 
 
 def eval(
     gpu_id,
-    encoder,
-    decoder,
+    seq2seq_model,
     seen_dataloader,
     unseen_dataloader,
-    max_instruction_length,
     writer,
     now_epoch,
 ):
-    encoder.eval()
-    decoder.eval()
+    seq2seq_model.eval()
     s = time.time()
     seen_losses = []
     for inputs, targets in seen_dataloader:
-        loss = rollout(encoder, decoder, inputs, targets, max_instruction_length, "argmax")
+        loss = rollout(seq2seq_model, inputs, targets)
         seen_losses.append(loss.item())
     unseen_losses = []
     for inputs, targets in unseen_dataloader:
-        loss = rollout(encoder, decoder, inputs, targets, max_instruction_length, "argmax")
+        loss = rollout(seq2seq_model, inputs, targets)
         unseen_losses.append(loss.item())
     seen_loss = torch.from_numpy(np.array([np.mean(seen_losses)])).to(gpu_id)
     all_reduce(seen_loss)
@@ -156,31 +108,23 @@ def eval(
 
 
 def train_one_step(
-    encoder,
-    decoder,
-    encoder_optimizer,
-    decoder_optimizer,
+    seq2seq_model,
+    seq2seq_optimizer,
     inputs,
     targets,
-    max_instruction_length,
-    feedback,
 ):
-    encoder.train()
-    decoder.train()
-    encoder_optimizer.zero_grad()
-    decoder_optimizer.zero_grad()
-    loss = rollout(encoder, decoder, inputs, targets, max_instruction_length, feedback)
+    seq2seq_model.train()
+    seq2seq_optimizer.zero_grad()
+    loss = rollout(seq2seq_model, inputs, targets)
     loss.backward()
-    encoder_optimizer.step()
-    decoder_optimizer.step()
+    seq2seq_optimizer.step()
     return loss
 
 
 def train(
     gpu_id: int,
     logger: logging.Logger,
-    encoder: torch.nn.Module,
-    decoder: torch.nn.Module,
+    seq2seq_model: torch.nn.Module,
     model_name: str,
     train_data_path: str,
     train_data_num: int,
@@ -195,30 +139,23 @@ def train(
     weight_decay: float,
     skip_frame_per: int,
     max_instruction_length: int,
-    feedback: str,
     n_iters: int,
     save_every: int,
     log_every: int,
     eval_every: int,
 ):
-    encoder_optimizer = optim.Adam(
-        filter_param(encoder.parameters()),
+    seq2seq_optimizer = optim.Adam(
+        filter_param(seq2seq_model.parameters()),
         lr=learning_rate,
         weight_decay=weight_decay,
     )
-    decoder_optimizer = optim.Adam(
-        filter_param(decoder.parameters()),
-        lr=learning_rate,
-        weight_decay=weight_decay,
-    )
-    encoder.train()
-    decoder.train()
+    seq2seq_model.train()
     
     if multiprocessing.get_start_method() == 'fork':
         multiprocessing.set_start_method('spawn', force=True)
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info("LOADING DATA...")
-    train_dataset = R2RDataset(train_data_path, use_image_feature, train_data_num, False, skip_frame_per, max_instruction_length)
+    train_dataset = R2RDataset(train_data_path, use_image_feature, train_data_num, True, skip_frame_per, max_instruction_length)
     train_sampler = DistributedSampler(
         train_dataset,
         num_replicas=int(os.environ["NP"]),
@@ -237,7 +174,7 @@ def train(
     )
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of train data: {len(train_dataset)}, batch: {len(train_dataloader)}")
-    val_seen_dataset = R2RDataset(val_seen_data_path, use_image_feature, val_seen_data_num, False, skip_frame_per, max_instruction_length)
+    val_seen_dataset = R2RDataset(val_seen_data_path, use_image_feature, val_seen_data_num, True, skip_frame_per, max_instruction_length)
     val_seen_sampler = DistributedSampler(
         val_seen_dataset,
         num_replicas=int(os.environ["NP"]),
@@ -247,7 +184,7 @@ def train(
     val_seen_dataloader = DataLoader(
         val_seen_dataset,
         num_workers=2,
-        batch_size=batch_size,
+        batch_size=int(batch_size/2),
         # shuffle=False,
         drop_last=False,
         collate_fn=my_collate_fn,
@@ -256,7 +193,7 @@ def train(
     )
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of val_seen data: {len(val_seen_dataset)}, batch: {len(val_seen_dataloader)}")
-    val_unseen_dataset = R2RDataset(val_unseen_data_path, use_image_feature, val_unseen_data_num, False, skip_frame_per, max_instruction_length)
+    val_unseen_dataset = R2RDataset(val_unseen_data_path, use_image_feature, val_unseen_data_num, True, skip_frame_per, max_instruction_length)
     val_unseen_sampler = DistributedSampler(
         val_unseen_dataset,
         num_replicas=int(os.environ["NP"]),
@@ -266,7 +203,7 @@ def train(
     val_unseen_dataloader = DataLoader(
         val_unseen_dataset,
         num_workers=2,
-        batch_size=batch_size,
+        batch_size=int(batch_size/2),
         # shuffle=False,
         drop_last=False,
         collate_fn=my_collate_fn,
@@ -291,14 +228,10 @@ def train(
             losses = []
             for _, (inputs, targets) in enumerate(train_dataloader):
                 loss = train_one_step(
-                    encoder,
-                    decoder,
-                    encoder_optimizer,
-                    decoder_optimizer,
+                    seq2seq_model,
+                    seq2seq_optimizer,
                     inputs,
                     targets,
-                    max_instruction_length,
-                    feedback,
                 )
                 losses.append(loss.item())
 
@@ -310,7 +243,7 @@ def train(
                 writer.add_scalar("train/loss", train_loss, i)
 
             if i % save_every == 0:
-                save_model(encoder, decoder, f"./data/models/{model_name}/data/{i}")
+                save_model(seq2seq_model, f"./data/models/{model_name}/data/{i}")
             if i == 1 or i % log_every == 0:
 
                 if int(os.environ["LOCAL_RANK"]) == 0:
@@ -319,34 +252,29 @@ def train(
                     logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
                 s = time.time()
             if i == 1 or i % eval_every == 0:
-                eval(gpu_id, encoder, decoder, val_seen_dataloader, val_unseen_dataloader, max_instruction_length, writer, i)
+                eval(gpu_id, seq2seq_model, val_seen_dataloader, val_unseen_dataloader, writer, i)
 
 
 def main(config, model_name, logger, gpu_id):
     lang = R2RLang(name="r2r_train")
-    encoder = SpeakerEncoderLSTM(
-        action_embedding_size=4,
-        world_embedding_size=config["model"]["world_embedding_size"],
-        hidden_size=config["model"]["hidden_size"],
-        dropout_ratio=config["model"]["dropout_ratio"],
+    seq2seq_model = Seq2SeqTransformer(
+        num_encoder_layers=config["model"]["num_encoder_layers"],   
+        num_decoder_layers=config["model"]["num_decoder_layers"],
+        emb_size=config["model"]["emb_size"],
+        vocab_emb_size=config["model"]["vocab_embedding_size"],
+        nhead=config["model"]["nhead"],
         use_image_feature=config["train"]["use_image_feature"],
-        bidirectional=config["model"]["bidirectional"],
-    )
-    encoder = DistributedDataParallel(encoder.to(gpu_id), device_ids=[gpu_id])
-    decoder = SpeakerDecoderLSTM(
         vocab_size=lang.vocab_size,
-        vocab_embedding_size=config["model"]["vocab_embedding_size"],
-        hidden_size=config["model"]["hidden_size"],
-        dropout_ratio=config["model"]["dropout_ratio"],
         glove=lang.glove_vec,
-        use_input_att_feed=config["model"]["use_input_att_feed"],
+        dim_feedforward=config["model"]["dim_feedforward"],
+        dropout=config["model"]["dropout_ratio"],
     )
-    decoder = DistributedDataParallel(decoder.to(gpu_id), device_ids=[gpu_id])
+    seq2seq_model = DistributedDataParallel(seq2seq_model.to(gpu_id), device_ids=[gpu_id])
+
     train(
         gpu_id=gpu_id,
         logger=logger,
-        encoder=encoder,
-        decoder=decoder,
+        seq2seq_model=seq2seq_model,
         model_name=model_name,
         train_data_path=config["train"]["train_data_path"],
         train_data_num=config["train"]["train_data_num"],
@@ -361,7 +289,6 @@ def main(config, model_name, logger, gpu_id):
         weight_decay=config["train"]["weight_decay"],
         skip_frame_per=config["train"]["skip_frame_per"],
         max_instruction_length=config["train"]["max_instruction_length"],
-        feedback=config["train"]["feedback"],
         n_iters=config["train"]["n_iters"],
         save_every=config["train"]["save_every"],
         log_every=config["train"]["log_every"],
@@ -370,6 +297,9 @@ def main(config, model_name, logger, gpu_id):
 
 
 if __name__=="__main__":
+    f = open("debug.txt", "w")
+    f.write(f"START transformer speaker!\n")
+    f.close()
     rank = int(os.environ["LOCAL_RANK"])
     world_size = torch.cuda.device_count()
     n_proc = int(os.environ["NP"])

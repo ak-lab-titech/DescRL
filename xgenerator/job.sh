@@ -14,7 +14,8 @@ module load cudnn
 module load openmpi/3.1.4-opa10.10
 
 
-CMD="train" 
+CMD="train"
+MODEL="speaker" # speaker, transformer-speaker
 
 MODEL_NAME="speaker"
 TRAIN_NP=8
@@ -28,6 +29,7 @@ pwd
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate av-nav
 echo CMD=$CMD
+echo MODEL=$MODEL
 
 if [ $CMD = "train" ]; then
         export NP=$TRAIN_NP
@@ -36,9 +38,8 @@ if [ $CMD = "train" ]; then
         CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
                 --nnodes=1 \
                 --nproc_per_node=$NP \
-                speaker/train.py \
-                --config-path \
-                ./speaker/config.yaml \
+                $MODEL/train.py \
+                --config-path $MODEL/config.yaml \
                 --model-name $MODEL_NAME
 elif [ $CMD = "eval" ]; then
         echo MODEL_NAME=$MODEL_NAME
