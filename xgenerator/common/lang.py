@@ -9,6 +9,19 @@ sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
 from common.load_lmdb import get_all_lmdb_data
 
 
+def tokens2sentences(tokens, lang):
+    """
+    tokens' shape must be (sentence_len, batch).
+    """
+    sentences = ["" for _ in range(len(tokens[0]))]
+    for token in tokens:
+        token = token.to('cpu').detach().numpy().copy()
+        for i in range(len(token)):
+            word = lang.index2word[token[i]]
+            sentences[i] = sentences[i] + word + " "
+    return sentences
+
+
 class R2RLang:
     def __init__(self, name: str):
         self.name = name

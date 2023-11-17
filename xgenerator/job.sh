@@ -46,7 +46,7 @@ elif [ $CMD = "eval" ]; then
         echo EVAL_NUM=$EVAL_NUM
         echo CKPT_NUM=$EVAL_CKPT_NUM
         echo EVAL_SEED=$EVAL_SEED
-        python speaker/eval.py \
+        python $MODEL/eval.py \
             --eval-num $EVAL_NUM \
             --ckpt-num $EVAL_CKPT_NUM \
             --model-path ./data/models/$MODEL_NAME \

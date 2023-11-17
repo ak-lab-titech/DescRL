@@ -68,9 +68,13 @@ def rollout(seq2seq_model, inputs, targets, return_words=False):
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)
     loss = loss_fn(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1))
     
-    # TODO logits to words
-
-    return loss
+    if return_words:
+        target_words = targets # (199, b)
+        _, words = logits.max(2)
+        words = words.detach() # (199, b)
+        return loss, words, target_words
+    else:
+        return loss
 
 
 def eval(

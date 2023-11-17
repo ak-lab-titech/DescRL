@@ -8,38 +8,32 @@ import torch
 sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
 
 from train import rollout
-from model import SpeakerEncoderLSTM, SpeakerDecoderLSTM
+from model import Seq2SeqTransformer
 from common.load_lmdb import R2RDataset, my_collate_fn
 from common.lang import R2RLang, tokens2sentences
 
 
 
 def load_model(model_path, ckpt_num, train_config, lang):
-    encoder = SpeakerEncoderLSTM(
-        action_embedding_size=4,
-        world_embedding_size=train_config["model"]["world_embedding_size"],
-        hidden_size=train_config["model"]["hidden_size"],
-        dropout_ratio=train_config["model"]["dropout_ratio"],
+    seq2seq_model = Seq2SeqTransformer(
+        num_encoder_layers=train_config["model"]["num_encoder_layers"],   
+        num_decoder_layers=train_config["model"]["num_decoder_layers"],
+        emb_size=train_config["model"]["emb_size"],
+        vocab_emb_size=train_config["model"]["vocab_embedding_size"],
+        nhead=train_config["model"]["nhead"],
         use_image_feature=train_config["train"]["use_image_feature"],
-        bidirectional=train_config["model"]["bidirectional"],
-    )
-    decoder = SpeakerDecoderLSTM(
         vocab_size=lang.vocab_size,
-        vocab_embedding_size=train_config["model"]["vocab_embedding_size"],
-        hidden_size=train_config["model"]["hidden_size"],
-        dropout_ratio=train_config["model"]["dropout_ratio"],
         glove=lang.glove_vec,
-        use_input_att_feed=train_config["model"]["use_input_att_feed"],
+        dim_feedforward=train_config["model"]["dim_feedforward"],
+        dropout=train_config["model"]["dropout_ratio"],
     )
-    encoder.load_state_dict(torch.load(f"{model_path}/data/{ckpt_num}/encoder.pth", torch.device("cpu")))
-    decoder.load_state_dict(torch.load(f"{model_path}/data/{ckpt_num}/decoder.pth", torch.device("cpu")))
-    return encoder, decoder
+    seq2seq_model.load_state_dict(torch.load(f"{model_path}/data/{ckpt_num}/seq2seq.pth", torch.device("cpu")))
+    return seq2seq_model
 
 
 def eval_by_a_dataset(
     eval_num,
-    encoder,
-    decoder,
+    seq2seq_model,
     lang,
     data_path,
     use_image_feature,
@@ -51,7 +45,7 @@ def eval_by_a_dataset(
         data_path,
         use_image_feature,
         data_num,
-        False,
+        True,
         skip_frame_per,
         max_instruction_length,
     )
@@ -60,12 +54,9 @@ def eval_by_a_dataset(
     inputs, targets = my_collate_fn(batch)
 
     loss, words, target_words = rollout(
-        encoder=encoder,
-        decoder=decoder,
+        seq2seq_model=seq2seq_model,
         inputs=inputs,
         targets=targets,
-        max_instruction_length=max_instruction_length,
-        feedback="argmax",
         return_words=True,
     )
     pred_sentences = tokens2sentences(words, lang)
@@ -84,15 +75,13 @@ def eval(
     train_config,
 ):
     lang = R2RLang(name="r2r_train")
-    encoder, decoder = load_model(model_path, ckpt_num, train_config, lang)
-    encoder.eval()
-    decoder.eval()
+    seq2seq_model = load_model(model_path, ckpt_num, train_config, lang)
+    seq2seq_model.eval()
 
     print("Seen")
     eval_by_a_dataset(
         eval_num,
-        encoder,
-        decoder,
+        seq2seq_model,
         lang,
         train_config["train"]["val_seen_data_path"],
         train_config["train"]["use_image_feature"],
@@ -104,8 +93,7 @@ def eval(
     print("Unseen")
     eval_by_a_dataset(
         eval_num,
-        encoder,
-        decoder,
+        seq2seq_model,
         lang,
         train_config["train"]["val_unseen_data_path"],
         train_config["train"]["use_image_feature"],
