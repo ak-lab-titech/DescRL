@@ -138,6 +138,14 @@ class VisualImageEncoder(nn.Module):
     def __init__(self, image_shape, output_size):
         super(VisualImageEncoder, self).__init__()
         channel_size = image_shape[2]
+        if image_shape[0] == 256 and image_shape[1] == 256:
+            last_layer_size = 12544
+        elif image_shape[0] == 128 and image_shape[1] == 128:
+            last_layer_size = 2304
+        else:
+            raise Exception(
+                f"image shape mast be (256, 256) or (128, 128), not ({image_shape[0]}, {image_shape[1]})"
+            )
         self.cnn = nn.Sequential(
             nn.Conv2d(
                 in_channels=channel_size,
@@ -160,7 +168,7 @@ class VisualImageEncoder(nn.Module):
                 stride=(2, 2),
             ), # [batch, 64, 14, 14]
             Flatten(), # [batch, 12544]
-            nn.Linear(12544, output_size), # [batch, output_size]
+            nn.Linear(last_layer_size, output_size), # [batch, output_size]
             nn.ReLU(True),
         )
         self.layer_init()

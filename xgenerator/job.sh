@@ -15,10 +15,10 @@ module load openmpi/3.1.4-opa10.10
 
 
 CMD="train"
-MODEL="speaker" # speaker, transformer-speaker
+MODEL="transformer-speaker" # speaker, transformer-speaker
 
-MODEL_NAME="speaker"
-TRAIN_NP=8
+MODEL_NAME="tf-speaker"
+TRAIN_NP=4
 EVAL_NUM=3
 EVAL_CKPT_NUM=70
 EVAL_SEED=0

@@ -152,6 +152,8 @@ def train(
         filter_param(seq2seq_model.parameters()),
         lr=learning_rate,
         weight_decay=weight_decay,
+        betas=(0.9, 0.98),
+        eps=1e-9,
     )
     seq2seq_model.train()
     
@@ -168,13 +170,13 @@ def train(
     )
     train_dataloader = DataLoader(
         train_dataset,
-        num_workers=2,
+        # num_workers=2,
         batch_size=batch_size,
         # shuffle=dataset_shuffle,
         drop_last=dataset_drop_last,
         collate_fn=my_collate_fn,
         sampler=train_sampler,
-        pin_memory=True,
+        # pin_memory=True,
     )
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of train data: {len(train_dataset)}, batch: {len(train_dataloader)}")
@@ -187,13 +189,13 @@ def train(
     )
     val_seen_dataloader = DataLoader(
         val_seen_dataset,
-        num_workers=2,
-        batch_size=int(batch_size/2),
+        # num_workers=2,
+        batch_size=int(batch_size/4),
         # shuffle=False,
         drop_last=False,
         collate_fn=my_collate_fn,
         sampler=val_seen_sampler,
-        pin_memory=True,
+        # pin_memory=True,
     )
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of val_seen data: {len(val_seen_dataset)}, batch: {len(val_seen_dataloader)}")
@@ -206,13 +208,13 @@ def train(
     )
     val_unseen_dataloader = DataLoader(
         val_unseen_dataset,
-        num_workers=2,
-        batch_size=int(batch_size/2),
+        # num_workers=2,
+        batch_size=int(batch_size/4),
         # shuffle=False,
         drop_last=False,
         collate_fn=my_collate_fn,
         sampler=val_unseen_sampler,
-        pin_memory=True,
+        # pin_memory=True,
     )
     tb_log_dir = f"./data/models/{model_name}/tb"
     os.makedirs(tb_log_dir, exist_ok=True)

@@ -1,13 +1,10 @@
 import time
 import sys
-import gzip
-import json
+import gc
 
 import lmdb
 import msgpack_numpy
 import numpy as np
-import torch
-from torch.autograd import Variable
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
@@ -90,29 +87,49 @@ class R2RDataset(Dataset):
         self.add_bos = add_bos
         self.skip_frame_per = skip_frame_per
         self.max_instruction_length = max_instruction_length
+        
+        env = lmdb.open(self.data_path, readonly=True, lock=False)
+        self.image_seqs = []
+        self.action_seqs = []
+        self.instructions = []
+        txn = env.begin()
+        for index in range(self.data_num):
+            value = txn.get(str(index).encode('latin-1'))
+            value = msgpack_numpy.unpackb(value, object_hook=msgpack_numpy.decode)
+            observation_seq = dict(value[0])
+            if self.use_image_feature:
+                image_seq = np.concatenate(
+                    [observation_seq["rgb_features"][::self.skip_frame_per], observation_seq["depth_features"][::self.skip_frame_per]], 1
+                ).astype(np.float32)
+            else:
+                image_seq = np.concatenate(
+                    [observation_seq["rgb"][::self.skip_frame_per], observation_seq["depth"][::self.skip_frame_per]], 3
+                ).astype(np.float32)
+            action_seq = np.eye(4)[np.array(value[2][::self.skip_frame_per])].astype(np.int8)
+            instruction = np.array(observation_seq["instruction"][0]).astype(np.uint16)
+
+            del observation_seq
+            del value
+            gc.collect()
+
+            self.image_seqs.append(image_seq)
+            self.action_seqs.append(action_seq)
+            self.instructions.append(instruction)
+        txn.commit()
+        env.close()
 
     def __len__(self):
         return self.data_num
 
     def __getitem__(self, index):
-        observation_seq, _, action_seq, _ = get_a_lmdb_data(
-            self.data_path, str(index).encode('latin-1')
-        )
-        if not self.use_image_feature:
-            image_seq = np.concatenate(
-                [observation_seq["rgb"], observation_seq["depth"]], 3
-            ) # (seq_len, h, w, 4)
-        else:
-            image_seq = np.concatenate(
-                [observation_seq["rgb_features"], observation_seq["depth_features"]], 1
-            ) # (seq_len, fea_dim, 4, 4)
-        action_seq = np.eye(4)[np.array(action_seq)]
-        
+        image_seq = self.image_seqs[index]
+        action_seq = self.action_seqs[index]
+        instruction = self.instructions[index]        
         x = {
-            "image_seq": image_seq[::self.skip_frame_per],
-            "action_seq": action_seq[::self.skip_frame_per],
+            "image_seq": image_seq,
+            "action_seq": action_seq,
         }
-        y = observation_seq["instruction"][0].copy()
+        y = instruction
         
         if self.add_bos:
             y = np.concatenate([[BOS_IDX], y[:-1]])
@@ -173,7 +190,7 @@ if __name__=="__main__":
     s = time.time()
     # observations, actions, instructions = get_all_lmdb_data(lmdb_dir)
     print(f"start!")
-    dataset = R2RDataset(lmdb_dir, True, 100, True)
+    dataset = R2RDataset(lmdb_dir, True, 100, True, 4, 200)
     print(f"define dataset! (time: {time.time() - s} [sec])")
     s = time.time()
     dataloader = DataLoader(
