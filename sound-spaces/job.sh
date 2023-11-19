@@ -35,6 +35,7 @@ if [ $CMD = "multi-gpu-train" ]; then
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
+        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
         /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
         ./train.sh
 elif [ $CMD = "single-gpu-train" ]; then
@@ -43,6 +44,7 @@ elif [ $CMD = "single-gpu-train" ]; then
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
+        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
         /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
         ./train.sh
 elif [ $CMD = "eval" ]; then
@@ -51,6 +53,7 @@ elif [ $CMD = "eval" ]; then
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
+        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
         /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
         ./eval.sh
 elif [ $CMD = "test" ]; then
@@ -59,6 +62,7 @@ elif [ $CMD = "test" ]; then
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
+        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
         /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
         ./test.sh
 elif [ $CMD = "video" ]; then
@@ -67,6 +71,7 @@ elif [ $CMD = "video" ]; then
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
+        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
         /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
         ./video.sh
 elif [ $CMD = "make_dataset" ]; then
@@ -75,6 +80,7 @@ elif [ $CMD = "make_dataset" ]; then
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
+        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
         /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
         ./make_dataset.sh
 elif [ $CMD = "plot_tb_data" ]; then
@@ -83,6 +89,7 @@ elif [ $CMD = "plot_tb_data" ]; then
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
+        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
         /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
         ./plot_tb_data.sh
 else
