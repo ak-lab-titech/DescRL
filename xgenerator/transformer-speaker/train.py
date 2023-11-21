@@ -1,4 +1,5 @@
 import os
+import gc
 import sys
 import time
 import argparse
@@ -65,30 +66,54 @@ def rollout(seq2seq_model, inputs, targets, max_instruction_length=80, feedback=
             memory_key_padding_mask=path_mask, # (b, max_l)
         )
     elif feedback == "student":
-        memory = seq2seq_model.encode(
-            src_image=image_features,
-            src_action=action_embeddings,
-            src_mask=torch.zeros((image_seqs_max_l, image_seqs_max_l), dtype=bool),
-            src_padding_mask=path_mask,
-        ) # (max_l, b, hidden)
+        if seq2seq_model.__class__.__name__ == "DistributedDataParallel":
+            src_mask = try_cuda(torch.zeros((image_seqs_max_l, image_seqs_max_l), dtype=bool))
+            memory = seq2seq_model.module.encode(
+                src_image=image_features,
+                src_action=action_embeddings,
+                src_mask=src_mask,
+                src_padding_mask=path_mask,
+            ) # (max_l, b, hidden)
+            del src_mask
+        else:
+            memory = seq2seq_model.encode(
+                src_image=image_features,
+                src_action=action_embeddings,
+                src_mask=torch.zeros((image_seqs_max_l, image_seqs_max_l), dtype=bool),
+                src_padding_mask=path_mask,
+            ) # (max_l, b, hidden)
+        del image_features
+        del action_embeddings
+        torch.cuda.empty_cache()
+        gc.collect()
         _, batch_size = targets.shape
-        preds = torch.full((1, batch_size), BOS_IDX)
+        preds = try_cuda(torch.full((1, batch_size), BOS_IDX))
         logits_list = []
-        for _ in range(max_instruction_length):
-            logits = seq2seq_model.decode(
-                trg=preds,
-                memory=memory,
-                tgt_mask=None,
-                memory_mask=None,
-                tgt_padding_mask=None,
-                memory_key_padding_mask=path_mask,
-            )[-1, :, :] # (batch, vocab_size)
+        for i in range(max_instruction_length):
+            if seq2seq_model.__class__.__name__ == "DistributedDataParallel":
+                logits = seq2seq_model.module.decode(
+                    trg=preds,
+                    memory=memory,
+                    tgt_mask=None,
+                    memory_mask=None,
+                    tgt_padding_mask=None,
+                    memory_key_padding_mask=path_mask,
+                )[-1, :, :] # (batch, vocab_size)
+            else:
+                logits = seq2seq_model.decode(
+                    trg=preds,
+                    memory=memory,
+                    tgt_mask=None,
+                    memory_mask=None,
+                    tgt_padding_mask=None,
+                    memory_key_padding_mask=path_mask,
+                )[-1, :, :] # (batch, vocab_size)
             logits_list.append(logits)
             _, next_word = logits.max(1)
-            next_word = next_word.view(1, 3)
+            next_word = next_word.view(1, batch_size)
             preds = torch.cat([preds, next_word], dim=0) # (target_len, batch)
             # TODO 全てがEOSだった場合終了
-        logits = torch.stack(logits_list[1:], dim=0) # (target_len, batch, vocab_size)
+        logits = try_cuda(torch.stack(logits_list[1:], dim=0)) # (target_len, batch, vocab_size)
     else:
         raise Exception(f"feedback must be 'teacher' or 'student', not {feedback}.")
 
@@ -112,16 +137,18 @@ def eval(
     unseen_dataloader,
     writer,
     now_epoch,
+    max_instruction_length,
+    feedback,
 ):
     seq2seq_model.eval()
     s = time.time()
     seen_losses = []
     for inputs, targets in seen_dataloader:
-        loss = rollout(seq2seq_model, inputs, targets)
+        loss = rollout(seq2seq_model, inputs, targets, max_instruction_length, feedback)
         seen_losses.append(loss.item())
     unseen_losses = []
     for inputs, targets in unseen_dataloader:
-        loss = rollout(seq2seq_model, inputs, targets)
+        loss = rollout(seq2seq_model, inputs, targets, max_instruction_length, feedback)
         unseen_losses.append(loss.item())
     seen_loss = torch.from_numpy(np.array([np.mean(seen_losses)])).to(gpu_id)
     all_reduce(seen_loss)
@@ -144,10 +171,12 @@ def train_one_step(
     seq2seq_optimizer,
     inputs,
     targets,
+    max_instruction_length,
+    feedback,
 ):
     seq2seq_model.train()
     seq2seq_optimizer.zero_grad()
-    loss = rollout(seq2seq_model, inputs, targets)
+    loss = rollout(seq2seq_model, inputs, targets, max_instruction_length, feedback)
     loss.backward()
     seq2seq_optimizer.step()
     return loss
@@ -170,6 +199,7 @@ def train(
     learning_rate: float,
     weight_decay: float,
     skip_frame_per: int,
+    feedback: str,
     max_instruction_length: int,
     n_iters: int,
     save_every: int,
@@ -266,6 +296,8 @@ def train(
                     seq2seq_optimizer,
                     inputs,
                     targets,
+                    max_instruction_length,
+                    feedback,
                 )
                 losses.append(loss.item())
 
@@ -286,7 +318,7 @@ def train(
                     logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
                 s = time.time()
             if i == 1 or i % eval_every == 0:
-                eval(gpu_id, seq2seq_model, val_seen_dataloader, val_unseen_dataloader, writer, i)
+                eval(gpu_id, seq2seq_model, val_seen_dataloader, val_unseen_dataloader, writer, i, max_instruction_length, feedback)
 
 
 def main(config, model_name, logger, gpu_id):
@@ -322,6 +354,7 @@ def main(config, model_name, logger, gpu_id):
         learning_rate=config["train"]["learning_rate"],
         weight_decay=config["train"]["weight_decay"],
         skip_frame_per=config["train"]["skip_frame_per"],
+        feedback=config["train"]["feedback"],
         max_instruction_length=config["train"]["max_instruction_length"],
         n_iters=config["train"]["n_iters"],
         save_every=config["train"]["save_every"],
