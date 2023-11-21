@@ -37,7 +37,7 @@ def save_model(seq2seq_model, save_dir):
     torch.save(seq2seq_model.module.state_dict(), model_path)
 
 
-def rollout(seq2seq_model, inputs, targets, return_words=False):
+def rollout(seq2seq_model, inputs, targets, max_instruction_length=80, feedback="teacher", return_words=False):
     action_embeddings = try_cuda(Variable(
             torch.from_numpy(np.array(inputs["action_seqs"])),
             requires_grad=False,
@@ -52,17 +52,45 @@ def rollout(seq2seq_model, inputs, targets, return_words=False):
     image_seqs_max_l= len(image_features)
     word_seqs_max_l = len(targets)-1
     
-    logits = seq2seq_model(
-        src_image=image_features, # (max_l, b, image_shape)
-        src_action=action_embeddings,      # (max_l, b, 4)
-        trg=targets[:-1, :], # (199, b)
-        src_mask=torch.zeros((image_seqs_max_l, image_seqs_max_l), dtype=bool), # (max_l, max_l)
-        memory_mask=None, # (max_l, 200)?
-        tgt_mask=torch.triu(torch.full((word_seqs_max_l, word_seqs_max_l), 1), diagonal=1).type(torch.bool),
-        src_padding_mask=path_mask, # (b, max_l)
-        tgt_padding_mask=(targets[:-1 :].permute(1,0)==PAD_IDX), # (b, 199)
-        memory_key_padding_mask=path_mask, # (b, max_l)
-    )
+    if feedback == "teacher":
+        logits = seq2seq_model(
+            src_image=image_features, # (max_l, b, image_shape)
+            src_action=action_embeddings,      # (max_l, b, 4)
+            trg=targets[:-1, :], # (199, b)
+            src_mask=torch.zeros((image_seqs_max_l, image_seqs_max_l), dtype=bool), # (max_l, max_l)
+            memory_mask=None, # (max_l, 200)?
+            tgt_mask=torch.triu(torch.full((word_seqs_max_l, word_seqs_max_l), 1), diagonal=1).type(torch.bool),
+            src_padding_mask=path_mask, # (b, max_l)
+            tgt_padding_mask=(targets[:-1 :].permute(1,0)==PAD_IDX), # (b, 199)
+            memory_key_padding_mask=path_mask, # (b, max_l)
+        )
+    elif feedback == "student":
+        memory = seq2seq_model.encode(
+            src_image=image_features,
+            src_action=action_embeddings,
+            src_mask=torch.zeros((image_seqs_max_l, image_seqs_max_l), dtype=bool),
+            src_padding_mask=path_mask,
+        ) # (max_l, b, hidden)
+        _, batch_size = targets.shape
+        preds = torch.full((1, batch_size), BOS_IDX)
+        logits_list = []
+        for _ in range(max_instruction_length):
+            logits = seq2seq_model.decode(
+                trg=preds,
+                memory=memory,
+                tgt_mask=None,
+                memory_mask=None,
+                tgt_padding_mask=None,
+                memory_key_padding_mask=path_mask,
+            )[-1, :, :] # (batch, vocab_size)
+            logits_list.append(logits)
+            _, next_word = logits.max(1)
+            next_word = next_word.view(1, 3)
+            preds = torch.cat([preds, next_word], dim=0) # (target_len, batch)
+            # TODO 全てがEOSだった場合終了
+        logits = torch.stack(logits_list[1:], dim=0) # (target_len, batch, vocab_size)
+    else:
+        raise Exception(f"feedback must be 'teacher' or 'student', not {feedback}.")
 
     targets = targets[1:,:]
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)

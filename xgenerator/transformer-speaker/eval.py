@@ -57,6 +57,7 @@ def eval_by_a_dataset(
         seq2seq_model=seq2seq_model,
         inputs=inputs,
         targets=targets,
+        feedback="student",
         return_words=True,
     )
     pred_sentences = tokens2sentences(words, lang)
@@ -105,6 +106,9 @@ def eval(
 
 
 if __name__=="__main__":
+    f = open("debug.txt", "w")
+    f.write(f"START eval transformer-speaker\n")
+    f.close()
     parser = argparse.ArgumentParser()
     parser.add_argument('--eval-num', help='the number of evaluation.')
     parser.add_argument('--ckpt-num', help='the number of checkpoint.')

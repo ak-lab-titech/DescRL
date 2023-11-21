@@ -61,11 +61,13 @@ class Seq2SeqTransformer(nn.Module):
         )
         self.generator = nn.Linear(emb_size, vocab_size)
         if use_image_feature:
-            # feature param: 34,816
+            # feature param: 2176*4*4 = 34,816
             self.visual_emb = VisualFeatureEncoder((2176, 4, 4), emb_size-4)
         else:
             # Image param: 256*256*4 = 262,144
-            self.visual_emb = VisualImageEncoder((256, 256, 4), emb_size-4)
+            #              128*128*4 = 65,536
+            # self.visual_emb = VisualImageEncoder((256, 256, 4), emb_size-4)
+            self.visual_emb = VisualImageEncoder((128, 128, 4), emb_size-4)
         self.word_vocab_emb = nn.Embedding(vocab_size, vocab_emb_size)
         if glove is not None:
             print('Using GloVe embedding')
@@ -111,6 +113,56 @@ class Seq2SeqTransformer(nn.Module):
             tgt_mask=tgt_mask,
             tgt_key_padding_mask=tgt_padding_mask,
             memory_mask=memory_mask,
+            memory_key_padding_mask=memory_key_padding_mask,
+        )
+        return self.generator(outs)
+
+    def encode(
+        self,
+        src_image: Tensor,
+        src_action: Tensor,
+        src_mask: Tensor,
+        src_padding_mask: Tensor,
+    ):
+        src_image_shape = src_image.shape
+        src_action_shape = src_action.shape
+        src_image = src_image.view(src_image_shape[0] * src_image_shape[1], src_image_shape[2], src_image_shape[3], src_image_shape[4])
+        src_action = src_action.view(src_action_shape[0] * src_action_shape[1], src_action_shape[2])
+        src_emb = torch.cat((self.visual_emb(src_image), src_action), 1) # (max_l*batch, embed)
+        _, emb_size = src_emb.shape
+        src_emb = src_emb.view(src_image_shape[0], src_image_shape[1], emb_size) # (max_l, batch, embed)
+        src_emb = self.positional_encoding(src_emb)
+
+        memory = self.transformer.encoder(
+            src_emb,
+            mask=src_mask,
+            src_key_padding_mask=src_padding_mask,
+        )
+        return memory
+
+    def decode(
+        self,
+        trg: Tensor,
+        memory: Tensor,
+        tgt_mask: Tensor,
+        memory_mask: Tensor,
+        tgt_padding_mask: Tensor,
+        memory_key_padding_mask: Tensor,
+    ):
+        trg_shape = trg.shape
+        trg = trg.reshape(-1) # (199*batch, )
+        tgt_emb = self.word_vocab_emb(trg) # (199*batch, 50)
+        tgt_emb = self.word_emb(tgt_emb) # (199*batch, 512)
+        _, emb_size = tgt_emb.shape
+        tgt_emb = tgt_emb.view(trg_shape[0], trg_shape[1], emb_size)
+        tgt_emb = self.positional_encoding(tgt_emb)
+        
+        outs = self.transformer.decoder(
+            tgt_emb,
+            memory,
+            tgt_mask=tgt_mask,
+            memory_mask=memory_mask,
+            tgt_key_padding_mask=tgt_padding_mask,
             memory_key_padding_mask=memory_key_padding_mask,
         )
         return self.generator(outs)
