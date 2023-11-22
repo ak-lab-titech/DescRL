@@ -57,6 +57,7 @@ def eval_by_a_dataset(
         seq2seq_model=seq2seq_model,
         inputs=inputs,
         targets=targets,
+        max_instruction_length=max_instruction_length,
         feedback="student",
         return_words=True,
     )
