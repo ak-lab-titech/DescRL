@@ -89,7 +89,7 @@ def rollout(seq2seq_model, inputs, targets, max_instruction_length=80, feedback=
         _, batch_size = targets.shape
         preds = try_cuda(torch.full((1, batch_size), BOS_IDX))
         logits_list = []
-        for i in range(max_instruction_length):
+        for i in range(max_instruction_length-1):
             if seq2seq_model.__class__.__name__ == "DistributedDataParallel":
                 logits = seq2seq_model.module.decode(
                     trg=preds,
@@ -113,7 +113,7 @@ def rollout(seq2seq_model, inputs, targets, max_instruction_length=80, feedback=
             next_word = next_word.view(1, batch_size)
             preds = torch.cat([preds, next_word], dim=0) # (target_len, batch)
             # TODO 全てがEOSだった場合終了
-        logits = try_cuda(torch.stack(logits_list[1:], dim=0)) # (target_len, batch, vocab_size)
+        logits = try_cuda(torch.stack(logits_list, dim=0)) # (target_len, batch, vocab_size)
     else:
         raise Exception(f"feedback must be 'teacher' or 'student', not {feedback}.")
 
