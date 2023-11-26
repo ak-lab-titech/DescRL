@@ -15,7 +15,7 @@ module load openmpi/3.1.4-opa10.10
 
 
 CMD="train"
-MODEL="transformer-speaker" # speaker, transformer-speaker
+MODEL="transformer_speaker" # speaker, transformer_speaker
 
 MODEL_NAME="tf-speaker"
 TRAIN_NP=4
