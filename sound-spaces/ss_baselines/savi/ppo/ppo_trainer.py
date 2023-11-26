@@ -15,6 +15,7 @@ import json
 import random
 import glob
 import copy
+import sys
 
 import numpy as np
 import torch
@@ -52,6 +53,9 @@ from ss_baselines.savi.models.rollout_storage import RolloutStorage, ExternalMem
 from ss_baselines.savi.models.belief_predictor import BeliefPredictor
 from habitat.tasks.nav.nav import IntegratedPointGoalGPSAndCompassSensor
 from soundspaces.tasks.nav import LocationBelief, CategoryBelief, SpectrogramSensor
+
+sys.path.append("/home/0/19B30511/av-nav/myss")
+from xgenerator.common.lang import tokens2sentences, R2RLang
 
 
 class DataParallelPassthrough(torch.nn.DataParallel):
@@ -91,6 +95,8 @@ class PPOTrainer(BaseRLTrainer):
         """
         logger.add_filehandler(self.config.LOG_FILE)
 
+        self.use_iprl = ppo_cfg.INSTRUCTION_PREDICTOR.use_iprl
+
         if observation_space is None:
             observation_space = self.envs.observation_spaces[0]
 
@@ -106,23 +112,51 @@ class PPOTrainer(BaseRLTrainer):
             )
         else:
             smt_cfg = ppo_cfg.SCENE_MEMORY_TRANSFORMER
-            self.actor_critic = AudioNavSMTPolicy(
-                observation_space=observation_space,
-                action_space=self.envs.action_spaces[0],
-                direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
-                goal_num=self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
-                hidden_size=smt_cfg.hidden_size,
-                nhead=smt_cfg.nhead,
-                num_encoder_layers=smt_cfg.num_encoder_layers,
-                num_decoder_layers=smt_cfg.num_decoder_layers,
-                dropout=smt_cfg.dropout,
-                activation=smt_cfg.activation,
-                use_pretrained=smt_cfg.use_pretrained,
-                pretrained_path=smt_cfg.pretrained_path,
-                use_belief_as_goal=ppo_cfg.use_belief_predictor,
-                use_label_belief=smt_cfg.use_label_belief,
-                use_location_belief=smt_cfg.use_location_belief
-            )
+            belief_cfg = ppo_cfg.BELIEF_PREDICTOR
+            iprl_cfg = ppo_cfg.INSTRUCTION_PREDICTOR
+            if not self.use_iprl:
+                self.actor_critic = AudioNavSMTPolicy(
+                    observation_space=observation_space,
+                    action_space=self.envs.action_spaces[0],
+                    direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+                    goal_num=self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
+                    hidden_size=smt_cfg.hidden_size,
+                    nhead=smt_cfg.nhead,
+                    num_encoder_layers=smt_cfg.num_encoder_layers,
+                    num_decoder_layers=smt_cfg.num_decoder_layers,
+                    dropout=smt_cfg.dropout,
+                    activation=smt_cfg.activation,
+                    use_pretrained=smt_cfg.use_pretrained,
+                    pretrained_path=smt_cfg.pretrained_path,
+                    use_belief_as_goal=ppo_cfg.use_belief_predictor,
+                    use_label_belief=smt_cfg.use_label_belief,
+                    use_location_belief=smt_cfg.use_location_belief,
+                )
+            else:
+                self.actor_critic = IPRLAudioNavSMTPolicy(
+                    observation_space=observation_space,
+                    action_space=self.envs.action_spaces[0],
+                    direct_map_size=self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+                    goal_num=self.config.TASK_CONFIG.SIMULATOR.AUDIO.NUM,
+                    iprl_max_instr_len=iprl_cfg.max_instr_len,
+                    iprl_num_decoder_layers=iprl_cfg.num_decoder_layers,
+                    iprl_vocab_emb_size=iprl_cfg.vocab_emb_size,
+                    iprl_emb_size=iprl_cfg.emb_size,
+                    iprl_nhead=iprl_cfg.nhead,
+                    iprl_dim_feedforward=iprl_cfg.dim_feedforward,
+                    iprl_dropout=iprl_cfg.dropout,
+                    hidden_size=smt_cfg.hidden_size,
+                    nhead=smt_cfg.nhead,
+                    num_encoder_layers=smt_cfg.num_encoder_layers,
+                    num_decoder_layers=smt_cfg.num_decoder_layers,
+                    dropout=smt_cfg.dropout,
+                    activation=smt_cfg.activation,
+                    use_pretrained=smt_cfg.use_pretrained,
+                    pretrained_path=smt_cfg.pretrained_path,
+                    use_belief_as_goal=ppo_cfg.use_belief_predictor,
+                    use_label_belief=smt_cfg.use_label_belief,
+                    use_location_belief=smt_cfg.use_location_belief,
+                )
 
             if ppo_cfg.use_belief_predictor:
                 belief_cfg = ppo_cfg.BELIEF_PREDICTOR
@@ -706,7 +740,7 @@ class PPOTrainer(BaseRLTrainer):
         random.seed(self.config.SEED)
         np.random.seed(self.config.SEED)
         torch.manual_seed(self.config.SEED)
-            
+
         # Map location CPU is almost always better than mapping to a CUDA device.
         ckpt_dict = self.load_checkpoint(checkpoint_path, map_location="cpu")
 
@@ -733,6 +767,7 @@ class PPOTrainer(BaseRLTrainer):
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
             config.freeze()
+            lang = R2RLang("r2r_video")
         elif "top_down_map" in self.config.VISUALIZATION_OPTION:
             config.defrost()
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
@@ -849,6 +884,7 @@ class PPOTrainer(BaseRLTrainer):
         if self.config.RL.PPO.use_belief_predictor:
             self.belief_predictor.eval()
         t = tqdm(total=self.config.TEST_EPISODE_COUNT)
+        step_cnt = [0 for _ in range(self.config.NUM_PROCESSES)]
         while (
             len(stats_episodes) < self.config.TEST_EPISODE_COUNT
             and self.envs.num_envs > 0
@@ -856,7 +892,9 @@ class PPOTrainer(BaseRLTrainer):
             current_episodes = self.envs.current_episodes()
 
             with torch.no_grad():
-                _, actions, _, test_recurrent_hidden_states, test_em_features, predict_direct_map = self.actor_critic.act(
+                for i in range(len(step_cnt)):
+                    step_cnt[i] += 1
+                _, actions, _, test_recurrent_hidden_states, test_em_features, predict_direct_map, iprl_logits = self.actor_critic.act(
                     batch,
                     test_recurrent_hidden_states,
                     predict_direct_map,
@@ -871,6 +909,14 @@ class PPOTrainer(BaseRLTrainer):
                     predict_direct_map.copy_(predict_direct_map)
                 
                 prev_actions.copy_(actions)
+            
+            if len(self.config.VIDEO_OPTION) > 0 and 'generated_instruction' in batch.keys():
+                _, iprl_tokens = iprl_logits.max(2) # iprl_tokens: (instr_len, batch)
+                iprl_sentences = tokens2sentences(iprl_tokens, lang)
+                true_sentences = tokens2sentences(batch['generated_instruction'].permute(1,0).int(), lang)
+                for i in range(len(iprl_sentences)):
+                    logger.info(f"Episode {len(stats_episodes)}, Step {step_cnt[i]} Pred: {iprl_sentences[i]}")
+                    logger.info(f"  True: {true_sentences[i]}")
 
             actions = [a[0].item() for a in actions]
             outputs = self.envs.step(actions)
@@ -916,6 +962,8 @@ class PPOTrainer(BaseRLTrainer):
                     descriptor_pred_gt[i].append(pair)
             
             for i in range(len(dones)):
+                if dones[i]:
+                    step_cnt[i] = 0
                 if dones[i] and self.use_direct_map:
                     predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
 

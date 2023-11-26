@@ -329,7 +329,7 @@ class GeneratedInstruction(Sensor):
             xgenerator_config = yaml.safe_load(yml)
 
         super().__init__(config=config)
-
+        self.model_resolution = kwargs["task"]._config["GENERATED_INSTRUCTION"]["MODEL_RESOLUTION"]
         self.instruction_generator = Seq2SeqTransformer(
             num_encoder_layers=xgenerator_config["model"]["num_encoder_layers"],   
             num_decoder_layers=xgenerator_config["model"]["num_decoder_layers"],
@@ -384,7 +384,15 @@ class GeneratedInstruction(Sensor):
         while True:
             sim_obs = self._sim._get_sim_observation()
             observations = self._sim._sensor_suite.get_observations(sim_obs)
-            depth_img = np.squeeze(observations["depth"], axis=3)
+            image_shape = np.shape(observations["rgb"])
+
+            if image_shape[0] != self.model_resolution:
+                observations = self.resize_observation(observations)
+
+            if len(image_shape) == 4:
+                depth_img = np.squeeze(observations["depth"], axis=3)
+            else:
+                depth_img = observations["depth"]
             rgb_img = observations["rgb"] / 255.0
             image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
 
@@ -473,6 +481,20 @@ class GeneratedInstruction(Sensor):
 
         out.release()
         cv2.destroyAllWindows()
+    
+    def resize_observation(self, observation):
+        observation['rgb'] = cv2.resize(
+            observation['rgb'],
+            (self.model_resolution, self.model_resolution),
+        )
+        observation['depth'] = np.expand_dims(
+            cv2.resize(
+                observation['depth'],
+                (self.model_resolution, self.model_resolution),
+            ),
+            axis=-1,
+        )
+        return observation
 
 
 @registry.register_measure
