@@ -33,6 +33,8 @@ if [ $CMD = "multi-gpu-train" ]; then
         singularity exec --nv \
         --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
+        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
         --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
@@ -42,6 +44,8 @@ elif [ $CMD = "single-gpu-train" ]; then
     singularity exec --nv \
         --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
+        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
         --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
@@ -51,6 +55,8 @@ elif [ $CMD = "eval" ]; then
     singularity exec --nv \
         --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
+        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
         --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
@@ -60,6 +66,8 @@ elif [ $CMD = "test" ]; then
     singularity exec --nv \
         --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
+        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
         --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
@@ -69,6 +77,8 @@ elif [ $CMD = "video" ]; then
     singularity exec --nv \
         --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
+        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
         --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
@@ -78,6 +88,8 @@ elif [ $CMD = "make_dataset" ]; then
     singularity exec --nv \
         --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
+        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
         --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
@@ -87,6 +99,8 @@ elif [ $CMD = "plot_tb_data" ]; then
     singularity exec --nv \
         --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
         --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
+        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
+        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
         --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
         --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \

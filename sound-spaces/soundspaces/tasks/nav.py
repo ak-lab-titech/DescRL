@@ -7,8 +7,10 @@
 from re import A
 from typing import Any, Type, Union, List
 import logging
-from cv2 import AgastFeatureDetector_NONMAX_SUPPRESSION
+import sys
 
+import yaml
+import cv2
 import numpy as np
 import torch
 import cv2
@@ -20,7 +22,7 @@ from skimage.measure import block_reduce
 from habitat.config import Config
 from habitat.core.dataset import Episode
 import habitat_sim
-from habitat_sim.utils.common import quat_to_angle_axis
+from habitat_sim.utils.common import quat_from_angle_axis, quat_to_angle_axis
 import matplotlib.pyplot as plt
 import japanize_matplotlib
 
@@ -40,6 +42,10 @@ from soundspaces.mp3d_utils import CATEGORY_INDEX_MAPPING
 from soundspaces.utils import convert_semantic_object_to_rgb
 from soundspaces.mp3d_utils import HouseReader
 
+sys.path.append("/home/0/19B30511/av-nav/myss")
+from xgenerator.common.lang import R2RLang
+from common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
+from xgenerator.transformer_speaker.model import Seq2SeqTransformer
 
 @registry.register_sensor
 class AudioGoalSensor(Sensor):
@@ -299,6 +305,174 @@ class DirectMap(Sensor):
             angle += 360
 
         return angle 
+
+@registry.register_sensor
+class GeneratedInstruction(Sensor):
+    cls_uuid: str = "generated_instruction"
+
+    def __init__(self, *args: Any, sim: Simulator, config: Config, **kwargs: Any) -> None:
+        """
+        kwargs has Dataset and Task.
+        sim's type is soundspaces.simulator.SoundSpacesSim.
+        """
+        self._sim = sim
+
+        lang = R2RLang(name="r2r_train")
+        self.vocab_size = lang.vocab_size
+
+        xgenerator_path = kwargs["task"]._config["GENERATED_INSTRUCTION"]["XGENERATOR_PATH"]
+        ckpt_num = kwargs["task"]._config["GENERATED_INSTRUCTION"]["XGENERATOR_CKPT"]
+        self.max_instr_len = kwargs["task"]._config["GENERATED_INSTRUCTION"]["MAX_INSTRUCTION_LENGTH"]
+        self.future_step_num = kwargs["task"]._config["GENERATED_INSTRUCTION"]["FUTURE_STEP_NUM"]
+
+        with open(f"../{xgenerator_path}/config.yaml", "r") as yml:
+            xgenerator_config = yaml.safe_load(yml)
+
+        super().__init__(config=config)
+
+        self.instruction_generator = Seq2SeqTransformer(
+            num_encoder_layers=xgenerator_config["model"]["num_encoder_layers"],   
+            num_decoder_layers=xgenerator_config["model"]["num_decoder_layers"],
+            emb_size=xgenerator_config["model"]["emb_size"],
+            vocab_emb_size=xgenerator_config["model"]["vocab_embedding_size"],
+            nhead=xgenerator_config["model"]["nhead"],
+            use_image_feature=xgenerator_config["train"]["use_image_feature"],
+            vocab_size=self.vocab_size,
+            glove=lang.glove_vec,
+            dim_feedforward=xgenerator_config["model"]["dim_feedforward"],
+            dropout=xgenerator_config["model"]["dropout_ratio"],
+        )
+        self.instruction_generator.load_state_dict(
+            torch.load(f"../{xgenerator_path}/data/{ckpt_num}/seq2seq.pth")
+        )
+        if torch.cuda.is_available():
+            self.instruction_generator.to("cuda")
+
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "generated_instruction"
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.NULL
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        return spaces.MultiDiscrete([self.vocab_size for _ in range(self.max_instr_len)])
+
+    def get_observation(self, *args: Any, observations, episode: Episode, **kwargs: Any):
+        batch_size = 1 # this must be 1
+        assert batch_size == 1, "batch_size must be 1 in GeneratedInstruction"
+
+        if self._sim._episode_step_count >= len(self._sim._oracle_actions): # Found後の観測
+            generated_instruction = torch.from_numpy(np.array([BOS_IDX, EOS_IDX] + [PAD_IDX for _ in range(self.max_instr_len-2)]))
+            if torch.cuda.is_available():
+                generated_instruction = generated_instruction.cuda()
+        else:
+            image_seqs, action_seqs = self.get_obs_seqs()
+            generated_instruction = self.generate_instruction(image_seqs, action_seqs, batch_size)
+        return generated_instruction        
+    
+    def get_obs_seqs(self):
+        current_previous_step_collided = self._sim._previous_step_collided
+        current_is_episode_active = self._sim._is_episode_active
+        current_receiver_position_index = self._sim._receiver_position_index
+        current_rotation_angle = self._sim._rotation_angle
+        current_episode_step_count = self._sim._episode_step_count
+        current_prev_sim_obs = self._sim._prev_sim_obs
+
+        future_step_cnt = 0
+        image_seqs_list = []
+        action_seqs_list = []
+        while True:
+            sim_obs = self._sim._get_sim_observation()
+            observations = self._sim._sensor_suite.get_observations(sim_obs)
+            depth_img = np.squeeze(observations["depth"], axis=3)
+            rgb_img = observations["rgb"] / 255.0
+            image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
+
+            action = self._sim.get_oracle_action()
+            action_onehot = np.eye(4)[action].astype(np.int8)
+
+            image_seqs_list.append(torch.Tensor([image]))
+            action_seqs_list.append(torch.Tensor([action_onehot]))
+
+            if action == 0 or future_step_cnt == self.future_step_num:
+                break
+            self._sim.step(action)
+            future_step_cnt += 1
+        
+        self._sim._previous_step_collided = current_previous_step_collided
+        self._sim._is_episode_active = current_is_episode_active
+        self._sim._receiver_position_index = current_receiver_position_index
+        self._sim._rotation_angle = current_rotation_angle
+        self._sim._episode_step_count = current_episode_step_count
+        self._sim._prev_sim_obs = current_prev_sim_obs
+        self._sim.set_agent_state(
+            position=list(self._sim.graph.nodes[self._sim._receiver_position_index]['point']),
+            rotation=quat_from_angle_axis(np.deg2rad(self._sim._rotation_angle), np.array([0, 1, 0])),
+        )
+
+        image_seqs = torch.stack(image_seqs_list, dim=0)
+        action_seqs = torch.stack(action_seqs_list, dim=0)
+        if torch.cuda.is_available():
+            image_seqs = image_seqs.cuda()
+            action_seqs = action_seqs.cuda()
+        
+        return image_seqs, action_seqs
+        
+    def generate_instruction(self, image_seqs, action_seqs, batch_size):
+        """
+        image_seqs: (seq_l, batch, image_shape)
+        action_seqs: (seq_l, batch, 4)
+        """
+        with torch.no_grad():
+            memory = self.instruction_generator.encode(
+                src_image=image_seqs,
+                src_action=action_seqs,
+                src_mask=None,
+                src_padding_mask=None,
+            )
+            past_tokens = torch.full((1, batch_size), BOS_IDX)
+            if torch.cuda.is_available():
+                past_tokens = past_tokens.cuda()
+            
+            for i in range(self.max_instr_len-1):
+                logits = self.instruction_generator.decode(
+                    trg=past_tokens,
+                    memory=memory,
+                    tgt_mask=None,
+                    memory_mask=None,
+                    tgt_padding_mask=None,
+                    memory_key_padding_mask=None,
+                )[-1, :, :] # (batch, vocab_size)
+                _, next_tokens = logits.max(1)
+                next_tokens = next_tokens.view(1, batch_size)
+                past_tokens = torch.cat([past_tokens, next_tokens], dim=0)
+                if next_tokens.item() == EOS_IDX:
+                    rest_tokens = torch.full((self.max_instr_len-(i+2), batch_size), PAD_IDX)
+                    if torch.cuda.is_available():
+                        rest_tokens = rest_tokens.cuda()
+                    past_tokens = torch.cat(
+                        [past_tokens, rest_tokens],
+                        dim=0,
+                    )
+                    break
+        past_tokens = past_tokens.view(self.max_instr_len)
+        return past_tokens
+    
+    def make_video(self, image_seqs, output_file, frame_rate=5):
+        """
+        image_seqs: (seq_l, batch, h, w, 4)
+        """
+        frame_size = (image_seqs.shape[2], image_seqs.shape[3])
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_file, fourcc, frame_rate, frame_size)
+
+        for i in range(len(image_seqs)):
+            frame = image_seqs[i, 0, :, :, :3].to('cpu').detach().numpy().copy() * 255
+            frame = np.clip(frame, 0, 255).astype(np.uint8)
+            out.write(frame)
+
+        out.release()
+        cv2.destroyAllWindows()
 
 
 @registry.register_measure

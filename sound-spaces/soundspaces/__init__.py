@@ -17,3 +17,4 @@ from soundspaces.tasks.nav import Collision
 from soundspaces.challenge import Challenge
 from soundspaces.benchmark import Benchmark
 from soundspaces.tasks.nav import DirectMap
+from soundspaces.tasks.nav import GeneratedInstruction

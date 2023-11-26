@@ -286,7 +286,8 @@ class PPOTrainer(BaseRLTrainer):
                 actions_log_probs,
                 recurrent_hidden_states,
                 external_memory_features,
-                predict_direct_map
+                predict_direct_map,
+                _,
             ) = self.actor_critic.act(
                 step_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
@@ -455,7 +456,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value, ppo_cfg.use_gae, ppo_cfg.gamma, ppo_cfg.tau
         )
 
-        value_loss, action_loss, dist_entropy, direct_map_loss = self.agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, direct_map_loss, iprl_loss = self.agent.update(rollouts)
 
         rollouts.after_update()
 
@@ -465,6 +466,7 @@ class PPOTrainer(BaseRLTrainer):
             action_loss,
             dist_entropy,
             direct_map_loss,
+            iprl_loss,
         )
 
     def train(self) -> None:

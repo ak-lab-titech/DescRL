@@ -154,6 +154,11 @@ _TC.TASK.SPECTROGRAM_SENSOR.TYPE = "SpectrogramSensor"
 _TC.TASK.DIRECT_MAP = CN()
 _TC.TASK.DIRECT_MAP.TYPE = "DirectMap"
 # -----------------------------------------------------------------------------
+# GENERATED_INSTRUCTION
+# -----------------------------------------------------------------------------
+_TC.TASK.GENERATED_INSTRUCTION = CN()
+_TC.TASK.GENERATED_INSTRUCTION.TYPE = "GeneratedInstruction"
+# -----------------------------------------------------------------------------
 # soundspaces
 # -----------------------------------------------------------------------------
 _TC.SIMULATOR.GRID_SIZE = 0.5

@@ -9,8 +9,11 @@
 import abc
 import logging
 import itertools
+import sys
+import gc
 
 import torch
+import numpy as np
 import torch.nn as nn
 from torchsummary import summary
 
@@ -22,6 +25,10 @@ from ss_baselines.savi.models.audio_cnn import AudioCNN
 from ss_baselines.savi.models.smt_state_encoder import SMTStateEncoder
 from ss_baselines.savi.models.smt_cnn import SMTCNN
 from ss_baselines.savi.models.direct_map_encoder import DirectMapEncoder
+from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
+
+sys.path.append("/home/0/19B30511/av-nav/myss")
+from xgenerator.common.lang import R2RLang
 
 DUAL_GOAL_DELIMITER = ','
 
@@ -31,6 +38,7 @@ class Policy(nn.Module):
         super().__init__()
         self.net = net
         self.dim_actions = dim_actions
+        self.use_iprl = False
 
         self.action_distribution = CategoricalNet(
             self.net.output_size, self.dim_actions
@@ -51,9 +59,15 @@ class Policy(nn.Module):
         ext_memory_masks,
         deterministic=False,
     ):
-        features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
-            observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
-        )
+        iprl_logits = None
+        if self.use_iprl:
+            features, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits = self.net(
+                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
+            )
+        else:
+            features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
+                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
+            )
         distribution = self.action_distribution(features)
         value = self.critic(features)
 
@@ -64,12 +78,17 @@ class Policy(nn.Module):
 
         action_log_probs = distribution.log_probs(action)
 
-        return value, action, action_log_probs, rnn_hidden_states, ext_memory_feats, direct_map
+        return value, action, action_log_probs, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits
 
     def get_value(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks):
-        features, _, _ , _= self.net(
-            observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
-        )
+        if self.use_iprl:
+            features, _, _ , _, _ = self.net(
+                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
+            )
+        else:
+            features, _, _ , _ = self.net(
+                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
+            )
         return self.critic(features)
 
     def evaluate_actions(
@@ -83,17 +102,24 @@ class Policy(nn.Module):
         ext_memory,
         ext_memory_masks,
     ):
-        features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
-            observations, rnn_hidden_states, prev_direct_map, prev_actions,
-            masks, ext_memory, ext_memory_masks
-        )
+        iprl_logits = None
+        if self.use_iprl:
+            features, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits = self.net(
+                observations, rnn_hidden_states, prev_direct_map, prev_actions,
+                masks, ext_memory, ext_memory_masks
+            )
+        else:
+            features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
+                observations, rnn_hidden_states, prev_direct_map, prev_actions,
+                masks, ext_memory, ext_memory_masks
+            )
         distribution = self.action_distribution(features)
         value = self.critic(features)
 
         action_log_probs = distribution.log_probs(action)
         distribution_entropy = distribution.entropy().mean()
 
-        return value, action_log_probs, distribution_entropy, rnn_hidden_states, ext_memory_feats, direct_map
+        return value, action_log_probs, distribution_entropy, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits
 
 
 class CriticHead(nn.Module):
@@ -142,6 +168,29 @@ class AudioNavSMTPolicy(Policy):
             ),
             action_space.n
         )
+
+class IPRLAudioNavSMTPolicy(Policy):
+    def __init__(
+        self,
+        observation_space,
+        action_space,
+        direct_map_size,
+        goal_num,
+        hidden_size=128,
+        **kwargs
+    ):
+        super().__init__(
+            IPRLAudioNavSMTNet(
+                observation_space,
+                action_space,
+                direct_map_size,
+                goal_num,
+                hidden_size=hidden_size,
+                **kwargs
+            ),
+            action_space.n
+        )
+        self.use_iprl = True
 
 
 class Net(nn.Module, metaclass=abc.ABCMeta):
@@ -396,7 +445,7 @@ class AudioNavSMTNet(Net):
     def num_recurrent_layers(self):
         return -1
 
-    def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks):
+    def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, need_enc_memory=False):
         x, direct_map = self.get_features(observations, prev_direct_map, prev_actions)
 
         if self._use_belief_as_goal:
@@ -415,11 +464,14 @@ class AudioNavSMTNet(Net):
         else:
             belief = None
 
-        x_att = self.smt_state_encoder(x, ext_memory, ext_memory_masks, goal=belief)
+        x_att, enc_memory = self.smt_state_encoder(x, ext_memory, ext_memory_masks, need_enc_memory=True, goal=belief)
         if self._use_residual_connection:
             x_att = torch.cat([x_att, x], 1)
 
-        return x_att, rnn_hidden_states, x, direct_map
+        if need_enc_memory:
+            return x_att, rnn_hidden_states, x, direct_map, belief, enc_memory
+        else:
+            return x_att, rnn_hidden_states, x, direct_map
 
     def _get_one_hot(self, actions):
         if actions.shape[1] == self._action_size:
@@ -477,3 +529,73 @@ class AudioNavSMTNet(Net):
         x = torch.cat(x, dim=1)
 
         return x, direct_map
+
+
+class IPRLAudioNavSMTNet(AudioNavSMTNet):
+    def __init__(
+        self,
+        observation_space,
+        action_space,
+        direct_map_size,
+        goal_num,
+        iprl_max_instr_len,
+        iprl_num_decoder_layers,
+        iprl_vocab_emb_size,
+        iprl_emb_size,
+        iprl_nhead,
+        iprl_dim_feedforward,
+        iprl_dropout,
+        hidden_size=128,
+        use_pretrained=False,
+        pretrained_path='',
+        use_belief_as_goal=True,
+        use_label_belief=True,
+        use_location_belief=True,
+        use_belief_encoding=False,
+        normalize_category_distribution=False,
+        use_category_input=False,
+        **kwargs
+    ):
+        super().__init__(
+            observation_space,
+            action_space,
+            direct_map_size,
+            goal_num,
+            hidden_size,
+            use_pretrained,
+            pretrained_path,
+            use_belief_as_goal,
+            use_label_belief,
+            use_location_belief,
+            use_belief_encoding,
+            normalize_category_distribution,
+            use_category_input,
+        )
+        lang = R2RLang(name="r2r_train")
+        self.instruction_predictor = InstructionPredictor(
+            num_decoder_layers=iprl_num_decoder_layers,
+            vocab_emb_size=iprl_vocab_emb_size,
+            emb_size=iprl_emb_size,
+            max_instr_len=iprl_max_instr_len,
+            nhead=iprl_nhead,
+            vocab_size=lang.vocab_size,
+            glove=lang.glove_vec,
+            dim_feedforward=iprl_dim_feedforward,
+            dropout=iprl_dropout,
+            pretraining=kwargs["pretraining"],
+        )
+    
+    def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks):
+        x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
+            observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, True,
+        )
+        logits = self.instruction_predictor(
+            goal_belief=belief, # (batch, smt_hidden(=256))
+            memory=enc_memory, # (mem_size, batch, smt_hidden)
+            tgt_mask=None,
+            memory_mask=None,
+            tgt_key_padding_mask=None,
+            memory_key_padding_mask=(1 - ext_memory_masks) > 0,
+        )
+
+        return x_att, rnn_hidden_states, x, direct_map, logits

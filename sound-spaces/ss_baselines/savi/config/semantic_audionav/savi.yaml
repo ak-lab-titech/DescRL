@@ -1,6 +1,6 @@
 BASE_TASK_CONFIG_PATH: "configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml"
 TRAINER_NAME: "ddppo"
-NUM_PROCESSES: 8
+NUM_PROCESSES: 2 # 8
 SENSORS: ["DEPTH_SENSOR", "RGB_SENSOR"]
 NUM_UPDATES: 20000
 LOG_INTERVAL: 10
@@ -14,6 +14,7 @@ RL:
     clip_param: 0.2
     ppo_epoch: 2
     num_mini_batch: 2
+    iprl_loss_coef: 0.2
     value_loss_coef: 0.5
     direct_map_loss_coef: 100
     entropy_coef: 0.05
@@ -52,6 +53,15 @@ RL:
       lr: 1e-3
       use_label_belief: True
       use_location_belief: True
+    INSTRUCTION_PREDICTOR:
+      use_iprl: True # IPRLを行うかどうか
+      max_instr_len: 40
+      num_decoder_layers: 1
+      vocab_emb_size: 50
+      emb_size: 256 # IPのembサイズ。SMTのemb_sizeと同じである必要がある
+      nhead: 8
+      dim_feedforward: 512
+      dropout: 0.2
   DDPPO:
     sync_frac: 0.6
     distrib_backend: "GLOO"

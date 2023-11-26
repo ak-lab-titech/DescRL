@@ -12,6 +12,49 @@ import torch.nn as nn
 from typing import Tuple, Optional
 
 
+class MyTransformer(nn.Transformer):
+    def forward(
+        self,
+        src: torch.Tensor,
+        tgt: torch.Tensor,
+        src_mask: Optional[torch.Tensor] = None,
+        tgt_mask: Optional[torch.Tensor] = None,
+        memory_mask: Optional[torch.Tensor] = None,
+        src_key_padding_mask: Optional[torch.Tensor] = None,
+        tgt_key_padding_mask: Optional[torch.Tensor] = None,
+        memory_key_padding_mask: Optional[torch.Tensor] = None,
+        src_is_causal: Optional[bool] = None,
+        tgt_is_causal: Optional[bool] = None,
+        memory_is_causal: bool = False,
+    ):
+        is_batched = src.dim() == 3
+        if not self.batch_first and src.size(1) != tgt.size(1) and is_batched:
+            raise RuntimeError("the batch number of src and tgt must be equal")
+        elif self.batch_first and src.size(0) != tgt.size(0) and is_batched:
+            raise RuntimeError("the batch number of src and tgt must be equal")
+
+        if src.size(-1) != self.d_model or tgt.size(-1) != self.d_model:
+            raise RuntimeError("the feature number of src and tgt must be equal to d_model")
+
+        memory = self.encoder(
+            src,
+            mask=src_mask,
+            src_key_padding_mask=src_key_padding_mask,
+            # is_causal=src_is_causal,
+        )
+        output = self.decoder(
+            tgt,
+            memory,
+            tgt_mask=tgt_mask,
+            memory_mask=memory_mask,
+            tgt_key_padding_mask=tgt_key_padding_mask,
+            memory_key_padding_mask=memory_key_padding_mask,
+            # tgt_is_causal=tgt_is_causal,
+            # memory_is_causal=memory_is_causal,
+        )
+        return output, memory
+
+
 class SMTStateEncoder(nn.Module):
     """
     The core Scene Memory Transformer block from https://arxiv.org/abs/1903.03878
@@ -68,7 +111,7 @@ class SMTStateEncoder(nn.Module):
             nn.Linear(dim_feedforward, dim_feedforward),
         )
 
-        self.transformer = nn.Transformer(
+        self.transformer = MyTransformer(
             d_model=dim_feedforward,
             nhead=nhead,
             num_encoder_layers=num_encoder_layers,
@@ -89,7 +132,7 @@ class SMTStateEncoder(nn.Module):
         """
         return (1 - memory_masks) > 0
 
-    def single_forward(self, x, memory, memory_masks, goal=None):
+    def single_forward(self, x, memory, memory_masks, need_enc_memory=False, goal=None):
         r"""Forward for a non-sequence input
 
         Args:
@@ -130,37 +173,41 @@ class SMTStateEncoder(nn.Module):
         # Transformer operations
         t_masks = self._convert_masks_to_transformer_format(memory_masks)
         if goal is not None:
-            x_att = self.transformer(
+            x_att, enc_memory = self.transformer(
                 memory,
                 goal.unsqueeze(0),
                 src_key_padding_mask=t_masks,
                 memory_key_padding_mask=t_masks,
-            )[-1]
+            )
         else:
             decode_memory = False
             if decode_memory:
-                x_att = self.transformer(
+                x_att, enc_memory = self.transformer(
                     memory,
                     memory,
                     src_key_padding_mask=t_masks,
                     tgt_key_padding_mask=t_masks,
                     memory_key_padding_mask=t_masks,
-                )[-1]
+                )
             else:
-                x_att = self.transformer(
+                x_att, enc_memory = self.transformer(
                     memory,
                     memory[-1:],
                     src_key_padding_mask=t_masks,
                     memory_key_padding_mask=t_masks,
-                )[-1]
+                )
+        x_att = x_att[-1]
 
-        return x_att
+        if need_enc_memory:
+            return x_att, enc_memory
+        else:
+            return x_att
 
     @property
     def hidden_state_size(self):
         return self._dim_feedforward
 
-    def forward(self, x, memory, *args, **kwargs):
+    def forward(self, x, memory, memory_masks, need_enc_memory=False, *args, **kwargs):
         """
         Single input case:
             Inputs:
@@ -174,7 +221,7 @@ class SMTStateEncoder(nn.Module):
                 memory_masks - (T*N, M)
         """
         assert x.size(0) == memory.size(1)
-        return self.single_forward(x, memory, *args, **kwargs)
+        return self.single_forward(x, memory, memory_masks, need_enc_memory=need_enc_memory, *args, **kwargs)
 
     def _encode_pose(self, agent_pose, memory_pose):
         """

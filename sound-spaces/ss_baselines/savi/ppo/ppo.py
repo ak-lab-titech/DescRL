@@ -5,10 +5,15 @@
 
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
+import sys
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+sys.path.append("/home/0/19B30511/av-nav/myss")
+from xgenerator.common.load_lmdb import PAD_IDX
 
 EPS_PPO = 1e-5
 
@@ -17,9 +22,11 @@ class PPO(nn.Module):
     def __init__(
         self,
         actor_critic,
+        use_iprl,
         clip_param,
         ppo_epoch,
         num_mini_batch,
+        iprl_loss_coef,
         value_loss_coef,
         entropy_coef,
         direct_map_loss_coef,
@@ -33,6 +40,11 @@ class PPO(nn.Module):
         super().__init__()
 
         self.actor_critic = actor_critic
+
+        self.use_iprl = use_iprl
+        self.iprl_loss_coef = iprl_loss_coef
+        self.iprl_loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)
+
 
         self.clip_param = clip_param
         self.ppo_epoch = ppo_epoch
@@ -68,6 +80,7 @@ class PPO(nn.Module):
         action_loss_epoch = 0
         dist_entropy_epoch = 0
         direct_map_loss_epoch = 0
+        iprl_loss_epoch = 0
 
         for e in range(self.ppo_epoch):
             data_generator = rollouts.recurrent_generator(
@@ -98,6 +111,7 @@ class PPO(nn.Module):
                     _,
                     _,
                     predict_direct_map,
+                    iprl_logits,
                 ) = self.actor_critic.evaluate_actions(
                     obs_batch,
                     recurrent_hidden_states_batch,
@@ -138,22 +152,25 @@ class PPO(nn.Module):
                 
                 if predict_direct_map is not None:
                     direct_map_loss = 0.5 * (obs_batch["direct_map"] - predict_direct_map).pow(2).mean()
+                else:
+                    direct_map_loss = 0
+                
+                if self.use_iprl:
+                    # logits: (instr_len, batch, vocab_size)
+                    iprl_targets = obs_batch["generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
+                    iprl_loss = self.iprl_loss_fn(iprl_logits.reshape(-1, iprl_logits.shape[-1]), iprl_targets.reshape(-1))
+                else:
+                    iprl_loss = 0
 
                 self.optimizer.zero_grad()
 
-                if predict_direct_map is not None:
-                    total_loss = (
-                        value_loss * self.value_loss_coef
-                        + action_loss
-                        - dist_entropy * self.entropy_coef
-                        + direct_map_loss * self.direct_map_loss_coef
-                    )
-                else:
-                    total_loss = (
-                        value_loss * self.value_loss_coef
-                        + action_loss
-                        - dist_entropy * self.entropy_coef
-                    )
+                total_loss = (
+                    value_loss * self.value_loss_coef
+                    + action_loss
+                    - dist_entropy * self.entropy_coef
+                    + direct_map_loss * self.direct_map_loss_coef
+                    + iprl_loss * self.iprl_loss_coef
+                )
 
                 self.before_backward(total_loss)
                 total_loss.backward()
@@ -170,6 +187,10 @@ class PPO(nn.Module):
                     direct_map_loss_epoch += direct_map_loss.item()
                 else:
                     direct_map_loss_epoch += 0
+                if self.use_iprl:
+                    iprl_loss_epoch += iprl_loss.item()
+                else:
+                    iprl_loss_epoch += 0
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
@@ -177,8 +198,9 @@ class PPO(nn.Module):
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
         direct_map_loss_epoch /= num_updates
+        iprl_loss_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, direct_map_loss_epoch
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, direct_map_loss_epoch, iprl_loss_epoch
 
     def before_backward(self, loss):
         pass
