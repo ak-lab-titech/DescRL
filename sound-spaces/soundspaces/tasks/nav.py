@@ -379,7 +379,7 @@ class GeneratedInstruction(Sensor):
         while True:
             sim_obs = self._sim._get_sim_observation()
             observations = self._sim._sensor_suite.get_observations(sim_obs)
-            image_shape = np.shape(observations["rgb"])
+            image_shape = np.shape(observations["depth"])
 
             # If the size of the observed image does not match the input size of the model, resize it (mainly for video)
             if image_shape[0] != self.model_resolution:
