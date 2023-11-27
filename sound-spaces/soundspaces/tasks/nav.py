@@ -361,13 +361,8 @@ class GeneratedInstruction(Sensor):
         batch_size = 1 # this must be 1
         assert batch_size == 1, "batch_size must be 1 in GeneratedInstruction"
 
-        if self._sim._episode_step_count >= len(self._sim._oracle_actions): # Found後の観測
-            generated_instruction = torch.from_numpy(np.array([BOS_IDX, EOS_IDX] + [PAD_IDX for _ in range(self.max_instr_len-2)]))
-            if torch.cuda.is_available():
-                generated_instruction = generated_instruction.cuda()
-        else:
-            image_seqs, action_seqs = self.get_obs_seqs()
-            generated_instruction = self.generate_instruction(image_seqs, action_seqs, batch_size)
+        image_seqs, action_seqs = self.get_obs_seqs()
+        generated_instruction = self.generate_instruction(image_seqs, action_seqs, batch_size)
         return generated_instruction        
     
     def get_obs_seqs(self):
@@ -386,6 +381,7 @@ class GeneratedInstruction(Sensor):
             observations = self._sim._sensor_suite.get_observations(sim_obs)
             image_shape = np.shape(observations["rgb"])
 
+            # If the size of the observed image does not match the input size of the model, resize it (mainly for video)
             if image_shape[0] != self.model_resolution:
                 observations = self.resize_observation(observations)
 
@@ -396,7 +392,7 @@ class GeneratedInstruction(Sensor):
             rgb_img = observations["rgb"] / 255.0
             image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
 
-            action = self._sim.get_oracle_action()
+            action = self._sim.get_oracle_action_from_current_pos()
             action_onehot = np.eye(4)[action].astype(np.int8)
 
             image_seqs_list.append(torch.Tensor([image]))
