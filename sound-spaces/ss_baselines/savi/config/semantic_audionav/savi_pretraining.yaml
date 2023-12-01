@@ -36,26 +36,26 @@ RL:
     reward_window_size: 50
     use_normalized_advantage: False
     policy_type: "smt"
-    use_belief_predictor: True # BeliefPredictorを使うかどうか
-    use_external_memory: True
+    use_belief_predictor: True # belief_predictorを使うかどうか。FalseならbeliefはNoneになる
+    use_external_memory: True  # external_memoryを使うかどうか
     SCENE_MEMORY_TRANSFORMER:
-      memory_size: 1
-      hidden_size: 256
-      nhead: 8
-      num_encoder_layers: 1
-      num_decoder_layers: 1
+      memory_size: 1 # ExternalMemoryのcapacity
+      hidden_size: 256 # Transformerのhiddenサイズ
+      nhead: 8 # Transformerのヘッド数
+      num_encoder_layers: 1 # Transformerのencoder数
+      num_decoder_layers: 1 # Transformerのdecoder数
       dropout: 0.0
       activation: 'relu'
-      use_pretrained: False
-      pretrained_path: ''
-      freeze_encoders: False
-      pretraining: True
-    BELIEF_PREDICTOR:
-      online_training: True # BeliefPredictorのpredictorと、actor_criticのgoal_enc, visual_enc, action_encをBeliefPredictorのoptimizerのparamsに追加
-      train_encoder: False # これがFalseならvisual_enc, action_enc, action_encをBeliefPredictorのoptimizerに入れない
-      lr: 1e-3
-      use_label_belief: True    # labelのbeliefを使うかどうか
-      use_location_belief: True # locationのbeliefを使うかどうか
+      use_pretrained: False # SMTのpretrainedのモデルを使うかどうか
+      pretrained_path: '' # pretrainedのモデルを使う場合のpretrainedのモデルのパス
+      freeze_encoders: False # encoder(visual, action, goal)をfreezeさせるかどうか
+      pretraining: True # savi1stであるかどうか（正確にはexternal_memoryからの入力をmaskするかどうか）
+    BELIEF_PREDICTOR: 
+      online_training: True # BeliefPredictorのpredictorを学習するかどうか
+      train_encoder: False # visual_enc, action_enc, goal_encをBeliefPredictorのoptimizerに入れるかどうか
+      lr: 1e-3 
+      use_label_belief: True # Categoryのbeliefを使うかどうか
+      use_location_belief: True # Locationのbeliefを使うかどうか
     INSTRUCTION_PREDICTOR:
       use_iprl: True # IPRLを行うかどうか
       max_instr_len: 40
@@ -71,6 +71,6 @@ RL:
     rnn_type: "GRU"
     num_recurrent_layers: 1
     backbone: "custom_resnet18"
-    pretrained_weights: "" # pretrainedのモデルを使う場合、どのパスから持ってくるか
-    pretrained: False # pretrainedのモデルを使うかどうか。2ndではTrueにする。
-    reset_critic: False # criticを初期化するか
+    pretrained_weights: "" # SMT以外の事前学習済みモデルを使う場合の事前学習済みモデルのパス
+    pretrained: False # 事前学習済みモデルを使うかどうか。ただしSMT以外(encoder, actor, critic)
+    reset_critic: False # criticをリセットするかどうか

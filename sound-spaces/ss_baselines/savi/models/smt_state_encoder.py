@@ -100,7 +100,7 @@ class SMTStateEncoder(nn.Module):
         if pose_indices is not None:
             pose_dims = pose_indices[1] - pose_indices[0]
             self.pose_encoder = nn.Linear(5, 16)
-            input_size += 16 - pose_dims
+            input_size += 16 - pose_dims # 元のposeは入力しないのでpose_dims引く
             self._use_pose_encoding = True
         else:
             self._use_pose_encoding = False

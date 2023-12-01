@@ -426,8 +426,8 @@ class ExternalMemory:
 
         Inputs:
             num_envs - number of parallel environments
+            total_size - capacity + additional buffer size (PPO.num_steps) for rollout updates
             capacity - total capacity of the memory per episode
-            total_size - capacity + additional buffer size for rollout updates
             dim - size of observations
             num_copies - number of copies of the data to maintain for efficient training
         """

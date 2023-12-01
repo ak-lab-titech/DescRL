@@ -101,7 +101,7 @@ class DDPPOTrainer(PPOTrainer):
                                   list(self.actor_critic.net.visual_encoder.parameters()) + \
                                   list(self.actor_critic.net.action_encoder.parameters())
                     self.belief_predictor.optimizer = torch.optim.Adam(params, lr=belief_cfg.lr)
-                self.belief_predictor.freeze_encoders()
+                self.belief_predictor.freeze_encoders() # classifierをfreezeさせる。online_trainingでなければpredictorも
 
         elif ppo_cfg.policy_type == 'smt':
             smt_cfg = ppo_cfg.SCENE_MEMORY_TRANSFORMER
@@ -176,7 +176,7 @@ class DDPPOTrainer(PPOTrainer):
                                   list(self.actor_critic.net.visual_encoder.parameters()) + \
                                   list(self.actor_critic.net.action_encoder.parameters())
                     self.belief_predictor.optimizer = torch.optim.Adam(params, lr=belief_cfg.lr)
-                self.belief_predictor.freeze_encoders()
+                self.belief_predictor.freeze_encoders() # classifierをfreezeさせる。online_trainingでなければpredictorも
 
         else:
             raise ValueError(f'Policy type {ppo_cfg.policy_type} is not defined!')
