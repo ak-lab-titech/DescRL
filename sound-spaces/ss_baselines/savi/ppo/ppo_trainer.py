@@ -40,7 +40,7 @@ from ss_baselines.common.utils import (
     resize_observation,
     NpEncoder
 )
-from ss_baselines.savi.ppo.policy import AudioNavBaselinePolicy, AudioNavSMTPolicy
+from ss_baselines.savi.ppo.policy import AudioNavBaselinePolicy, AudioNavSMTPolicy, IPRLAudioNavSMTPolicy
 from ss_baselines.savi.ppo.ppo import PPO
 from ss_baselines.savi.ppo.slurm_utils import (
     EXIT,
@@ -145,6 +145,7 @@ class PPOTrainer(BaseRLTrainer):
                     iprl_nhead=iprl_cfg.nhead,
                     iprl_dim_feedforward=iprl_cfg.dim_feedforward,
                     iprl_dropout=iprl_cfg.dropout,
+                    iprl_use_gt_D=iprl_cfg.iprl_use_gt_D,
                     hidden_size=smt_cfg.hidden_size,
                     nhead=smt_cfg.nhead,
                     num_encoder_layers=smt_cfg.num_encoder_layers,

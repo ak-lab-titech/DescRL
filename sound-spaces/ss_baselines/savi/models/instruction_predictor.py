@@ -47,13 +47,14 @@ class InstructionPredictor(nn.Module):
         self.emb_size = emb_size
         self.max_instr_len = max_instr_len
         self._pretraining = pretraining
+        self.belief_dim = 23
         super(InstructionPredictor, self).__init__()
 
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=emb_size, nhead=nhead, dim_feedforward=dim_feedforward
         )
         self.decoder = nn.TransformerDecoder(decoder_layer=decoder_layer, num_layers=num_decoder_layers)
-        self.generator = nn.Linear(emb_size+emb_size, vocab_size)
+        self.generator = nn.Linear(emb_size+self.belief_dim, vocab_size)
         self.word_vocab_emb = nn.Embedding(vocab_size, vocab_emb_size)
         if glove is not None:
             print('Using GloVe embedding')

@@ -767,9 +767,9 @@ class SoundSpacesSim(Simulator, ABC):
     def get_oracle_action(self):
         return self._oracle_actions[self._episode_step_count]
 
-    def get_oracle_action_from_current_pos(self):
+    def get_oracle_actions_from_current_pos(self):
         oracle_actions = self.compute_oracle_actions()
-        return oracle_actions[0]
+        return oracle_actions
 
     @property
     def previous_step_collided(self):

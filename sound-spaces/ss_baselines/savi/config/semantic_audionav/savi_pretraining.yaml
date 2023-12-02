@@ -65,6 +65,7 @@ RL:
       nhead: 8
       dim_feedforward: 512
       dropout: 0.2
+      iprl_use_gt_D: True
   DDPPO:
     sync_frac: 0.6
     distrib_backend: "GLOO"

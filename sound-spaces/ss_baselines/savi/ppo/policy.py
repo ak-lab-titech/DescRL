@@ -545,6 +545,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         iprl_nhead,
         iprl_dim_feedforward,
         iprl_dropout,
+        iprl_use_gt_D,
         hidden_size=128,
         use_pretrained=False,
         pretrained_path='',
@@ -584,13 +585,20 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             dropout=iprl_dropout,
             pretraining=kwargs["pretraining"],
         )
+        self.iprl_use_gt_D = iprl_use_gt_D
     
     def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks):
         x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
             observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, True,
         )
+        if self.iprl_use_gt_D:
+            category = observations["category"] # (batch, 21)
+            location = observations["pointgoal_with_gps_compass"] # (batch, 2)
+            D_t = torch.cat([category, -location[:, 1], location[:, 0]], dim=1)
+        else:
+            D_t = belief[:, :21 + 2*self.goal_num]
         logits = self.instruction_predictor(
-            goal_belief=belief, # (batch, smt_hidden(=256))
+            goal_belief=D_t, # (batch, 23)
             memory=enc_memory, # (mem_size, batch, smt_hidden)
             tgt_mask=None,
             memory_mask=None,

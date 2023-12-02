@@ -373,10 +373,10 @@ class GeneratedInstruction(Sensor):
         current_episode_step_count = self._sim._episode_step_count
         current_prev_sim_obs = self._sim._prev_sim_obs
 
-        future_step_cnt = 0
         image_seqs_list = []
         action_seqs_list = []
-        while True:
+        oracle_actions = self._sim.get_oracle_actions_from_current_pos()
+        for i in range(self.future_step_num):
             sim_obs = self._sim._get_sim_observation()
             observations = self._sim._sensor_suite.get_observations(sim_obs)
             image_shape = np.shape(observations["depth"])
@@ -392,16 +392,15 @@ class GeneratedInstruction(Sensor):
             rgb_img = observations["rgb"] / 255.0
             image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
 
-            action = self._sim.get_oracle_action_from_current_pos()
+            action = oracle_actions[i]
             action_onehot = np.eye(4)[action].astype(np.int8)
 
             image_seqs_list.append(torch.Tensor([image]))
             action_seqs_list.append(torch.Tensor([action_onehot]))
 
-            if action == 0 or future_step_cnt == self.future_step_num:
+            if action == 0:
                 break
             self._sim.step(action)
-            future_step_cnt += 1
         
         self._sim._previous_step_collided = current_previous_step_collided
         self._sim._is_episode_active = current_is_episode_active
