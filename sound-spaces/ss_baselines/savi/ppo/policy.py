@@ -594,11 +594,13 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         if self.iprl_use_gt_D:
             category = observations["category"] # (batch, 21)
             location = observations["pointgoal_with_gps_compass"] # (batch, 2)
-            D_t = torch.cat([category, -location[:, 1], location[:, 0]], dim=1)
+            location = torch.cat([-location[:, 1].unsqueeze(1), location[:, 0].unsqueeze(1)], dim=1)
         else:
-            D_t = belief[:, :21 + 2*self.goal_num]
+            category = belief[:, :21]
+            location = belief[:, 21:21+2*self.goal_num]
         logits = self.instruction_predictor(
-            goal_belief=D_t, # (batch, 23)
+            category=category, # (batch, 21)
+            location=location, # (batch, 2)
             memory=enc_memory, # (mem_size, batch, smt_hidden)
             tgt_mask=None,
             memory_mask=None,
