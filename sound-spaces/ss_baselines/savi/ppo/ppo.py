@@ -158,7 +158,7 @@ class PPO(nn.Module):
                 if self.use_iprl:
                     # logits: (instr_len, batch, vocab_size)
                     iprl_targets = obs_batch["generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
-                    iprl_loss = self.iprl_loss_fn(iprl_logits.reshape(-1, iprl_logits.shape[-1]), iprl_targets.reshape(-1))
+                    iprl_loss = self.iprl_loss_fn(iprl_logits.view(-1, iprl_logits.shape[-1]), iprl_targets.reshape(-1))
                 else:
                     iprl_loss = 0
 

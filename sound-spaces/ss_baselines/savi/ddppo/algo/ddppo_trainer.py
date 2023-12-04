@@ -143,6 +143,7 @@ class DDPPOTrainer(PPOTrainer):
                     iprl_dim_feedforward=iprl_cfg.dim_feedforward,
                     iprl_dropout=iprl_cfg.dropout,
                     iprl_use_gt_D=iprl_cfg.iprl_use_gt_D,
+                    iprl_feedback=iprl_cfg.feedback,
                     hidden_size=smt_cfg.hidden_size,
                     nhead=smt_cfg.nhead,
                     num_encoder_layers=smt_cfg.num_encoder_layers,

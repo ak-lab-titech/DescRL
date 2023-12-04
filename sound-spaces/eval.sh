@@ -33,7 +33,9 @@ if [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-1st" ]; then
         EVAL.SPLIT val \
         USE_SYNC_VECENV True \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
-        RL.DDPPO.pretrained False
+        RL.DDPPO.pretrained False \
+        RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
+        RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
 elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-2nd" ]; then
     python ss_baselines/savi/run.py \
         --run-type eval \
@@ -48,7 +50,8 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-2nd" ]; then
         USE_SYNC_VECENV True \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
         RL.DDPPO.pretrained False \
-        RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False
+        RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
+        RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
 fi

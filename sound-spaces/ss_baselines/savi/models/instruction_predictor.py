@@ -84,13 +84,19 @@ class InstructionPredictor(nn.Module):
     def forward(self,
         category: torch.Tensor,
         location: torch.Tensor,
+        target: torch.Tensor,
         memory: torch.Tensor,
-        tgt_mask: torch.Tensor,
-        memory_mask: torch.Tensor,
-        tgt_key_padding_mask: torch.Tensor,
         memory_key_padding_mask: torch.Tensor
     ):
         memory_key_padding_mask = self.convert_memory_masks(memory_key_padding_mask)
+
+        if target is not None:
+            logits = self.teacher_forcing_forward(category, location, target, memory, memory_key_padding_mask)
+        else:
+            logits = self.student_forcing_forward(category, location, memory, memory_key_padding_mask)
+        return logits
+
+    def student_forcing_forward(self, category, location, memory, memory_key_padding_mask):
         batch_size = category.shape[0]     
         past_tokens = torch.full((1, batch_size), BOS_IDX)
         past_tokens = past_tokens.cuda() if torch.cuda.is_available() else past_tokens
@@ -104,8 +110,6 @@ class InstructionPredictor(nn.Module):
                         tgt=past_words, # (instr_len, batch, embed)
                         memory=memory, # (mem_size(=152), batch, smt_hidden)
                         tgt_mask=tgt_mask,
-                        memory_mask=memory_mask,
-                        tgt_key_padding_mask=tgt_key_padding_mask,
                         memory_key_padding_mask=memory_key_padding_mask,
                     )[-1, :, :]
                     logits = self.generator(decoder_output) # (batch, 2506)
@@ -118,14 +122,29 @@ class InstructionPredictor(nn.Module):
                 past_words = self.embed_word_tokens(past_tokens, category, location)
                 decoder_output = self.decoder(
                     tgt=past_words, # (instr_len, batch, embed)
-                    memory=memory, # (mem_size(=152), batch, smt_hidden)
+                    memory=memory, # (mem_size, batch, smt_hidden)
                     tgt_mask=tgt_mask,
-                    memory_mask=memory_mask,
-                    tgt_key_padding_mask=tgt_key_padding_mask,
                     memory_key_padding_mask=memory_key_padding_mask,
                 )
                 logits = self.generator(decoder_output) # (instr_len, batch, vocab_size)
         return logits
+
+    def teacher_forcing_forward(self, category, location, target, memory, memory_key_padding_mask):
+        _, instr_len = target.size()
+        target = target[:, :-1].permute(1, 0).long() # (instr_len, batch)
+        
+        tgt_mask = torch.triu(torch.full((instr_len-1, instr_len-1), 1), diagonal=1).type(torch.bool)
+        tgt_mask = tgt_mask.cuda() if torch.cuda.is_available() else tgt_mask
+        past_words = self.embed_word_tokens(target, category, location)
+        decoder_output = self.decoder(
+            tgt=past_words, # (instr_len, batch, embed)
+            memory=memory, # (mem_size, batch, smt_hidden)
+            tgt_mask=tgt_mask,
+            memory_key_padding_mask=memory_key_padding_mask,
+        )
+        logits = self.generator(decoder_output) # (instr_len, batch, vocab_size)
+        return logits
+
     
     def embed_word_tokens(self, word_tokens, category, location):
         """
@@ -137,7 +156,7 @@ class InstructionPredictor(nn.Module):
         embs = torch.cat([self.category_emb(category), location], dim=1) # (batch, 50)
         embs = embs.view(1, batch_size, self.vocab_emb_size)
         if instr_len > 1:
-            word_tokens = word_tokens[1:, :].view((instr_len-1)*batch_size) # (instr_len*batch, )
+            word_tokens = word_tokens[1:, :].reshape((instr_len-1)*batch_size) # (instr_len*batch, )
             word_vocab_embs = self.word_vocab_emb(word_tokens) # (instr_len*batch, 50)
             embs = torch.cat(
                 [

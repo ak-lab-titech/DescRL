@@ -66,7 +66,8 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi" ]; then
         TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE False \
         DISPLAY_RESOLUTION 512 \
         TEST_EPISODE_COUNT $VIDEO_NUM \
-        RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False
+        RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
+        RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
 fi

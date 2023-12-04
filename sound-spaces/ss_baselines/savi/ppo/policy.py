@@ -546,6 +546,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         iprl_dim_feedforward,
         iprl_dropout,
         iprl_use_gt_D,
+        iprl_feedback,
         hidden_size=128,
         use_pretrained=False,
         pretrained_path='',
@@ -586,6 +587,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             pretraining=kwargs["pretraining"],
         )
         self.iprl_use_gt_D = iprl_use_gt_D
+        self.feedback = iprl_feedback
     
     def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks):
         x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
@@ -598,13 +600,19 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         else:
             category = belief[:, :21]
             location = belief[:, 21:21+2*self.goal_num]
+        
+        if self.feedback == "teacher":
+            target = observations["generated_instruction"] # (batch, instr_len)
+        elif self.feedback == "student":
+            target = None
+        else:
+            raise Exception(f"feedback must be 'teacher' or 'student', not {self.feedback}")
+
         logits = self.instruction_predictor(
             category=category, # (batch, 21)
             location=location, # (batch, 2)
+            target=target,
             memory=enc_memory, # (mem_size, batch, smt_hidden)
-            tgt_mask=None,
-            memory_mask=None,
-            tgt_key_padding_mask=None,
             memory_key_padding_mask=(1 - ext_memory_masks) > 0,
         )
 
