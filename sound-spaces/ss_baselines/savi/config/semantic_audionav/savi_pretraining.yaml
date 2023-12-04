@@ -1,6 +1,6 @@
 BASE_TASK_CONFIG_PATH: "configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml"
 TRAINER_NAME: "ddppo"
-NUM_PROCESSES: 6 # 8
+NUM_PROCESSES: 8 # IPRLは6なら動く(はず)
 SENSORS: ["DEPTH_SENSOR", "RGB_SENSOR"]
 NUM_UPDATES: 20000
 LOG_INTERVAL: 10
@@ -57,7 +57,7 @@ RL:
       use_label_belief: True # Categoryのbeliefを使うかどうか
       use_location_belief: True # Locationのbeliefを使うかどうか
     INSTRUCTION_PREDICTOR:
-      use_iprl: True # IPRLを行うかどうか
+      use_iprl: False # IPRLを行うかどうか
       max_instr_len: 40
       num_decoder_layers: 1
       vocab_emb_size: 50
