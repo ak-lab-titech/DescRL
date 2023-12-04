@@ -61,6 +61,7 @@
 3. 実行するシェルスクリプトの中身(train.sh, test.sh, video.shなど)を必要に応じて変更する
     * videoとtestの場合はファイル頭部の変数と、AV-NavなのかSAViなのか
     * trainの場合はモデルを保存するディレクトリ名と、AV-NavなのかSAVi 1stなのかSAVi 2ndなのか
+    * w/ IPRLで学習したものをevalとtestする場合でも、SNSORSからGENERATED_INSTRUCTIONを外した方が高速化されるので外した方が良い。evalとtestでは使わないので
 4. `qsub -g tga-aklab job.sh`を実行
 
 

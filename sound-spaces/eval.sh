@@ -20,7 +20,7 @@ echo DATASET_NAME=$DATASET_NAME
 echo PREV_CKPT_IND=$PREV_CKPT_IND
 
 
-if [ $ENV = "ss1-savi" && $MODEL = "savi-1st" ]; then
+if [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-1st" ]; then
     python ss_baselines/savi/run.py \
         --run-type eval \
         --exp-config ss_baselines/savi/config/semantic_audionav/savi_pretraining.yaml \
@@ -34,7 +34,7 @@ if [ $ENV = "ss1-savi" && $MODEL = "savi-1st" ]; then
         USE_SYNC_VECENV True \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
         RL.DDPPO.pretrained False
-elif [ $ENV = "ss1-savi" && $MODEL = "savi-2nd" ]; then
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-2nd" ]; then
     python ss_baselines/savi/run.py \
         --run-type eval \
         --exp-config ss_baselines/savi/config/semantic_audionav/savi.yaml \
@@ -47,7 +47,8 @@ elif [ $ENV = "ss1-savi" && $MODEL = "savi-2nd" ]; then
         EVAL.SPLIT val \
         USE_SYNC_VECENV True \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
-        RL.DDPPO.pretrained False
+        RL.DDPPO.pretrained False \
+        RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
 fi

@@ -54,7 +54,8 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi" ]; then
         EVAL.SPLIT test \
         RL.DDPPO.pretrained False \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
-        USE_SYNC_VECENV True
+        USE_SYNC_VECENV True \
+        RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False
 elif [ $ENV = "ss2-avnav" ] && [ $MODEL = "random" ]; then
     python ss_baselines/common/simple_agents.py \
          --success-distance 1.0 \
