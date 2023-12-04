@@ -363,7 +363,7 @@ class GeneratedInstruction(Sensor):
 
         image_seqs, action_seqs = self.get_obs_seqs()
         generated_instruction = self.generate_instruction(image_seqs, action_seqs, batch_size)
-        return generated_instruction        
+        return generated_instruction
     
     def get_obs_seqs(self):
         current_previous_step_collided = self._sim._previous_step_collided
@@ -376,7 +376,10 @@ class GeneratedInstruction(Sensor):
         image_seqs_list = []
         action_seqs_list = []
         oracle_actions = self._sim.get_oracle_actions_from_current_pos()
-        for i in range(self.future_step_num):
+        future_step_cnt = 0
+        # for分だと-1の時に対応できないのでwhile
+        while True:
+            future_step_cnt += 1
             sim_obs = self._sim._get_sim_observation()
             observations = self._sim._sensor_suite.get_observations(sim_obs)
             image_shape = np.shape(observations["depth"])
@@ -392,13 +395,11 @@ class GeneratedInstruction(Sensor):
             rgb_img = observations["rgb"] / 255.0
             image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
 
-            action = oracle_actions[i]
+            action = oracle_actions[future_step_cnt-1]
             action_onehot = np.eye(4)[action].astype(np.int8)
-
-            image_seqs_list.append(torch.Tensor([image]))
-            action_seqs_list.append(torch.Tensor([action_onehot]))
-
-            if action == 0:
+            image_seqs_list.append([image])
+            action_seqs_list.append([action_onehot])
+            if action == 0 or future_step_cnt == self.future_step_num:
                 break
             self._sim.step(action)
         
@@ -413,8 +414,8 @@ class GeneratedInstruction(Sensor):
             rotation=quat_from_angle_axis(np.deg2rad(self._sim._rotation_angle), np.array([0, 1, 0])),
         )
 
-        image_seqs = torch.stack(image_seqs_list, dim=0)
-        action_seqs = torch.stack(action_seqs_list, dim=0)
+        image_seqs = torch.from_numpy(np.array(image_seqs_list))
+        action_seqs = torch.from_numpy(np.array(action_seqs_list))
         if torch.cuda.is_available():
             image_seqs = image_seqs.cuda()
             action_seqs = action_seqs.cuda()
