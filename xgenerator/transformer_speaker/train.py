@@ -88,32 +88,52 @@ def rollout(seq2seq_model, inputs, targets, max_instruction_length=80, feedback=
         gc.collect()
         _, batch_size = targets.shape
         preds = try_cuda(torch.full((1, batch_size), BOS_IDX))
-        logits_list = []
         for i in range(max_instruction_length-1):
-            if seq2seq_model.__class__.__name__ == "DistributedDataParallel":
-                logits = seq2seq_model.module.decode(
-                    trg=preds,
-                    memory=memory,
-                    tgt_mask=None,
-                    memory_mask=None,
-                    tgt_padding_mask=None,
-                    memory_key_padding_mask=path_mask,
-                )[-1, :, :] # (batch, vocab_size)
+            tgt_mask = torch.triu(torch.full((i+1, i+1), 1), diagonal=1).type(torch.bool)
+            tgt_mask = tgt_mask.cuda() if torch.cuda.is_available() else tgt_mask
+            if i != max_instruction_length-2:
+                with torch.no_grad():
+                    if seq2seq_model.__class__.__name__ == "DistributedDataParallel":
+                        logits = seq2seq_model.module.decode(
+                            trg=preds,
+                            memory=memory,
+                            tgt_mask=tgt_mask,
+                            memory_mask=None,
+                            tgt_padding_mask=None,
+                            memory_key_padding_mask=path_mask,
+                        )[-1, :, :] # (batch, vocab_size)
+                    else:
+                        logits = seq2seq_model.decode(
+                            trg=preds,
+                            memory=memory,
+                            tgt_mask=tgt_mask,
+                            memory_mask=None,
+                            tgt_padding_mask=None,
+                            memory_key_padding_mask=path_mask,
+                        )[-1, :, :] # (batch, vocab_size)
+                    _, next_word = logits.max(1)
+                    next_word = next_word.view(1, batch_size)
+                    preds = torch.cat([preds, next_word], dim=0) # (target_len, batch)
             else:
-                logits = seq2seq_model.decode(
-                    trg=preds,
-                    memory=memory,
-                    tgt_mask=None,
-                    memory_mask=None,
-                    tgt_padding_mask=None,
-                    memory_key_padding_mask=path_mask,
-                )[-1, :, :] # (batch, vocab_size)
-            logits_list.append(logits)
-            _, next_word = logits.max(1)
-            next_word = next_word.view(1, batch_size)
-            preds = torch.cat([preds, next_word], dim=0) # (target_len, batch)
-            # TODO 全てがEOSだった場合終了
-        logits = try_cuda(torch.stack(logits_list, dim=0)) # (target_len, batch, vocab_size)
+                if seq2seq_model.__class__.__name__ == "DistributedDataParallel":
+                    logits = seq2seq_model.module.decode(
+                        trg=preds,
+                        memory=memory,
+                        tgt_mask=tgt_mask,
+                        memory_mask=None,
+                        tgt_padding_mask=None,
+                        memory_key_padding_mask=path_mask,
+                    )
+                else:
+                    logits = seq2seq_model.module.decode(
+                        trg=preds,
+                        memory=memory,
+                        tgt_mask=tgt_mask,
+                        memory_mask=None,
+                        tgt_padding_mask=None,
+                        memory_key_padding_mask=path_mask,
+                    )
+                    
     else:
         raise Exception(f"feedback must be 'teacher' or 'student', not {feedback}.")
 

@@ -16,14 +16,14 @@ train:
   val_seen_data_num: 778
   val_unseen_data_path: "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma_128/val_unseen_trajectories.lmdb"
   val_unseen_data_num: 1839
-  batch_size: 128 # student forceでは64
+  batch_size: 128
   use_image_feature: False
   dataset_drop_last: True
   learning_rate: 0.0001
   weight_decay: 0.0005
   skip_frame_per: 4
   feedback: "teacher" # teacher, student
-  max_instruction_length: 80 # student forceでは50
+  max_instruction_length: 80
   n_iters: 20000
   save_every: 10
   log_every: 1
