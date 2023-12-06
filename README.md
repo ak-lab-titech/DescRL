@@ -76,7 +76,7 @@
 
 #### IPRLの事前学習
 1. `myss/sound-spaces/configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml`の`TASK.SENSORS`に`'ORACLE_ACTION_SENSOR'`を追加
-2. `myss/sound-spaces/ss_baselines/savi/config/semantic_audionav/savi.yaml`のSCENE_MEMORY_TRANSFORMERの`use_pretrained`をTrueにして、`pretrained_path`を指定する。
+2. IPRLの事前学習後にこの重みを利用したい場合は、`myss/sound-spaces/ss_baselines/savi/config/semantic_audionav/savi.yaml`のSCENE_MEMORY_TRANSFORMERの`use_pretrained`をTrueにして、`pretrained_path`を指定する。
 
 #### ゴール数の変更
 1. configの`SIMULATOR.AUDIO.NUM`を変更する
