@@ -588,6 +588,8 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         )
         self.iprl_use_gt_D = iprl_use_gt_D
         self.feedback = iprl_feedback
+
+        self.train()
     
     def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks):
         x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
