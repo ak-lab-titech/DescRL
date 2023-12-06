@@ -211,13 +211,14 @@ class DDPPOTrainer(PPOTrainer):
                     if "actor_critic.net.visual_encoder.depth_encoder." in k
                 },
             )
-            self.belief_predictor.predictor.load_state_dict(
-                {
-                    k[len("predictor."):]: v
-                    for k, v in pretrained_state['belief_predictor'].items()
-                    if "predictor." in k
-                }
-            )
+            if ppo_cfg.use_belief_predictor:
+                self.belief_predictor.predictor.load_state_dict(
+                    {
+                        k[len("predictor."):]: v
+                        for k, v in pretrained_state['belief_predictor'].items()
+                        if "predictor." in k
+                    }
+                )
 
         if self.config.RL.DDPPO.reset_critic:
             nn.init.orthogonal_(self.actor_critic.critic.fc.weight)

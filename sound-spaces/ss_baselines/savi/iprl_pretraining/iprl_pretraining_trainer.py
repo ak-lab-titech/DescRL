@@ -144,13 +144,14 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
                     if "actor_critic.net.visual_encoder.depth_encoder." in k
                 },
             )
-            self.belief_predictor.predictor.load_state_dict(
-                {
-                    k[len("predictor."):]: v
-                    for k, v in pretrained_state['belief_predictor'].items()
-                    if "predictor." in k
-                }
-            )
+            if ppo_cfg.use_belief_predictor:
+                self.belief_predictor.predictor.load_state_dict(
+                    {
+                        k[len("predictor."):]: v
+                        for k, v in pretrained_state['belief_predictor'].items()
+                        if "predictor." in k
+                    }
+                )
         
         self.ppo_epoch = ppo_cfg.ppo_epoch
         self.num_mini_batch = ppo_cfg.num_mini_batch
