@@ -73,6 +73,11 @@
 3. `myss/sound-spaces/configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml`の`TASK.SENSORS`に`'GENERATED_INSTRUCTION'`を追加
 4. `TASK.GENERATED_INSTRUCTION`を必要に応じて変更。
 
+
+#### IPRLの事前学習
+1. `myss/sound-spaces/configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml`の`TASK.SENSORS`に`'ORACLE_ACTION_SENSOR'`を追加
+2. `myss/sound-spaces/ss_baselines/savi/config/semantic_audionav/savi.yaml`のSCENE_MEMORY_TRANSFORMERの`use_pretrained`をTrueにして、`pretrained_path`を指定する。
+
 #### ゴール数の変更
 1. configの`SIMULATOR.AUDIO.NUM`を変更する
 2. configの`DATASET.SPLIT`を変更する

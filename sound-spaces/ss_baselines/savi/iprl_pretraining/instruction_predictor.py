@@ -1,0 +1,266 @@
+import logging
+import itertools
+import sys
+
+import torch
+import torch.nn as nn
+import numpy as np
+from soundspaces.tasks.nav import PoseSensor, SpectrogramSensor, LocationBelief, CategoryBelief, Category
+from ss_baselines.savi.models.audio_cnn import AudioCNN
+from ss_baselines.savi.models.smt_state_encoder import SMTStateEncoder
+from ss_baselines.savi.models.smt_cnn import SMTCNN
+from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
+
+sys.path.append("/home/0/19B30511/av-nav/myss")
+from xgenerator.common.lang import R2RLang
+
+
+class DecentralizedDistributedMixinInstruction:
+    def init_distributed(self, find_unused_params: bool = True) -> None:
+        r"""Initializes distributed training for the model
+
+        1. Broadcasts the model weights from world_rank 0 to all other workers
+        2. Adds gradient hooks to the model
+
+        :param find_unused_params: Whether or not to filter out unused parameters
+                                   before gradient reduction.  This *must* be True if
+                                   there are any parameters in the model that where unused in the
+                                   forward pass, otherwise the gradient reduction
+                                   will not work correctly.
+        """
+        # NB: Used to hide the hooks from the nn.Module,
+        # so they don't show up in the state_dict
+        class Guard:
+            def __init__(self, model, device):
+                if torch.cuda.is_available():
+                    self.ddp = torch.nn.parallel.DistributedDataParallel(
+                        model, device_ids=[device], output_device=device
+                    )
+                else:
+                    self.ddp = torch.nn.parallel.DistributedDataParallel(model)
+
+        self._ddp_hooks = Guard(self, self.device)
+
+        self.reducer = self._ddp_hooks.ddp.reducer
+        self.find_unused_params = find_unused_params
+
+    def before_backward(self, loss):
+        if self.find_unused_params:
+            self.reducer.prepare_for_backward([loss])
+        else:
+            self.reducer.prepare_for_backward([])
+
+
+class AudioNavSMTInstructionPredictor(nn.Module):
+    def __init__(
+        self,
+        device,
+        observation_space,
+        action_space,
+        goal_num,
+        iprl_max_instr_len,
+        iprl_num_decoder_layers,
+        iprl_vocab_emb_size,
+        iprl_emb_size,
+        iprl_nhead,
+        iprl_dim_feedforward,
+        iprl_dropout,
+        iprl_use_gt_D,
+        iprl_feedback,
+        hidden_size=128,
+        use_pretrained=False,
+        pretrained_path='',
+        use_belief_as_goal=True,
+        use_label_belief=True,
+        use_location_belief=True,
+        use_belief_encoding=False,
+        normalize_category_distribution=False,
+        use_category_input=False,
+        **kwargs,
+    ):
+        self.device = device
+
+        self._use_action_encoding = True
+        self._use_residual_connection = False
+        self._use_belief_as_goal = use_belief_as_goal
+        self._use_label_belief = use_label_belief
+        self._use_location_belief = use_location_belief
+        self._hidden_size = hidden_size
+        self._action_size = action_space.n
+        self._use_belief_encoder = use_belief_encoding
+        self._normalize_category_distribution = normalize_category_distribution
+        self._use_category_input = use_category_input
+        self.goal_num = goal_num
+
+        super().__init__()
+        assert SpectrogramSensor.cls_uuid in observation_space.spaces
+        self.goal_encoder = AudioCNN(observation_space, 128, SpectrogramSensor.cls_uuid)
+        audio_feature_dims = 128
+
+        self.visual_encoder = SMTCNN(observation_space)
+        self.action_encoder = nn.Linear(self._action_size, 16)
+        action_encoding_dims = 16
+
+        nfeats = self.visual_encoder.feature_dims + action_encoding_dims + audio_feature_dims
+
+        if self._use_category_input:
+            nfeats += 21
+        
+        assert PoseSensor.cls_uuid in observation_space.spaces
+        if PoseSensor.cls_uuid in observation_space.spaces:
+            pose_dims = observation_space.spaces[PoseSensor.cls_uuid].shape[0]
+            # Specify which part of the memory corresponds to pose_dims
+            pose_indices = (nfeats, nfeats + pose_dims)
+            nfeats += pose_dims
+        else:
+            pose_indices = None
+        
+        self._feature_size = nfeats
+
+        self.smt_state_encoder = SMTStateEncoder(
+            input_size=nfeats,
+            nhead=kwargs["nhead"],
+            num_encoder_layers=kwargs["num_encoder_layers"],
+            num_decoder_layers=kwargs["num_decoder_layers"],
+            dim_feedforward=hidden_size,
+            dropout=kwargs["dropout"],
+            activation=kwargs["activation"],
+            pose_indices=pose_indices,
+            pretraining=kwargs["pretraining"],
+        )
+
+        if self._use_belief_encoder:
+            self.belief_encoder = nn.Linear(self._hidden_size, self._hidden_size)
+
+        if use_pretrained:
+            assert(pretrained_path != '')
+            self.pretrained_initialization(pretrained_path)
+
+        lang = R2RLang(name="r2r_train")
+        self.instruction_predictor = InstructionPredictor(
+            num_decoder_layers=iprl_num_decoder_layers,
+            vocab_emb_size=iprl_vocab_emb_size,
+            emb_size=iprl_emb_size,
+            max_instr_len=iprl_max_instr_len,
+            nhead=iprl_nhead,
+            vocab_size=lang.vocab_size,
+            glove=lang.glove_vec,
+            dim_feedforward=iprl_dim_feedforward,
+            dropout=iprl_dropout,
+            pretraining=kwargs["pretraining"],
+        )
+        self.iprl_use_gt_D = iprl_use_gt_D
+        self.feedback = iprl_feedback
+
+        self.optimizer = None
+
+        self.train()
+    
+    @property
+    def memory_dim(self):
+        return self._feature_size
+
+    @property
+    def output_size(self):
+        size = self.smt_state_encoder.hidden_state_size
+        if self._use_residual_connection:
+            size += self._feature_size
+        return size
+
+    @property
+    def is_blind(self):
+        return False
+
+    @property
+    def num_recurrent_layers(self):
+        return -1
+    
+    def freeze_encoders(self):
+        """Freeze goal, visual and fusion encoders. Pose encoder is not frozen."""
+        logging.info(f'AudioNavSMTNet ===> Freezing goal, visual, fusion encoders!')
+        params_to_freeze = []
+        params_to_freeze.append(self.goal_encoder.parameters())
+        params_to_freeze.append(self.visual_encoder.parameters())
+        params_to_freeze.append(self.action_encoder.parameters())
+        for p in itertools.chain(*params_to_freeze):
+            p.requires_grad = False
+
+    def set_eval_encoders(self):
+        """Sets the goal, visual and fusion encoders to eval mode."""
+        self.goal_encoder.eval()
+        self.visual_encoder.eval()
+
+    def get_features(self, observations, prev_actions):
+        x = []
+        x.append(self.visual_encoder(observations))
+        x.append(self.action_encoder(self._get_one_hot(prev_actions)))
+        x.append(self.goal_encoder(observations))
+
+        if self._use_category_input:
+            x.append(observations[Category.cls_uuid])
+
+        x.append(observations[PoseSensor.cls_uuid])
+
+        x = torch.cat(x, dim=1)
+
+        return x
+    
+    def _get_one_hot(self, actions):
+        if actions.shape[1] == self._action_size:
+            return actions
+        else:
+            N = actions.shape[0]
+            actions_oh = torch.zeros(N, self._action_size, device=actions.device)
+            actions_oh.scatter_(1, actions.long(), 1)
+            return actions_oh
+
+    def forward(self, observations, prev_actions, masks, ext_memory, ext_memory_masks):
+        x = self.get_features(observations, prev_actions)
+
+        if self._use_belief_as_goal:
+            belief = torch.zeros((x.shape[0], self._hidden_size), device=x.device)
+            if self._use_label_belief:
+                if self._normalize_category_distribution:
+                    belief[:, :21] = nn.functional.softmax(observations[CategoryBelief.cls_uuid], dim=1)
+                else:
+                    belief[:, :21] = observations[CategoryBelief.cls_uuid]
+
+            if self._use_location_belief:
+                belief[:, 21:21 + 2*self.goal_num] = observations[LocationBelief.cls_uuid]
+
+            if self._use_belief_encoder:
+                belief = self.belief_encoder(belief)
+        else:
+            belief = None
+        
+        _, enc_memory = self.smt_state_encoder(x, ext_memory, ext_memory_masks, need_enc_memory=True, goal=belief)
+
+        if self.iprl_use_gt_D:
+            category = observations["category"] # (batch, 21)
+            location = observations["pointgoal_with_gps_compass"] # (batch, 2)
+            location = torch.cat([-location[:, 1].unsqueeze(1), location[:, 0].unsqueeze(1)], dim=1)
+        else:
+            category = belief[:, :21]
+            location = belief[:, 21:21+2*self.goal_num]
+        
+        if self.feedback == "teacher":
+            target = observations["generated_instruction"] # (batch, instr_len)
+        elif self.feedback == "student":
+            target = None
+        else:
+            raise Exception(f"feedback must be 'teacher' or 'student', not {self.feedback}")
+        
+        logits = self.instruction_predictor(
+            category=category, # (batch, 21)
+            location=location, # (batch, 2)
+            target=target,
+            memory=enc_memory, # (mem_size, batch, smt_hidden)
+            memory_key_padding_mask=(1 - ext_memory_masks) > 0,
+        )
+
+        return logits
+
+
+class AudioNavSMTInstructionPredictorDDP(AudioNavSMTInstructionPredictor, DecentralizedDistributedMixinInstruction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)

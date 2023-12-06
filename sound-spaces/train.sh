@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi
-MODEL="savi-2nd"   # avnav, avwan, savi-1st, savi-2nd
+MODEL="savi-2nd"   # avnav, avwan, savi-1st, savi-2nd, savi-iprl-pretraining
 MODEL_NAME="ss1savi-savi-iprl"
 PRETRAINED_MODEL_NAME="ss1savi-savi"
 CKPT_NUM="88"
@@ -46,6 +46,11 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-1st" ]; then
 elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-2nd" ]; then
     python ss_baselines/savi/run.py \
         --exp-config ss_baselines/savi/config/semantic_audionav/savi.yaml \
+        --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
+        RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pretraining" ]; then
+    python ss_baselines/savi/iprl_pretraining/run.py \
+        --config ss_baselines/savi/iprl_pretraining/config.yaml \
         --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
         RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
 else
