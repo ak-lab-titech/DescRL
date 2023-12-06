@@ -39,7 +39,7 @@ RL:
       memory_size: 150
       hidden_size: 256
       nhead: 8
-      num_encoder_layers: 1
+      num_encoder_layers: 3 # 1
       num_decoder_layers: 1
       dropout: 0.0
       activation: 'relu'
@@ -56,7 +56,7 @@ RL:
     INSTRUCTION_PREDICTOR:
       use_iprl: True # IPRLを行うかどうか
       max_instr_len: 40
-      num_decoder_layers: 1
+      num_decoder_layers: 3
       vocab_emb_size: 50
       emb_size: 256 # IPのembサイズ。SMTのemb_sizeと同じである必要がある
       nhead: 8
