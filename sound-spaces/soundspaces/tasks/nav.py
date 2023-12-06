@@ -347,6 +347,8 @@ class GeneratedInstruction(Sensor):
         )
         if torch.cuda.is_available():
             self.instruction_generator.to("cuda")
+        
+        self.previous_instruction = None
 
     def _get_uuid(self, *args: Any, **kwargs: Any):
         return "generated_instruction"
@@ -361,9 +363,13 @@ class GeneratedInstruction(Sensor):
         batch_size = 1 # this must be 1
         assert batch_size == 1, "batch_size must be 1 in GeneratedInstruction"
 
-        image_seqs, action_seqs = self.get_obs_seqs()
-        generated_instruction = self.generate_instruction(image_seqs, action_seqs, batch_size)
-        return generated_instruction
+        if self._sim._previous_step_collided:
+            return self.previous_instruction
+        else:
+            image_seqs, action_seqs = self.get_obs_seqs()
+            generated_instruction = self.generate_instruction(image_seqs, action_seqs, batch_size)
+            self.previous_instruction = generated_instruction
+            return generated_instruction
     
     def get_obs_seqs(self):
         current_previous_step_collided = self._sim._previous_step_collided
