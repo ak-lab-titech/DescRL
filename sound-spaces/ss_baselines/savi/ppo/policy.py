@@ -57,12 +57,13 @@ class Policy(nn.Module):
         masks,
         ext_memory,
         ext_memory_masks,
+        need_logits=False,
         deterministic=False,
     ):
         iprl_logits = None
         if self.use_iprl:
             features, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits = self.net(
-                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
+                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, need_logits
             )
         else:
             features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
@@ -83,7 +84,7 @@ class Policy(nn.Module):
     def get_value(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks):
         if self.use_iprl:
             features, _, _ , _, _ = self.net(
-                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
+                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, False
             )
         else:
             features, _, _ , _ = self.net(
@@ -106,7 +107,7 @@ class Policy(nn.Module):
         if self.use_iprl:
             features, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits = self.net(
                 observations, rnn_hidden_states, prev_direct_map, prev_actions,
-                masks, ext_memory, ext_memory_masks
+                masks, ext_memory, ext_memory_masks, True,
             )
         else:
             features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
@@ -591,10 +592,13 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
 
         self.train()
     
-    def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks):
+    def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, need_logits=False):
         x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
             observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, True,
         )
+        if not need_logits:
+            return x_att, rnn_hidden_states, x, direct_map, None
+        
         if self.iprl_use_gt_D:
             category = observations["category"] # (batch, 21)
             location = observations["pointgoal_with_gps_compass"] # (batch, 2)

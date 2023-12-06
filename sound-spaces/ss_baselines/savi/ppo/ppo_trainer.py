@@ -332,6 +332,7 @@ class PPOTrainer(BaseRLTrainer):
                 rollouts.masks[rollouts.step],
                 external_memory,
                 external_memory_masks,
+                False,
             )
 
         pth_time += time.time() - t_sample_action
@@ -904,7 +905,8 @@ class PPOTrainer(BaseRLTrainer):
                     not_done_masks,
                     test_em.memory[:, 0] if ppo_cfg.use_external_memory else None,
                     test_em.masks if ppo_cfg.use_external_memory else None,
-                    deterministic=False
+                    need_logits=True,
+                    deterministic=False,
                 )
                 if self.use_direct_map:
                     # predict_direct_map.copy_(batch["direct_map"]) # こっちを選択するとGTをいれることになる
