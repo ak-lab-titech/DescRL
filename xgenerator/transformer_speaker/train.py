@@ -125,7 +125,7 @@ def rollout(seq2seq_model, inputs, targets, max_instruction_length=80, feedback=
                         memory_key_padding_mask=path_mask,
                     )
                 else:
-                    logits = seq2seq_model.module.decode(
+                    logits = seq2seq_model.decode(
                         trg=preds,
                         memory=memory,
                         tgt_mask=tgt_mask,
