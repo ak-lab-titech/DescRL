@@ -1,5 +1,6 @@
 import contextlib
 import os
+import copy
 import sys
 import random
 import time
@@ -7,6 +8,8 @@ import glob
 from typing import Dict, List, Any
 from collections import defaultdict, deque
 
+from gym import spaces
+from tqdm import tqdm
 import numpy as np
 import torch
 import torch.distributed as distrib
@@ -20,7 +23,7 @@ from ss_baselines.common.environments import get_env_class
 from ss_baselines.savi.iprl_pretraining.iprl_pretraining_rollout_storage import IPRLPretrainingRolloutStorage
 from ss_baselines.savi.iprl_pretraining.instruction_predictor import AudioNavSMTInstructionPredictorDDP
 from ss_baselines.common.tensorboard_utils import TensorboardWriter
-from ss_baselines.common.utils import batch_obs, linear_decay
+from ss_baselines.common.utils import batch_obs, linear_decay, observations_to_image, generate_video
 from ss_baselines.savi.ddppo.algo.ddp_utils import (
     EXIT,
     REQUEUE,
@@ -30,13 +33,15 @@ from ss_baselines.savi.ddppo.algo.ddp_utils import (
     requeue_job,
     save_interrupted_state,
 )
-from ss_baselines.savi.ddppo.algo.ddppo import DDPPO
 from ss_baselines.savi.models.belief_predictor import BeliefPredictor, BeliefPredictorDDP
+from ss_baselines.savi.models.rollout_storage import ExternalMemory
+from ss_baselines.common.utils import resize_observation
 from habitat.tasks.nav.nav import IntegratedPointGoalGPSAndCompassSensor
 from soundspaces.tasks.nav import LocationBelief, CategoryBelief, SpectrogramSensor
 
 sys.path.append("/home/0/19B30511/av-nav/myss")
 from xgenerator.common.load_lmdb import PAD_IDX
+from xgenerator.common.lang import tokens2sentences, R2RLang
 
 
 class IPRLPretrainingTrainer(BaseRLTrainer):
@@ -708,3 +713,359 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
             time.time() - t_update_model,
             iprl_loss_epoch,
         )
+
+    def _eval_checkpoint(
+        self,
+        checkpoint_path: str,
+        writer: TensorboardWriter,
+        checkpoint_index: int = 0
+    ) -> Dict:
+        r"""Evaluates a single checkpoint.
+
+        Args:
+            checkpoint_path: path of checkpoint
+            writer: tensorboard writer object for logging to tensorboard
+            checkpoint_index: index of cur checkpoint for logging
+
+        Returns:
+            None
+        """
+        random.seed(self.config.SEED)
+        np.random.seed(self.config.SEED)
+        torch.manual_seed(self.config.SEED)
+
+        # Map location CPU is almost always better than mapping to a CUDA device.
+        ckpt_dict = self.load_checkpoint(checkpoint_path, map_location="cpu")
+
+        if self.config.EVAL.USE_CKPT_CONFIG:
+            config = self._setup_eval_config(ckpt_dict["config"])
+        else:
+            config = self.config.clone()
+
+        ppo_cfg = config.RL.PPO
+
+        config.defrost()
+        config.TASK_CONFIG.DATASET.SPLIT = config.EVAL.SPLIT
+        if self.config.DISPLAY_RESOLUTION != config.TASK_CONFIG.SIMULATOR.DEPTH_SENSOR.WIDTH:
+            model_resolution = config.TASK_CONFIG.SIMULATOR.DEPTH_SENSOR.WIDTH
+            config.TASK_CONFIG.SIMULATOR.DEPTH_SENSOR.WIDTH = config.TASK_CONFIG.SIMULATOR.RGB_SENSOR.HEIGHT = \
+                config.TASK_CONFIG.SIMULATOR.RGB_SENSOR.WIDTH = config.TASK_CONFIG.SIMULATOR.DEPTH_SENSOR.HEIGHT = \
+                self.config.DISPLAY_RESOLUTION
+        else:
+            model_resolution = self.config.DISPLAY_RESOLUTION
+        config.freeze()
+
+        if len(self.config.VIDEO_OPTION) > 0:
+            config.defrost()
+            config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
+            config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
+            config.freeze()
+            lang = R2RLang("r2r_video")
+        elif "top_down_map" in self.config.VISUALIZATION_OPTION:
+            config.defrost()
+            config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
+            config.freeze()
+
+        logger.info(f"env config: {config}")
+        self.envs = construct_envs(
+            config, get_env_class(config.ENV_NAME)
+        )
+        if self.config.DISPLAY_RESOLUTION != model_resolution:
+            observation_space = self.envs.observation_spaces[0]
+            observation_space.spaces['depth'] = spaces.Box(low=0, high=1, shape=(model_resolution,
+                                                           model_resolution, 1), dtype=np.uint8)
+            observation_space.spaces['rgb'] = spaces.Box(low=0, high=1, shape=(model_resolution,
+                                                         model_resolution, 3), dtype=np.uint8)
+        else:
+            observation_space = self.envs.observation_spaces[0]
+        self._setup_instruction_predictor(ppo_cfg, observation_space)
+
+        self.instruction_predictor.load_state_dict(ckpt_dict["state_dict"])
+
+        if self.config.RL.PPO.use_belief_predictor and "belief_predictor" in ckpt_dict:
+            self.belief_predictor.load_state_dict(ckpt_dict["belief_predictor"])
+
+        observations = self.envs.reset()
+        if config.DISPLAY_RESOLUTION != model_resolution:
+            resize_observation(observations, model_resolution)
+        batch = batch_obs(observations, self.device, skip_list=['view_point_goals', 'intermediate'])
+
+        if ppo_cfg.use_external_memory:
+            test_em = ExternalMemory(
+                self.config.NUM_PROCESSES,
+                ppo_cfg.SCENE_MEMORY_TRANSFORMER.memory_size,
+                ppo_cfg.SCENE_MEMORY_TRANSFORMER.memory_size,
+                self.instruction_predictor.memory_dim,
+            )
+            test_em.to(self.device)
+        else:
+            test_em = None
+        prev_actions = torch.zeros(
+            self.config.NUM_PROCESSES, 1, device=self.device, dtype=torch.long
+        )
+        not_done_masks = torch.zeros(
+            self.config.NUM_PROCESSES, 1, device=self.device
+        )
+        stats_episodes = dict()  # dict of dicts that stores stats per episode
+        if self.config.RL.PPO.use_belief_predictor:
+            self.belief_predictor.update(batch, None)
+
+            descriptor_pred_gt = [[] for _ in range(self.config.NUM_PROCESSES)]
+            for i in range(len(descriptor_pred_gt)):
+                if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                    category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
+                    category_gt = np.argmax(batch['category'].cpu().numpy()[i])
+                if self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                    location_prediction = batch['location_belief'].cpu().numpy()[i]
+                    location_gt = batch['pointgoal_with_gps_compass'].cpu().numpy()[i]
+                geodesic_distance = -1
+                if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief and self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                    pair = (category_prediction, location_prediction, category_gt, location_gt, geodesic_distance)
+                elif self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                    pair = (category_prediction, category_gt, geodesic_distance)
+                elif self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                    pair = (location_prediction, location_gt, geodesic_distance)
+                else:
+                    pair = (geodesic_distance)
+                if 'view_point_goals' in observations[i]:
+                    pair += (observations[i]['view_point_goals'],)
+                descriptor_pred_gt[i].append(pair)
+
+        rgb_frames = [
+            [] for _ in range(self.config.NUM_PROCESSES)
+        ]  # type: List[List[np.ndarray]]
+        audios = [
+            [] for _ in range(self.config.NUM_PROCESSES)
+        ]
+        if len(self.config.VIDEO_OPTION) > 0:
+            os.makedirs(self.config.VIDEO_DIR, exist_ok=True)
+
+        self.instruction_predictor.eval()
+        if self.config.RL.PPO.use_belief_predictor:
+            self.belief_predictor.eval()
+        t = tqdm(total=self.config.TEST_EPISODE_COUNT)
+        step_cnt = [0 for _ in range(self.config.NUM_PROCESSES)]
+        while (
+            len(stats_episodes) < self.config.TEST_EPISODE_COUNT
+            and self.envs.num_envs > 0
+        ):
+            current_episodes = self.envs.current_episodes()
+
+            with torch.no_grad():
+                for i in range(len(step_cnt)):
+                    step_cnt[i] += 1
+                actions = batch["oracle_action_sensor"]
+                iprl_logits = self.instruction_predictor(
+                    batch,
+                    prev_actions,
+                    not_done_masks,
+                    test_em.memory[:, 0] if ppo_cfg.use_external_memory else None,
+                    test_em.masks if ppo_cfg.use_external_memory else None,
+                )
+                if ppo_cfg.use_external_memory:
+                    test_em_features = self.instruction_predictor.get_features(
+                        batch,
+                        prev_actions,
+                    )
+
+                prev_actions.copy_(actions)
+
+            
+            if len(self.config.VIDEO_OPTION) > 0 and 'generated_instruction' in batch.keys():
+                _, iprl_tokens = iprl_logits.max(2) # iprl_tokens: (instr_len, batch)
+                iprl_sentences = tokens2sentences(iprl_tokens, lang)
+                true_sentences = tokens2sentences(batch['generated_instruction'].permute(1,0).int(), lang)
+                for i in range(len(iprl_sentences)):
+                    logger.info(f"Episode {len(stats_episodes)}, Step {step_cnt[i]} Pred: {iprl_sentences[i]}")
+                    logger.info(f"  True: {true_sentences[i]}")
+
+            actions = [int(a.item()) for a in actions]
+            outputs = self.envs.step(actions)
+
+            observations, rewards, dones, infos = [
+                list(x) for x in zip(*outputs)
+            ]
+            if config.DISPLAY_RESOLUTION != model_resolution:
+                original_observations = copy.deepcopy(observations)
+                resize_observation(observations, model_resolution)
+            batch = batch_obs(observations, self.device, skip_list=['view_point_goals', 'intermediate'])
+
+            not_done_masks = torch.tensor(
+                [[0.0] if done else [1.0] for done in dones],
+                dtype=torch.float,
+                device=self.device,
+            )
+            # Update external memory
+            if ppo_cfg.use_external_memory:
+                test_em.insert(test_em_features, not_done_masks)
+            if self.config.RL.PPO.use_belief_predictor:
+                self.belief_predictor.update(batch, dones)
+
+                for i in range(len(descriptor_pred_gt)):
+                    if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                        category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
+                        category_gt = np.argmax(batch['category'].cpu().numpy()[i])
+                    location_prediction = batch['location_belief'].cpu().numpy()[i]
+                    location_gt = batch['pointgoal_with_gps_compass'].cpu().numpy()[i]
+                    if dones[i]:
+                        geodesic_distance = -1
+                    else:
+                        geodesic_distance = infos[i]['distance_to_goal']
+                    if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief and self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                        pair = (category_prediction, location_prediction, category_gt, location_gt, geodesic_distance)
+                    elif self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                        pair = (location_prediction, location_gt, geodesic_distance)
+                    else:
+                        raise NotImplementedError()
+                    if 'view_point_goals' in observations[i]:
+                        pair += (observations[i]['view_point_goals'],)
+                    descriptor_pred_gt[i].append(pair)
+            
+            for i in range(len(dones)):
+                if dones[i]:
+                    step_cnt[i] = 0
+
+            for i in range(self.envs.num_envs):
+                if len(self.config.VIDEO_OPTION) > 0:
+                    if self.config.RL.PPO.use_belief_predictor:
+                        pred = descriptor_pred_gt[i][-1]
+                    else:
+                        pred = None
+                    if config.TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE and 'intermediate' in observations[i]:
+                        for observation in original_observations[i]['intermediate']:
+                            frame = observations_to_image(observation, infos[i], pred=pred)
+                            rgb_frames[i].append(frame)
+                        del original_observations[i]['intermediate']
+
+                    if "rgb" not in original_observations[i]:
+                        original_observations[i]["rgb"] = np.zeros((self.config.DISPLAY_RESOLUTION,
+                                                           self.config.DISPLAY_RESOLUTION, 3))
+                    frame = observations_to_image(original_observations[i], infos[i], pred=pred)
+                    rgb_frames[i].append(frame)
+                    audios[i].append(original_observations[i]['audiogoal'])
+
+            next_episodes = self.envs.current_episodes()
+            envs_to_pause = []
+            for i in range(self.envs.num_envs):
+                # pause envs which runs out of episodes
+                if (
+                    next_episodes[i].scene_id,
+                    next_episodes[i].episode_id,
+                ) in stats_episodes:
+                    envs_to_pause.append(i)
+
+                # episode ended
+                if not_done_masks[i].item() == 0:
+                    stats_episodes[
+                        (
+                            current_episodes[i].scene_id,
+                            current_episodes[i].episode_id,
+                        )
+                    ] = None
+                    t.update()
+
+                    if len(self.config.VIDEO_OPTION) > 0:
+                        fps = self.config.TASK_CONFIG.SIMULATOR.VIEW_CHANGE_FPS \
+                                    if self.config.TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE else 1
+                        if 'sound' in current_episodes[i].info:
+                            sound = current_episodes[i].info['sound']
+                        else:
+                            # sound = current_episodes[i].sound_id.split('/')[1][:-4]
+                            sound = f"epi{len(stats_episodes)}"
+                        generate_video(
+                            video_option=self.config.VIDEO_OPTION,
+                            video_dir=self.config.VIDEO_DIR,
+                            images=rgb_frames[i][:-1],
+                            scene_name=current_episodes[i].scene_id.split('/')[3],
+                            sound=sound,
+                            sr=self.config.TASK_CONFIG.SIMULATOR.AUDIO.RIR_SAMPLING_RATE,
+                            episode_id=current_episodes[i].episode_id,
+                            checkpoint_idx=checkpoint_index,
+                            metric_name='spl',
+                            metric_value=infos[i]['spl'],
+                            tb_writer=writer,
+                            audios=audios[i][:-1],
+                            fps=fps
+                        )
+
+                        # observations has been reset but info has not
+                        # to be consistent, do not use the last frame
+                        rgb_frames[i] = []
+                        audios[i] = []
+
+            if not self.config.RL.PPO.use_belief_predictor:
+                descriptor_pred_gt = None
+
+            (
+                self.envs,
+                not_done_masks,
+                test_em,
+                prev_actions,
+                batch,
+                rgb_frames,
+            ) = self._pause_envs(
+                envs_to_pause,
+                self.envs,
+                not_done_masks,
+                prev_actions,
+                batch,
+                rgb_frames,
+                test_em,
+                descriptor_pred_gt
+            )
+
+        self.envs.close()
+
+        result = None
+        return result
+
+    @staticmethod
+    def _pause_envs(
+        envs_to_pause,
+        envs,
+        not_done_masks,
+        prev_actions,
+        batch,
+        rgb_frames,
+        test_em=None,
+        descriptor_pred_gt=None
+    ):
+        # pausing self.envs with no new episode
+        if len(envs_to_pause) > 0:
+            state_index = list(range(envs.num_envs))
+            for idx in reversed(envs_to_pause):
+                state_index.pop(idx)
+                envs.pause_at(idx)
+                if test_em is not None:
+                    test_em.pop_at(idx)
+                if descriptor_pred_gt is not None:
+                    descriptor_pred_gt.pop(idx)
+
+            # indexing along the batch dimensions
+            not_done_masks = not_done_masks[state_index]
+            
+            prev_actions = prev_actions[state_index]
+
+            for k, v in batch.items():
+                batch[k] = v[state_index]
+
+            rgb_frames = [rgb_frames[i] for i in state_index]
+
+        if test_em is None:
+            return (
+                envs,
+                not_done_masks,
+                prev_actions,
+                batch,
+                rgb_frames,
+            )
+        else:
+            return (
+                envs,
+                not_done_masks,
+                test_em,
+                prev_actions,
+                batch,
+                rgb_frames,
+            )
+

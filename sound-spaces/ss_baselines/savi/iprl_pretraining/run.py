@@ -22,6 +22,13 @@ from ss_baselines.savi.iprl_pretraining.iprl_pretraining_trainer import IPRLPret
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--run-type",
+        choices=["train", "eval"],
+        # required=True,
+        default='train',
+        help="run type of the experiment (train or eval)",
+    )
+    parser.add_argument(
         "--config",
         type=str,
         required=True,
@@ -55,7 +62,10 @@ def main():
                         datefmt="%Y-%m-%d %H:%M:%S")
     logging.getLogger().setLevel(level)
 
-    trainer.train()
+    if args.run_type == "train":
+        trainer.train()
+    elif args.run_type == "eval":
+        trainer.eval(1, -1, config.USE_LAST_CKPT)
 
 
 if __name__ == "__main__":

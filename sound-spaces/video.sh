@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi
-MODEL="savi"   # avnav, avwan, savi
+MODEL="savi"   # avnav, avwan, savi, savi-iprl-pretraining
 MODEL_NAME="ss1savi-savi"
 DATASET_NAME="mp3d"
 CKPT_NUM=154
@@ -66,6 +66,25 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi" ]; then
         TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE False \
         DISPLAY_RESOLUTION 512 \
         TEST_EPISODE_COUNT $VIDEO_NUM \
+        RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
+        RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pretraining" ]; then
+    python ss_baselines/savi/iprl_pretraining/run.py \
+        --run-type eval \
+        --config ss_baselines/savi/iprl_pretraining/config.yaml \
+        --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
+        CONTINUOUS False \
+        NUM_PROCESSES 1 \
+        EVAL.SPLIT test \
+        RL.DDPPO.pretrained False \
+        LOG_FILE data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/demo_video.log \
+        TENSORBOARD_DIR data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/tb_demo_video_ckpt$CKPT_NUM \
+        EVAL_CKPT_PATH_DIR data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        TASK_CONFIG.SIMULATOR.USE_RENDERED_OBSERVATIONS False \
+        TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE False \
+        DISPLAY_RESOLUTION 512 \
+        TEST_EPISODE_COUNT $VIDEO_NUM \
+        RL.PPO.use_belief_predictor True \
         RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
         RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
 else
