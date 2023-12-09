@@ -1,6 +1,6 @@
 BASE_TASK_CONFIG_PATH: "configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml"
 TRAINER_NAME: "ddppo"
-NUM_PROCESSES: 2
+NUM_PROCESSES: 1
 SENSORS: ["DEPTH_SENSOR", "RGB_SENSOR"]
 NUM_UPDATES: 20000
 LOG_INTERVAL: 10
@@ -15,13 +15,14 @@ RL:
     eps: 1e-5
     num_steps: 150
     hidden_size: 512
+    num_mini_batch: 1 # 2
     use_belief_predictor: False
     use_external_memory: True
     SCENE_MEMORY_TRANSFORMER:
       memory_size: 150
       hidden_size: 256
       nhead: 8
-      num_encoder_layers: 1
+      num_encoder_layers: 3 # 1
       num_decoder_layers: 1
       dropout: 0.0
       activation: 'relu'
@@ -37,7 +38,7 @@ RL:
       use_location_belief: True
     INSTRUCTION_PREDICTOR:
       max_instr_len: 40
-      num_decoder_layers: 1
+      num_decoder_layers: 3
       vocab_emb_size: 50
       emb_size: 256 # IPのembサイズ。SMTのemb_sizeと同じである必要がある
       nhead: 8
@@ -47,7 +48,7 @@ RL:
       feedback: "teacher" # teacher or student
   DDPPO:
     sync_frac: 0.6
-    distrib_backend: "GLOO"
+    distrib_backend: "nccl" # GLOO
     # choose the best pretrained SAVi based on validation curve
     pretrained_weights: "data/models/savi/data/ckpt.XXX.pth"
     pretrained: True

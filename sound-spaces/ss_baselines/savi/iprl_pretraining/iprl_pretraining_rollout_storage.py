@@ -35,10 +35,8 @@ class IPRLPretrainingRolloutStorage:
         else:
             action_shape = action_space.shape[0]
 
-        self.actions = torch.zeros(num_steps, num_envs, action_shape)
         self.prev_actions = torch.zeros(num_steps + 1, num_envs, action_shape)
         if action_space.__class__.__name__ == "ActionSpace":
-            self.actions = self.actions.long()
             self.prev_actions = self.prev_actions.long()
 
         self.masks = torch.zeros(num_steps + 1, num_envs, 1)
@@ -64,7 +62,6 @@ class IPRLPretrainingRolloutStorage:
         for sensor in self.observations:
             self.observations[sensor] = self.observations[sensor].to(device)
 
-        self.actions = self.actions.to(device)
         self.prev_actions = self.prev_actions.to(device)
         self.masks = self.masks.to(device)
         self.em_masks = self.em_masks.to(device)
@@ -77,14 +74,13 @@ class IPRLPretrainingRolloutStorage:
         actions,
         not_done_masks,
         em_features,
-        dones,
     ):
         for sensor in observations:
             if sensor == "depth":
                 self.observations[sensor][self.step + 1].copy_(
                     np.squeeze(observations[sensor], axis=4)
                 )
-            elif sensor == "generated_instruction":
+            elif sensor == "oracle_action_generated_instruction":
                 self.observations[sensor][self.step + 1].copy_(
                     np.squeeze(observations[sensor], axis=1)
                 )
@@ -97,7 +93,6 @@ class IPRLPretrainingRolloutStorage:
                     observations[sensor]
                 )
 
-        self.actions[self.step].copy_(actions)
         self.prev_actions[self.step + 1].copy_(actions)
         self.masks[self.step + 1].copy_(not_done_masks)
         if self.use_external_memory:
@@ -130,7 +125,6 @@ class IPRLPretrainingRolloutStorage:
         for start_ind in range(0, num_processes, num_envs_per_batch):
             observations_batch = defaultdict(list)
 
-            actions_batch = []
             prev_actions_batch = []
             masks_batch = []
             if self.use_external_memory:
@@ -148,7 +142,6 @@ class IPRLPretrainingRolloutStorage:
                         self.observations[sensor][: self.step, ind]
                     )
 
-                actions_batch.append(self.actions[: self.step, ind])
                 prev_actions_batch.append(self.prev_actions[: self.step, ind])
                 masks_batch.append(self.masks[: self.step, ind])
                 if self.use_external_memory:
@@ -163,7 +156,6 @@ class IPRLPretrainingRolloutStorage:
                     observations_batch[sensor], 1
                 )
 
-            actions_batch = torch.stack(actions_batch, 1)
             prev_actions_batch = torch.stack(prev_actions_batch, 1)
             masks_batch = torch.stack(masks_batch, 1)
 
@@ -180,7 +172,6 @@ class IPRLPretrainingRolloutStorage:
                     T, N, observations_batch[sensor]
                 )
 
-            actions_batch = self._flatten_helper(T, N, actions_batch)
             prev_actions_batch = self._flatten_helper(T, N, prev_actions_batch)
             masks_batch = self._flatten_helper(T, N, masks_batch)
             if self.use_external_memory:
@@ -189,7 +180,6 @@ class IPRLPretrainingRolloutStorage:
 
             yield (
                 observations_batch,
-                actions_batch,
                 prev_actions_batch,
                 masks_batch,
                 em_store_batch,

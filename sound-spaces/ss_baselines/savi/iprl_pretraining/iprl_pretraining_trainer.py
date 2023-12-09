@@ -200,7 +200,6 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
             actions,
             masks.to(device=self.device),
             external_memory_features,
-            dones,
         )
 
         if self.config.RL.PPO.use_belief_predictor:
@@ -318,7 +317,7 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
         for sensor in rollouts.observations:
             if sensor == "depth":
                 batch_sensor = np.squeeze(batch[sensor], axis=4)
-            elif sensor == "generated_instruction":
+            elif sensor == "oracle_action_generated_instruction":
                 batch_sensor = np.squeeze(batch[sensor], axis=1)
             elif sensor == "oracle_action_sensor":
                 batch_sensor = batch[sensor].reshape(-1, 1)
@@ -675,7 +674,6 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
             for sample in data_generator:
                 (
                     obs_batch,
-                    actions_batch,
                     prev_actions_batch,
                     masks_batch,
                     external_memory,
@@ -690,7 +688,7 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
                     external_memory_masks,
                 )
 
-                iprl_targets = obs_batch["generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
+                iprl_targets = obs_batch["oracle_action_generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
                 iprl_loss = self.iprl_loss_fn(iprl_logits.view(-1, iprl_logits.shape[-1]), iprl_targets.reshape(-1))
 
                 self.instruction_predictor.optimizer.zero_grad()
@@ -871,10 +869,10 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
                 prev_actions.copy_(actions)
 
             
-            if len(self.config.VIDEO_OPTION) > 0 and 'generated_instruction' in batch.keys():
+            if len(self.config.VIDEO_OPTION) > 0 and 'oracle_action_generated_instruction' in batch.keys():
                 _, iprl_tokens = iprl_logits.max(2) # iprl_tokens: (instr_len, batch)
                 iprl_sentences = tokens2sentences(iprl_tokens, lang)
-                true_sentences = tokens2sentences(batch['generated_instruction'].permute(1,0).int(), lang)
+                true_sentences = tokens2sentences(batch['oracle_action_generated_instruction'].permute(1,0).int(), lang)
                 for i in range(len(iprl_sentences)):
                     logger.info(f"Episode {len(stats_episodes)}, Step {step_cnt[i]} Pred: {iprl_sentences[i]}")
                     logger.info(f"  True: {true_sentences[i]}")

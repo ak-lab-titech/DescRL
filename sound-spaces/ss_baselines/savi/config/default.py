@@ -159,6 +159,11 @@ _TC.TASK.DIRECT_MAP.TYPE = "DirectMap"
 _TC.TASK.GENERATED_INSTRUCTION = CN()
 _TC.TASK.GENERATED_INSTRUCTION.TYPE = "GeneratedInstruction"
 # -----------------------------------------------------------------------------
+# ORACLE_ACTION_GENERATED_INSTRUCTION
+# -----------------------------------------------------------------------------
+_TC.TASK.ORACLE_ACTION_GENERATED_INSTRUCTION = CN()
+_TC.TASK.ORACLE_ACTION_GENERATED_INSTRUCTION.TYPE = "OracleActionGeneratedInstruction"
+# -----------------------------------------------------------------------------
 # soundspaces
 # -----------------------------------------------------------------------------
 _TC.SIMULATOR.GRID_SIZE = 0.5

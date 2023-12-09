@@ -244,7 +244,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             location = belief[:, 21:21+2*self.goal_num]
         
         if self.feedback == "teacher":
-            target = observations["generated_instruction"] # (batch, instr_len)
+            target = observations["oracle_action_generated_instruction"] # (batch, instr_len)
         elif self.feedback == "student":
             target = None
         else:
