@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from torch import Tensor
 
 import habitat_sim
+from habitat_sim.utils.viz_utils import semantic_to_rgb
 from habitat.core.dataset import Episode
 from habitat.core.registry import registry
 from habitat.core.simulator import (
@@ -301,9 +302,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             # Ignore key as it gets propogated to sensor below
             ignore_keys={"gpu_gpu"},
         )
-        sim_config.scene_dataset_config_file = (
-            self.habitat_config.SCENE_DATASET
-        )
+        sim_config.scene_dataset_config_file = "data/scene_datasets/mp3d/mp3d.scene_dataset_config.json"
         sim_config.scene_id = self.habitat_config.SCENE
         agent_config = habitat_sim.AgentConfiguration()
         overwrite_config(
@@ -388,12 +387,36 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             sim_obs = self.get_sensor_observations()
 
         self._prev_sim_obs = sim_obs
-        return self._sensor_suite.get_observations(sim_obs)
+        obs = self._sensor_suite.get_observations(sim_obs)
+        
+        # semantic画像をカテゴリごとにしてRGBに変換
+        if "semantic" in obs.keys():
+            semantic_obs = obs["semantic"]
+            semantic_obs = self._to_category_id(semantic_obs)
+            obs["semantic"] = np.array(semantic_to_rgb(semantic_obs))
+
+        return obs
+
+    def _to_category_id(self, obs):
+        scene = self.semantic_scene
+        instance_id_to_label_id = {int(obj.id.split("_")[-1]): obj.category.index() for obj in scene.objects}
+        mapping = np.array([instance_id_to_label_id[i] for i in range(len(instance_id_to_label_id)) ])
+        semantic_obs = np.take(mapping, obs)
+
+        semantic_obs[semantic_obs>=40] = 0
+        semantic_obs[semantic_obs<0] = 0
+        return semantic_obs
 
     def step(self, action: Union[str, np.ndarray, int]) -> Observations:
         sim_obs = super().step(action)
         self._prev_sim_obs = sim_obs
         observations = self._sensor_suite.get_observations(sim_obs)
+
+        # semantic画像をカテゴリごとにしてRGBに変換
+        if "semantic" in observations.keys():
+            semantic_obs = observations["semantic"]
+            semantic_obs = self._to_category_id(semantic_obs)
+            observations["semantic"] = np.array(semantic_to_rgb(semantic_obs))
         return observations
 
     def render(self, mode: str = "rgb") -> Any:
