@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from torch import Tensor
 
 import habitat_sim
-from habitat_sim.utils.viz_utils import semantic_to_rgb
 from habitat.core.dataset import Episode
 from habitat.core.registry import registry
 from habitat.core.simulator import (
@@ -389,11 +388,11 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         self._prev_sim_obs = sim_obs
         obs = self._sensor_suite.get_observations(sim_obs)
         
-        # semantic画像をカテゴリごとにしてRGBに変換
+        # semantic画像をカテゴリごとに変換
         if "semantic" in obs.keys():
             semantic_obs = obs["semantic"]
             semantic_obs = self._to_category_id(semantic_obs)
-            obs["semantic"] = np.array(semantic_to_rgb(semantic_obs))
+            obs["semantic"] = np.array(semantic_obs)
 
         return obs
 
@@ -412,11 +411,11 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         self._prev_sim_obs = sim_obs
         observations = self._sensor_suite.get_observations(sim_obs)
 
-        # semantic画像をカテゴリごとにしてRGBに変換
+        # semantic画像をカテゴリごとに変換
         if "semantic" in observations.keys():
             semantic_obs = observations["semantic"]
             semantic_obs = self._to_category_id(semantic_obs)
-            observations["semantic"] = np.array(semantic_to_rgb(semantic_obs))
+            observations["semantic"] = np.array(semantic_obs)
         return observations
 
     def render(self, mode: str = "rgb") -> Any:
