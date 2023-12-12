@@ -14,6 +14,52 @@ PAD_IDX = 0
 BOS_IDX = 2504
 EOS_IDX = 2505
 
+d3_40_colors_rgb = np.array(
+    [
+        [31, 119, 180],
+        [174, 199, 232],
+        [255, 127, 14],
+        [255, 187, 120],
+        [44, 160, 44],
+        [152, 223, 138],
+        [214, 39, 40],
+        [255, 152, 150],
+        [148, 103, 189],
+        [197, 176, 213],
+        [140, 86, 75],
+        [196, 156, 148],
+        [227, 119, 194],
+        [247, 182, 210],
+        [127, 127, 127],
+        [199, 199, 199],
+        [188, 189, 34],
+        [219, 219, 141],
+        [23, 190, 207],
+        [158, 218, 229],
+        [57, 59, 121],
+        [82, 84, 163],
+        [107, 110, 207],
+        [156, 158, 222],
+        [99, 121, 57],
+        [140, 162, 82],
+        [181, 207, 107],
+        [206, 219, 156],
+        [140, 109, 49],
+        [189, 158, 57],
+        [231, 186, 82],
+        [231, 203, 148],
+        [132, 60, 57],
+        [173, 73, 74],
+        [214, 97, 107],
+        [231, 150, 156],
+        [123, 65, 115],
+        [165, 81, 148],
+        [206, 109, 189],
+        [222, 158, 214],
+    ],
+    dtype=np.uint8,
+)
+
 
 def get_lmdb_keys(dir_name: str):
     """
@@ -90,6 +136,7 @@ class R2RDataset(Dataset):
         
         env = lmdb.open(self.data_path, readonly=True, lock=False)
         self.image_seqs = []
+        self.semantic_seqs = []
         self.action_seqs = []
         self.instructions = []
         txn = env.begin()
@@ -102,9 +149,14 @@ class R2RDataset(Dataset):
                     [observation_seq["rgb_features"][::self.skip_frame_per], observation_seq["depth_features"][::self.skip_frame_per]], 1
                 ).astype(np.float32)
             else:
-                image_seq = np.concatenate(
-                    [observation_seq["rgb"][::self.skip_frame_per], observation_seq["depth"][::self.skip_frame_per]], 3
-                ).astype(np.float32)
+                image_seq = np.concatenate([
+                    np.array(observation_seq["rgb"][::self.skip_frame_per] / 255.0).astype(np.float32),
+                    np.array(observation_seq["depth"][::self.skip_frame_per]).astype(np.float32),
+                ], 3).astype(np.float32)
+                if "semantic" in observation_seq.keys():
+                    self.semantic_seqs.append(
+                        np.array(observation_seq["semantic"][::self.skip_frame_per]).astype(np.uint8)
+                    )
             action_seq = np.eye(4)[np.array(value[2][::self.skip_frame_per])].astype(np.int8)
             instruction = np.array(observation_seq["instruction"][0]).astype(np.uint16)
 
@@ -117,16 +169,21 @@ class R2RDataset(Dataset):
             self.instructions.append(instruction)
         txn.commit()
         env.close()
-
+   
     def __len__(self):
         return self.data_num
 
     def __getitem__(self, index):
         image_seq = self.image_seqs[index]
+        if self.semantic_seqs != []:
+            semantic_seq = self.semantic_seqs[index]
+        else:
+            semantic_seq = None
         action_seq = self.action_seqs[index]
         instruction = self.instructions[index]        
         x = {
             "image_seq": image_seq,
+            "semantic_seq": semantic_seq,
             "action_seq": action_seq,
         }
         y = instruction
@@ -148,9 +205,15 @@ def my_collate_fn(batch):
         if max_path_length < len(x["action_seq"]):
             max_path_length = len(x["action_seq"])
     
+    if batch[0][0]["semantic_seq"] is not None:
+        h, w, c = np.shape(batch[0][0]["image_seq"][0])
+        image_shape = (h, w, c+3)
+    else:
+        image_shape = np.shape(batch[0][0]["image_seq"][0])
+    
     batched_image_seqs = [
         np.zeros(
-            (batch_size,) + np.shape(batch[0][0]["image_seq"][0]),
+            (batch_size,) + image_shape,
             np.float32,
         ) for _ in range(max_path_length)
     ]
@@ -166,10 +229,21 @@ def my_collate_fn(batch):
     
     for i, (x, y) in enumerate(batch):
         image_seq = x["image_seq"]
+        semantic_seq = x["semantic_seq"]
         action_seq = x["action_seq"]
         assert len(image_seq) == len(action_seq)
         path_masks[i, :len(action_seq)] = False
         for t, (image, action) in enumerate(zip(image_seq, action_seq)):
+            if semantic_seq is not None:
+                semantic = x["semantic_seq"][t]
+                semantic = np.take(
+                    d3_40_colors_rgb,
+                    semantic,
+                    axis=0,
+                ).astype(np.uint8) / 255.0
+                semantic = np.squeeze(semantic, axis=2)
+                image = np.concatenate([image, semantic], axis=2).astype(np.float32)
+            
             batched_image_seqs[t][i] = image
             batched_action_seqs[t][i] = action
         seq_lengths.append(len(image_seq))

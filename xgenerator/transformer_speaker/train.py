@@ -351,6 +351,7 @@ def main(config, model_name, logger, gpu_id):
         nhead=config["model"]["nhead"],
         use_image_feature=config["train"]["use_image_feature"],
         vocab_size=lang.vocab_size,
+        use_semantic=config["model"]["use_semantic"],
         glove=lang.glove_vec,
         dim_feedforward=config["model"]["dim_feedforward"],
         dropout=config["model"]["dropout_ratio"],

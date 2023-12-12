@@ -46,6 +46,7 @@ class Seq2SeqTransformer(nn.Module):
         nhead: int,
         use_image_feature: int,
         vocab_size: int,
+        use_semantic: bool,
         glove: np.ndarray = None,
         dim_feedforward: int = 512,
         dropout: float = 0.1,
@@ -62,12 +63,18 @@ class Seq2SeqTransformer(nn.Module):
         self.generator = nn.Linear(emb_size, vocab_size)
         if use_image_feature:
             # feature param: 2176*4*4 = 34,816
+            print("Visual image feature shape: (2176, 4, 4)")
             self.visual_emb = VisualFeatureEncoder((2176, 4, 4), emb_size-4)
         else:
             # Image param: 256*256*4 = 262,144
             #              128*128*4 = 65,536
             # self.visual_emb = VisualImageEncoder((256, 256, 4), emb_size-4)
-            self.visual_emb = VisualImageEncoder((128, 128, 4), emb_size-4)
+            if use_semantic:
+                print("Visual image shape: (128, 128, 7)")
+                self.visual_emb = VisualImageEncoder((128, 128, 7), emb_size-4)
+            else:
+                print("Visual image shape: (128, 128, 4)")
+                self.visual_emb = VisualImageEncoder((128, 128, 4), emb_size-4)
         self.word_vocab_emb = nn.Embedding(vocab_size, vocab_emb_size)
         if glove is not None:
             print('Using GloVe embedding')
