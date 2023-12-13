@@ -53,3 +53,10 @@ cd myss/xgenerator
 export OPENBLAS_NUM_THREADS=1
 tensorboard --logdir ./data/models/model-name/tb
 ```
+
+## Config
+
+### Semantic画像を使用する場合
+1.  `use_semantic`をTrueにする
+2. `train_data_path`, `val_seen_data_path`, `val_unseen_data_path`をsemantic画像入りのやつにする
+    * `cma_128_semantic`
