@@ -855,26 +855,17 @@ class TopDownMap(Measure):
 
         return top_down_map
 
-    def _draw_point(self, position, point_type, is_goal=False):
+    def _draw_point(self, position, point_type):
         t_x, t_y = maps.to_grid(
             position[2],
             position[0],
             (self._top_down_map.shape[0], self._top_down_map.shape[1]),
             sim=self._sim,
         )
-        if is_goal:
-            cv2.circle(
-                self._top_down_map,
-                (t_y, t_x),
-                25,
-                point_type,
-                thickness=-1,
-            )
-        else:
-            self._top_down_map[
-                t_x - self.point_padding : t_x + self.point_padding + 1,
-                t_y - self.point_padding : t_y + self.point_padding + 1,
-            ] = point_type
+        self._top_down_map[
+            t_x - self.point_padding : t_x + self.point_padding + 1,
+            t_y - self.point_padding : t_y + self.point_padding + 1,
+        ] = point_type
 
 
     def _draw_goals_view_points(self, episode):
@@ -898,7 +889,7 @@ class TopDownMap(Measure):
                 if self._is_on_same_floor(goal.position[1]):
                     try:
                         self._draw_point(
-                            goal.position, maps.MAP_TARGET_POINT_INDICATOR, True
+                            goal.position, maps.MAP_TARGET_POINT_INDICATOR,
                         )
                     except AttributeError:
                         pass
