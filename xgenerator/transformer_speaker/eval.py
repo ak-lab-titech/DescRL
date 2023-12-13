@@ -23,6 +23,7 @@ def load_model(model_path, ckpt_num, train_config, lang):
         nhead=train_config["model"]["nhead"],
         use_image_feature=train_config["train"]["use_image_feature"],
         vocab_size=lang.vocab_size,
+        use_semantic=train_config["model"]["use_semantic"],
         glove=lang.glove_vec,
         dim_feedforward=train_config["model"]["dim_feedforward"],
         dropout=train_config["model"]["dropout_ratio"],
