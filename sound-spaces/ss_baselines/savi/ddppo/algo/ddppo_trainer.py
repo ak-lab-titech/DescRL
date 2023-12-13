@@ -353,6 +353,8 @@ class DDPPOTrainer(PPOTrainer):
                 batch_sensor = np.squeeze(batch[sensor], axis=4)
             elif sensor == "generated_instruction":
                 batch_sensor = np.squeeze(batch[sensor], axis=1)
+            elif sensor == "semantic":
+                continue
             else:
                 batch_sensor = batch[sensor]
             rollouts.observations[sensor][0].copy_(batch_sensor)

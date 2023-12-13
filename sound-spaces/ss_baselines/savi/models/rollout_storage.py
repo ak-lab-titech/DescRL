@@ -39,6 +39,8 @@ class RolloutStorage:
         self.observations = {}
 
         for sensor in observation_space.spaces:
+            if sensor == "semantic":
+                continue
             self.observations[sensor] = torch.zeros(
                 num_steps + 1,
                 num_envs,
@@ -144,6 +146,8 @@ class RolloutStorage:
                 self.observations[sensor][self.step + 1].copy_(
                     np.squeeze(observations[sensor], axis=1)
                 )
+            elif sensor == "semantic":
+                continue
             else:
                 self.observations[sensor][self.step + 1].copy_(
                     observations[sensor]

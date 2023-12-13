@@ -53,14 +53,6 @@ class SMTCNN(nn.Module):
             self.depth_encoder = custom_resnet18(num_input_channels=n_input_depth)
             self._feat_dims += 64
 
-        # Semantic instance segmentation
-        if "semantic" in observation_space.spaces:
-            # Semantic object segmentation
-            self.input_modalities.append("semantic")
-            self.input_modalities.append("semantic_object")
-            self.semantic_encoder = custom_resnet18(num_input_channels=6)
-            self._feat_dims += 64
-
         self.layer_init()
 
     def layer_init(self):
@@ -95,22 +87,6 @@ class SMTCNN(nn.Module):
                 depth_observations = self.obs_transform(depth_observations)
             cnn_features.append(self.depth_encoder(depth_observations))
 
-        if "semantic" in self.input_modalities:
-            assert "semantic_object" in observations.keys(), \
-                "SMTCNN: Both instance and class segmentations must be available"
-            semantic_observations = convert_semantics_to_rgb(
-                observations["semantic"]
-            ).float()
-            semantic_object_observations = observations["semantic_object"].float()
-            # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
-            semantic_observations = torch.cat(
-                [semantic_observations, semantic_object_observations], -1
-            )
-            semantic_observations = semantic_observations.permute(0, 3, 1, 2) / 255.0
-            if self.obs_transform:
-                semantic_observations = self.obs_transform(semantic_observations)
-            cnn_features.append(self.semantic_encoder(semantic_observations))
-
         cnn_features = torch.cat(cnn_features, dim=1)
 
         return cnn_features
@@ -129,16 +105,3 @@ class SMTCNN(nn.Module):
     @property
     def is_blind(self):
         return False
-
-
-def convert_semantics_to_rgb(semantics):
-    r"""Converts semantic IDs to RGB images.
-    """
-    semantics = semantics.long() % 40
-    mapping_rgb = torch.from_numpy(d3_40_colors_rgb).to(semantics.device)
-    semantics_r = torch.take(mapping_rgb[:, 0], semantics)
-    semantics_g = torch.take(mapping_rgb[:, 1], semantics)
-    semantics_b = torch.take(mapping_rgb[:, 2], semantics)
-    semantics_rgb = torch.stack([semantics_r, semantics_g, semantics_b], -1)
-
-    return semantics_rgb

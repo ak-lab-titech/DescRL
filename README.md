@@ -79,6 +79,10 @@
 2. SENSORSの`'GENERATED_INSRUCTION'`を消して`'ORACLE_ACTION_GENERATED_INSTRUCTION'`を追加
 3. IPRLの事前学習後にこの重みを利用したい場合は、`myss/sound-spaces/ss_baselines/savi/config/semantic_audionav/savi.yaml`のSCENE_MEMORY_TRANSFORMERの`use_pretrained`をTrueにして、`pretrained_path`を指定する。
 
+#### Semantic画像を用いたXGeneratorの使用
+1. GENERATED_INSTRUCTION.XGENERATOR_PATHとGENERATED_INSTRUCTION.XGENERATOR_CKPTをSemantic画像対応のXGeneratorに変更
+2. SENSORSに`"SEMANTIC_SENSOR"`を追加
+
 #### ゴール数の変更
 1. configの`SIMULATOR.AUDIO.NUM`を変更する
 2. configの`DATASET.SPLIT`を変更する

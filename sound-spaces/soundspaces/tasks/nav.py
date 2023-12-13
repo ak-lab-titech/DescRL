@@ -335,6 +335,7 @@ class GeneratedInstruction(Sensor):
             num_decoder_layers=xgenerator_config["model"]["num_decoder_layers"],
             emb_size=xgenerator_config["model"]["emb_size"],
             vocab_emb_size=xgenerator_config["model"]["vocab_embedding_size"],
+            use_semantic=xgenerator_config["model"]["use_semantic"],
             nhead=xgenerator_config["model"]["nhead"],
             use_image_feature=xgenerator_config["train"]["use_image_feature"],
             vocab_size=self.vocab_size,
@@ -399,7 +400,12 @@ class GeneratedInstruction(Sensor):
             else:
                 depth_img = observations["depth"]
             rgb_img = observations["rgb"] / 255.0
-            image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
+            
+            if "semantic" in observations.keys():
+                semantic_img = np.squeeze(observations["semantic"], axis=3) / 255.0
+                image = np.concatenate([rgb_img, depth_img, semantic_img], 2).astype(np.float32)
+            else:
+                image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
 
             action = oracle_actions[future_step_cnt-1]
             action_onehot = np.eye(4)[action].astype(np.int8)
@@ -431,7 +437,7 @@ class GeneratedInstruction(Sensor):
                 action_seqs = action_seqs.cuda()
         
         return image_seqs, action_seqs
-        
+
     def generate_instruction(self, image_seqs, action_seqs, batch_size):
         """
         image_seqs: (seq_l, batch, image_shape)
@@ -474,14 +480,26 @@ class GeneratedInstruction(Sensor):
     
     def make_video(self, image_seqs, output_file, frame_rate=5):
         """
-        image_seqs: (seq_l, batch, h, w, 4)
+        image_seqs: (seq_l, batch, h, w, c)
         """
-        frame_size = (image_seqs.shape[2], image_seqs.shape[3])
+        if image_seqs.shape[4] == 7:
+            frame_size = (image_seqs.shape[2]*3, image_seqs.shape[3])
+        else:
+            frame_size = (image_seqs.shape[2]*2, image_seqs.shape[3])
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         out = cv2.VideoWriter(output_file, fourcc, frame_rate, frame_size)
 
         for i in range(len(image_seqs)):
-            frame = image_seqs[i, 0, :, :, :3].to('cpu').detach().numpy().copy() * 255
+            rgb = image_seqs[i, 0, :, :, :3].to('cpu').detach().numpy().copy() * 255
+            depth = image_seqs[i, 0, :, :, 3].to('cpu').detach().numpy().copy()
+            depth = np.uint8(cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX))
+            depth = np.array(cv2.applyColorMap(depth, cv2.COLORMAP_JET))
+            if image_seqs.shape[4] == 7:
+                semantic = image_seqs[i, 0, :, :, 4:].to('cpu').detach().numpy().copy() * 255
+                frame = np.concatenate([rgb, depth, semantic], axis=1)
+            else:
+                frame = np.concatenate([rgb, depth], axis=1)
+            
             frame = np.clip(frame, 0, 255).astype(np.uint8)
             out.write(frame)
 
