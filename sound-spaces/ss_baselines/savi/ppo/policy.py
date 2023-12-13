@@ -412,10 +412,10 @@ class AudioNavSMTNet(Net):
         self._feature_size = nfeats
 
         self.smt_state_encoder = SMTStateEncoder(
-            nfeats,
+            input_size=nfeats,
             dim_feedforward=hidden_size,
             pose_indices=pose_indices,
-            **kwargs
+            **kwargs,
         )
 
         if self._use_belief_encoder:
@@ -573,6 +573,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             use_belief_encoding,
             normalize_category_distribution,
             use_category_input,
+            **kwargs,
         )
         lang = R2RLang(name="r2r_train")
         self.instruction_predictor = InstructionPredictor(
@@ -602,7 +603,6 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         if self.iprl_use_gt_D:
             category = observations["category"] # (batch, 21)
             location = observations["pointgoal_with_gps_compass"] # (batch, 2)
-            location = torch.cat([-location[:, 1].unsqueeze(1), location[:, 0].unsqueeze(1)], dim=1)
         else:
             category = belief[:, :21]
             location = belief[:, 21:21+2*self.goal_num]

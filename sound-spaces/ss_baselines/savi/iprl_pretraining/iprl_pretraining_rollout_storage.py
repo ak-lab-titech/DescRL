@@ -24,6 +24,8 @@ class IPRLPretrainingRolloutStorage:
         self.observations = {}
 
         for sensor in observation_space.spaces:
+            if sensor == "semantic":
+                continue
             self.observations[sensor] = torch.zeros(
                 num_steps + 1,
                 num_envs,
@@ -88,6 +90,8 @@ class IPRLPretrainingRolloutStorage:
                 self.observations[sensor][self.step + 1].copy_(
                     observations[sensor].reshape(-1, 1)
                 )
+            elif sensor == "semantic":
+                continue
             else:
                 self.observations[sensor][self.step + 1].copy_(
                     observations[sensor]

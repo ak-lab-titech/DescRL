@@ -80,6 +80,7 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
             iprl_dropout=iprl_cfg.dropout,
             iprl_use_gt_D=iprl_cfg.iprl_use_gt_D,
             iprl_feedback=iprl_cfg.feedback,
+            max_grad_norm=ppo_cfg.max_grad_norm,
             hidden_size=smt_cfg.hidden_size,
             nhead=smt_cfg.nhead,
             num_encoder_layers=smt_cfg.num_encoder_layers,
@@ -169,15 +170,16 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
 
         t_sample_action = time.time()
 
-        step_observation = {
-            k: v[rollouts.step] for k, v in rollouts.observations.items()
-        }
-        external_memory_features = self.instruction_predictor.get_features(
-            step_observation,
-            rollouts.prev_actions[rollouts.step],
-        )
+        with torch.no_grad():
+            step_observation = {
+                k: v[rollouts.step] for k, v in rollouts.observations.items()
+            }
+            external_memory_features = self.instruction_predictor.get_features(
+                step_observation,
+                rollouts.prev_actions[rollouts.step],
+            )
 
-        actions = step_observation["oracle_action_sensor"]
+            actions = step_observation["oracle_action_sensor"]
 
         pth_time += time.time() - t_sample_action
 
@@ -321,6 +323,8 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
                 batch_sensor = np.squeeze(batch[sensor], axis=1)
             elif sensor == "oracle_action_sensor":
                 batch_sensor = batch[sensor].reshape(-1, 1)
+            elif sensor == "semantic":
+                continue
             else:
                 batch_sensor = batch[sensor]
             rollouts.observations[sensor][0].copy_(batch_sensor)
@@ -698,6 +702,7 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
                 self.instruction_predictor.before_backward(total_loss)
                 total_loss.backward()
 
+                self.instruction_predictor.before_step()
                 self.instruction_predictor.optimizer.step()
 
                 iprl_loss_epoch += iprl_loss.item()

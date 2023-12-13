@@ -67,6 +67,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         iprl_dropout,
         iprl_use_gt_D,
         iprl_feedback,
+        max_grad_norm,
         hidden_size=128,
         use_pretrained=False,
         pretrained_path='',
@@ -85,6 +86,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         self._use_belief_as_goal = use_belief_as_goal
         self._use_label_belief = use_label_belief
         self._use_location_belief = use_location_belief
+        self.max_grad_norm = max_grad_norm
         self._hidden_size = hidden_size
         self._action_size = action_space.n
         self._use_belief_encoder = use_belief_encoding
@@ -238,7 +240,6 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         if self.iprl_use_gt_D:
             category = observations["category"] # (batch, 21)
             location = observations["pointgoal_with_gps_compass"] # (batch, 2)
-            location = torch.cat([-location[:, 1].unsqueeze(1), location[:, 0].unsqueeze(1)], dim=1)
         else:
             category = belief[:, :21]
             location = belief[:, 21:21+2*self.goal_num]
@@ -259,6 +260,11 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         )
 
         return logits
+
+    def before_step(self):
+        nn.utils.clip_grad_norm_(
+            self.parameters(), self.max_grad_norm
+        )
 
 
 class AudioNavSMTInstructionPredictorDDP(AudioNavSMTInstructionPredictor, DecentralizedDistributedMixinInstruction):
