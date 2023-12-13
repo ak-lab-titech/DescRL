@@ -48,8 +48,8 @@ TASK:
     GOAL_FORMAT: "CARTESIAN"
     DIMENSIONALITY: 2
   GENERATED_INSTRUCTION:
-    XGENERATOR_PATH: "xgenerator/data/models/tf-speaker"
-    XGENERATOR_CKPT: 800
+    XGENERATOR_PATH: "xgenerator/data/models/tf-speaker-semantic-24h"
+    XGENERATOR_CKPT: 1000
     MAX_INSTRUCTION_LENGTH: 40
     FUTURE_STEP_NUM: 20 # -1なら最後まで
     MODEL_RESOLUTION: 128
