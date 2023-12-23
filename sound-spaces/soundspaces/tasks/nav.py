@@ -349,6 +349,8 @@ class GeneratedInstruction(Sensor):
         if torch.cuda.is_available():
             self.instruction_generator.to("cuda")
         
+        self.instruction_generator.eval()
+        
         self.previous_instruction = None
 
     def _get_uuid(self, *args: Any, **kwargs: Any):
