@@ -75,9 +75,19 @@
 
 
 #### IPRLの事前学習
+
+##### 事前学習用のデータを作成する
+GeneratedInstructionで時間がかかりすぎるので、事前に作成しておくと高速化ができる。
+1. DATASET.SPLITで、どのデータセットにおいて生成したいのか選択
+    * 1データあたり0.4sくらいかかるので、膨大すぎる場合は事前にsplitして並列でやるのが良い
+
+
+##### 事前学習
 1. `myss/sound-spaces/configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml`の`TASK.SENSORS`に`'ORACLE_ACTION_SENSOR'`を追加
 2. SENSORSの`'GENERATED_INSRUCTION'`を消して`'ORACLE_ACTION_GENERATED_INSTRUCTION'`を追加
-3. IPRLの事前学習後にこの重みを利用したい場合は、`myss/sound-spaces/ss_baselines/savi/config/semantic_audionav/savi.yaml`のSCENE_MEMORY_TRANSFORMERの`use_pretrained`をTrueにして、`pretrained_path`を指定する。
+
+#### 事前学習ずみをSAViで使う
+1. IPRLの事前学習後にこの重みを利用したい場合は、`myss/sound-spaces/ss_baselines/savi/config/semantic_audionav/savi.yaml`のSCENE_MEMORY_TRANSFORMERの`use_pretrained`をTrueにして、`pretrained_path`を指定する。
 
 #### Semantic画像を用いたXGeneratorの使用
 1. GENERATED_INSTRUCTION.XGENERATOR_PATHとGENERATED_INSTRUCTION.XGENERATOR_CKPTをSemantic画像対応のXGeneratorに変更
