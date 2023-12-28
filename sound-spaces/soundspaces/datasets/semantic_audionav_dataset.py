@@ -15,7 +15,7 @@ from habitat.core.registry import registry
 from habitat.core.simulator import AgentState, ShortestPathPoint
 from habitat.core.dataset import Dataset
 from habitat.core.utils import DatasetFloatJSONEncoder
-from soundspaces.tasks.semantic_audionav_task import SemanticAudioGoalNavEpisode, SemanticAudioGoal, ObjectViewLocation
+from soundspaces.tasks.semantic_audionav_task import SemanticAudioGoalNavEpisodeWithInstruction, SemanticAudioGoalNavEpisode, SemanticAudioGoal, ObjectViewLocation
 
 ALL_SCENES_MASK = "*"
 CONTENT_SCENES_PATH_FIELD = "content_scenes_path"
@@ -82,7 +82,10 @@ class SemanticAudioNavDataset(Dataset):
             dataset["episodes"][i]["object_category"] = ep["goals"][0][
                 "object_category"
             ]
-            ep = SemanticAudioGoalNavEpisode(**ep)
+            if "instructions" in ep.keys():
+                ep = SemanticAudioGoalNavEpisodeWithInstruction(**ep)
+            else:
+                ep = SemanticAudioGoalNavEpisode(**ep)
 
             goals_key = ep.goals_key
             if goals_key not in goals_by_category:
@@ -191,7 +194,10 @@ class SemanticAudioNavDataset(Dataset):
         #     self.goals_by_category[k] = [self.__deserialize_goal(g) for g in v]
 
         for i, episode in enumerate(deserialized["episodes"]):
-            episode = SemanticAudioGoalNavEpisode(**episode)
+            if "instructions" in episode.keys():
+                episode = SemanticAudioGoalNavEpisodeWithInstruction(**episode)
+            else:
+                episode = SemanticAudioGoalNavEpisode(**episode)
             # episode.episode_id = str(i)
 
             if scenes_dir is not None:

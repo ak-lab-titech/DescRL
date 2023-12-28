@@ -68,6 +68,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         iprl_use_gt_D,
         iprl_feedback,
         max_grad_norm,
+        on_or_off="on",
         hidden_size=128,
         use_pretrained=False,
         pretrained_path='',
@@ -93,6 +94,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         self._normalize_category_distribution = normalize_category_distribution
         self._use_category_input = use_category_input
         self.goal_num = goal_num
+        self.on_or_off = on_or_off
 
         super().__init__()
         assert SpectrogramSensor.cls_uuid in observation_space.spaces
@@ -129,6 +131,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             activation=kwargs["activation"],
             pose_indices=pose_indices,
             pretraining=kwargs["pretraining"],
+            on_or_off=on_or_off,
         )
 
         if self._use_belief_encoder:
@@ -194,16 +197,28 @@ class AudioNavSMTInstructionPredictor(nn.Module):
 
     def get_features(self, observations, prev_actions):
         x = []
-        x.append(self.visual_encoder(observations))
-        x.append(self.action_encoder(self._get_one_hot(prev_actions)))
-        x.append(self.goal_encoder(observations))
+        x.append(self.visual_encoder(observations, self.on_or_off))
+        if self.on_or_off == "off":
+            L, N, _ = prev_actions.size()
+            prev_actions = prev_actions.view(L*N, 1)
+            action_features = self.action_encoder(self._get_one_hot(prev_actions))
+            action_features = action_features.view(L, N, 16)
+            
+        x.append(action_features)
+        x.append(self.goal_encoder(observations, self.on_or_off))
 
         if self._use_category_input:
             x.append(observations[Category.cls_uuid])
 
         x.append(observations[PoseSensor.cls_uuid])
 
-        x = torch.cat(x, dim=1)
+        if self.on_or_off == "on":
+            x = torch.cat(x, dim=1)
+        else:
+            x = torch.cat(x, dim=2)
+        # f = open("debug.txt", "a")
+        # f.write(f"x: {x.size()}\n")
+        # f.close()
 
         return x
     
@@ -217,6 +232,38 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             return actions_oh
 
     def forward(self, observations, prev_actions, masks, ext_memory, ext_memory_masks):
+        # f = open("debug.txt", "a")
+        # f.write(f"--------- FORWARD --------\n")
+        # for k, v in observations.items():
+        #     f.write(f"{k}: {v.size()}\n")
+        # f.write(f"prev_actions: {prev_actions.size()}\n")
+        # f.write(f"ext_memory_masks: {ext_memory_masks.size()}\n")
+        # f.close()
+        if self.on_or_off == "on":
+            return self.on_forward(observations, prev_actions, masks, ext_memory, ext_memory_masks)
+        elif self.on_or_off == "off":
+            return self.off_forward(observations, prev_actions, ext_memory_masks, observations["target"])
+        else:
+            raise Exception(f"on_or_off: {self.on_or_off}")
+
+    def off_forward(self, observations, prev_actions, ext_memory_masks, targets):
+        x = self.get_features(observations, prev_actions)
+        _, enc_memory = self.smt_state_encoder(x, None, ext_memory_masks, path_lens=observations["seq_lengths"])
+
+        category =  observations["category"] # (batch, 21)
+        location =  observations["location"] # (batch, 2)
+
+        logits = self.instruction_predictor(
+            category=category, # (batch, 21)
+            location=location, # (batch, 2)
+            target=targets, # (batch, instr_len)
+            memory=enc_memory, # (mem_size, batch, smt_hidden)
+            memory_key_padding_mask=ext_memory_masks,
+            convert_mask=False,
+        )
+        return logits
+
+    def on_forward(self, observations, prev_actions, masks, ext_memory, ext_memory_masks):
         x = self.get_features(observations, prev_actions)
 
         if self._use_belief_as_goal:

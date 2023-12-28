@@ -132,10 +132,14 @@ class AudioCNN(nn.Module):
                 if layer.bias is not None:
                     nn.init.constant_(layer.bias, val=0)
 
-    def forward(self, observations):
+    def forward(self, observations, on_or_off="on"):
         cnn_input = []
 
         audio_observations = observations[self._audiogoal_sensor]
+        if on_or_off == "off":
+            L, N, H, W, C = audio_observations.size()
+            audio_observations = audio_observations.view(L*N, H, W, C)
+        
         # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
         audio_observations = audio_observations.permute(0, 3, 1, 2)
         cnn_input.append(audio_observations)
@@ -147,4 +151,8 @@ class AudioCNN(nn.Module):
 
         cnn_input = torch.cat(cnn_input, dim=1)
 
-        return self.cnn(cnn_input)
+        audio_features = self.cnn(cnn_input)
+
+        if on_or_off == "off":
+            audio_features = audio_features.view(L, N, -1)
+        return audio_features

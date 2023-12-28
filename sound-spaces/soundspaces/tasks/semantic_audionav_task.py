@@ -45,6 +45,11 @@ class SemanticAudioGoalNavEpisode(NavigationEpisode):
         return f"{os.path.basename(self.scene_id)}_{self.object_category}"
 
 
+@attr.s(auto_attribs=True, kw_only=True)
+class SemanticAudioGoalNavEpisodeWithInstruction(SemanticAudioGoalNavEpisode):
+    instructions: list[int]
+
+
 @attr.s(auto_attribs=True)
 class ObjectViewLocation:
     r"""ObjectViewLocation provides information about a position around an object goal

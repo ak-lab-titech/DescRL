@@ -69,7 +69,8 @@ class SMTStateEncoder(nn.Module):
         dropout: float = 0.1,
         activation: str = "relu",
         pose_indices: Optional[Tuple[int, int]] = None,
-        pretraining: bool = False
+        pretraining: bool = False,
+        on_or_off: str = "on",
     ):
         r"""A Transformer for encoding the state in RL and decoding features based on
         the observation and goal encodings.
@@ -84,6 +85,7 @@ class SMTStateEncoder(nn.Module):
             dim_feedforward: The hidden size of feedforward layers in the transformer
             dropout: The dropout value after each attention layer
             activation: The activation to use after each linear layer
+            on_or_off: on-policy or off-policy
         """
 
         super().__init__()
@@ -120,6 +122,7 @@ class SMTStateEncoder(nn.Module):
             dropout=dropout,
             activation=activation,
         )
+        self.on_or_off = on_or_off
 
     def _convert_masks_to_transformer_format(self, memory_masks):
         r"""The memory_masks is a FloatTensor with
@@ -207,7 +210,23 @@ class SMTStateEncoder(nn.Module):
     def hidden_state_size(self):
         return self._dim_feedforward
 
-    def forward(self, x, memory, memory_masks, need_enc_memory=False, *args, **kwargs):
+    def off_policy_forward(self, x, memory_masks, path_lens):
+        if self._use_pose_encoding:
+            pi, pj = self._pose_indices
+            x_pose = x[..., pi:]
+            x_pose_enc = self._encode_pose_off_policy(x_pose, path_lens)
+            x = torch.cat([x[..., :pi], x_pose_enc], dim=-1)
+        M, bs = x.shape[:2]
+        x = self.fusion_encoder(x.view(M*bs, -1)).view(M, bs, -1)
+        
+        encoded_features = self.transformer.encoder(
+            x,
+            mask=None,
+            src_key_padding_mask=memory_masks,
+        )
+        return None, encoded_features
+
+    def forward(self, x, memory, memory_masks, need_enc_memory=False, path_lens=None, *args, **kwargs):
         """
         Single input case:
             Inputs:
@@ -220,8 +239,13 @@ class SMTStateEncoder(nn.Module):
                 memory - (M, N, input_size)
                 memory_masks - (T*N, M)
         """
-        assert x.size(0) == memory.size(1)
-        return self.single_forward(x, memory, memory_masks, need_enc_memory=need_enc_memory, *args, **kwargs)
+        if self.on_or_off == "on":
+            assert x.size(0) == memory.size(1)
+            return self.single_forward(x, memory, memory_masks, need_enc_memory=need_enc_memory, *args, **kwargs)
+        elif self.on_or_off == "off":
+            return self.off_policy_forward(x, memory_masks, path_lens)
+        else:
+            raise Exception(f"on_or_off: {self.on_or_off}")
 
     def _encode_pose(self, agent_pose, memory_pose):
         """
@@ -250,6 +274,23 @@ class SMTStateEncoder(nn.Module):
         ).view(M, bs, -1)
 
         return agent_pose_encoded, memory_pose_encoded
+
+    def _encode_pose_off_policy(self, agent_poses, path_lens):
+        """
+        memoryとxが分けられていない時用のencode_pose.
+        off-policyの時に用いる
+        """
+        agent_xyh, agent_t = agent_poses[..., :3], agent_poses[..., 3:4]
+        current_agent_xyh = agent_xyh[path_lens-1, torch.arange(path_lens.size(0))].unsqueeze(0)
+
+        agent_rel_xyh = self._compute_relative_pose(current_agent_xyh, agent_xyh)
+        agent_rel_pose = torch.cat([agent_rel_xyh, agent_t], -1)
+        agent_pose_formatted = self._format_pose(agent_rel_pose)
+        M, bs = agent_pose_formatted.shape[:2]
+        agent_pose_encoded = self.pose_encoder(
+            agent_pose_formatted.view(M * bs, -1)
+        ).view(M, bs, -1)
+        return agent_pose_encoded
 
     def _compute_relative_pose(self, pose_a, pose_b):
         """

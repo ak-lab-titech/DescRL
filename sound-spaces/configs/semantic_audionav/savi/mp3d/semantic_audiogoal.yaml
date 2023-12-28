@@ -66,7 +66,7 @@ TASK:
 
 DATASET:
   TYPE: "SemanticAudioNav"
-  SPLIT: "train"
+  SPLIT: "train" # train_w_instruction
   CONTENT_SCENES: ["*"]
   VERSION: 'v1'
   SCENES_DIR: "data/scene_datasets/mp3d"

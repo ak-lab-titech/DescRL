@@ -86,9 +86,11 @@ class InstructionPredictor(nn.Module):
         location: torch.Tensor,
         target: torch.Tensor,
         memory: torch.Tensor,
-        memory_key_padding_mask: torch.Tensor
+        memory_key_padding_mask: torch.Tensor,
+        convert_mask: bool = True,
     ):
-        memory_key_padding_mask = self.convert_memory_masks(memory_key_padding_mask)
+        if convert_mask:
+            memory_key_padding_mask = self.convert_memory_masks(memory_key_padding_mask)
 
         if target is not None:
             logits = self.teacher_forcing_forward(category, location, target, memory, memory_key_padding_mask)

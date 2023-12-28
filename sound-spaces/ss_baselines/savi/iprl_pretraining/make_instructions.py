@@ -59,17 +59,11 @@ def setup_instruction_generator(
     )
     if torch.cuda.is_available():
         instruction_generator = instruction_generator.to(torch.device("cuda"))
+    instruction_generator.eval()
     return instruction_generator
 
 
 def get_obs_seqs(sim, future_step_num):
-    current_previous_step_collided = sim._previous_step_collided
-    current_is_episode_active = sim._is_episode_active
-    current_receiver_position_index = sim._receiver_position_index
-    current_rotation_angle = sim._rotation_angle
-    current_episode_step_count = sim._episode_step_count
-    current_prev_sim_obs = sim._prev_sim_obs
-
     image_seqs_list = []
     action_seqs_list = []
     oracle_actions = sim.get_oracle_actions_from_current_pos()
@@ -100,17 +94,6 @@ def get_obs_seqs(sim, future_step_num):
         if action == 0 or future_step_cnt == future_step_num:
             break
         sim.step(action)
-        
-    sim._previous_step_collided = current_previous_step_collided
-    sim._is_episode_active = current_is_episode_active
-    sim._receiver_position_index = current_receiver_position_index
-    sim._rotation_angle = current_rotation_angle
-    sim._episode_step_count = current_episode_step_count
-    sim._prev_sim_obs = current_prev_sim_obs
-    sim.set_agent_state(
-        position=list(sim.graph.nodes[sim._receiver_position_index]['point']),
-        rotation=quat_from_angle_axis(np.deg2rad(sim._rotation_angle), np.array([0, 1, 0])),
-    )
 
     image_seqs = np.array(image_seqs_list)
     action_seqs = np.array(action_seqs_list)
@@ -221,10 +204,7 @@ def main(
     dict_dataset = {f: {'episodes': [], 'scene': f.split('/')[0]} for f in scene_file_names}
 
     print(f"length of episodes: {len(episodes)}\n")
-    cnt = 0
     for episode in episodes:
-        s = time.time()
-
         sim_cfg = merge_sim_episode_config(sim_cfg, episode)
         sim.reconfigure(sim_cfg)
         _ = sim.reset()
@@ -238,9 +218,10 @@ def main(
             path_mask=path_masks,
             max_instr_len=config.TASK.GENERATED_INSTRUCTION.MAX_INSTRUCTION_LENGTH,
         )
+        episode.info["num_action"] = np.shape(batched_image_seqs)[1] # 元々保存されているnum_actionとoracle_action lengthが異なっている時がある
         dict_episode = {
             'episode_id': episode.episode_id,
-            'scene_id': episode.scene_id,
+            'scene_id': os.path.join(*episode.scene_id.split("/")[-2:]),
             'start_position': episode.start_position,
             'start_rotation': episode.start_rotation,
             'info': episode.info,
@@ -265,18 +246,11 @@ def main(
             'instructions': instructions.cpu().numpy().tolist(),
         }
         dict_dataset[f"{sim_cfg.SCENE.split('/')[-1].split('.')[0]}.json.gz"]['episodes'].append(dict_episode)
-        if cnt > 100000:
-            break
-        cnt += 1
-
-        # f = open("debug.txt", "a")
-        # f.write(f"time: {time.time() - s}\n")
-        # f.close()
     
     for key, values in dict_dataset.items():
         print(f"len of {key}: {len(values['episodes'])}\n")
         dataset_json_str = json.dumps(values)
-        with open(f"{save_dataset_path}/content/{key}", "wt") as f:
+        with gzip.open(f"{save_dataset_path}/content/{key}", "wt") as f:
             f.write(dataset_json_str)
     
 

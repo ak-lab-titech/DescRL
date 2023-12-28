@@ -83,8 +83,17 @@ GeneratedInstructionで時間がかかりすぎるので、事前に作成して
 
 
 ##### 事前学習
+on-policyで行う場合
 1. `myss/sound-spaces/configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml`の`TASK.SENSORS`に`'ORACLE_ACTION_SENSOR'`を追加
 2. SENSORSの`'GENERATED_INSRUCTION'`を消して`'ORACLE_ACTION_GENERATED_INSTRUCTION'`を追加
+
+off-policyで行う場合
+1. SENSORSに`ORACLE_ACTION_SENSOR`も`GENERATED_INSTRUCTION`も`ORACLE_ACTION_GENERATED_INSTRUCTION`も不要
+    * (そもそも呼ばれないので消す必要もない)
+2. SPLITを、instructionが含まれているものを選択するようにする
+    * e.g. `train_w_instruction`
+3. batch_size (PPO.num_steps)は64くらいまでおとさないとmemoryが足りないのでおとす
+4. multi gpuで学習させたい場合も、job.shのCMDは`single-gpu-train`にする
 
 #### 事前学習ずみをSAViで使う
 1. IPRLの事前学習後にこの重みを利用したい場合は、`myss/sound-spaces/ss_baselines/savi/config/semantic_audionav/savi.yaml`のSCENE_MEMORY_TRANSFORMERの`use_pretrained`をTrueにして、`pretrained_path`を指定する。

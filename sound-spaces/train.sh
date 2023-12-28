@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi
-MODEL="savi-2nd"   # avnav, avwan, savi-1st, savi-2nd, savi-iprl-pretraining
+MODEL="savi-2nd"   # avnav, avwan, savi-1st, savi-2nd, savi-iprl-pre-onpolicy, savi-iprl-pre-offpolicy
 MODEL_NAME="ss1savi-savi-iprl"
 PRETRAINED_MODEL_NAME="ss1savi-savi-1st"
 CKPT_NUM="106"
@@ -48,8 +48,16 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-2nd" ]; then
         --exp-config ss_baselines/savi/config/semantic_audionav/savi.yaml \
         --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
         RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
-elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pretraining" ]; then
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pre-onpolicy" ]; then
     python ss_baselines/savi/iprl_pretraining/run.py \
+        --config ss_baselines/savi/iprl_pretraining/config.yaml \
+        --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
+        RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pre-offpolicy" ]; then
+    CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
+        --nnodes=1 \
+        --nproc_per_node=$NP \
+       ss_baselines/savi/iprl_pretraining/off_policy_train.py \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
         --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
         RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
