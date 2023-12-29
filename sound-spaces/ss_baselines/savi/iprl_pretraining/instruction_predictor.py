@@ -203,6 +203,8 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             prev_actions = prev_actions.view(L*N, 1)
             action_features = self.action_encoder(self._get_one_hot(prev_actions))
             action_features = action_features.view(L, N, 16)
+        else:
+            action_features = self.action_encoder(self._get_one_hot(prev_actions))
             
         x.append(action_features)
         x.append(self.goal_encoder(observations, self.on_or_off))

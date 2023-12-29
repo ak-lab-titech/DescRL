@@ -344,10 +344,13 @@ class GeneratedInstruction(Sensor):
             dropout=xgenerator_config["model"]["dropout_ratio"],
         )
         self.instruction_generator.load_state_dict(
-            torch.load(f"../{xgenerator_path}/data/{ckpt_num}/seq2seq.pth")
+            torch.load(
+                f"../{xgenerator_path}/data/{ckpt_num}/seq2seq.pth",
+                map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
+            )
         )
         if torch.cuda.is_available():
-            self.instruction_generator.to("cuda")
+            self.instruction_generator = self.instruction_generator.to("cuda")
         
         self.instruction_generator.eval()
         
@@ -386,7 +389,7 @@ class GeneratedInstruction(Sensor):
         action_seqs_list = []
         oracle_actions = self._sim.get_oracle_actions_from_current_pos()
         future_step_cnt = 0
-        # for分だと-1の時に対応できないのでwhile
+        # for文だと-1の時に対応できないのでwhile
         while True:
             future_step_cnt += 1
             sim_obs = self._sim._get_sim_observation()
@@ -480,34 +483,6 @@ class GeneratedInstruction(Sensor):
         past_tokens = past_tokens.view(self.max_instr_len)
         return past_tokens
     
-    def make_video(self, image_seqs, output_file, frame_rate=5):
-        """
-        image_seqs: (seq_l, batch, h, w, c)
-        """
-        if image_seqs.shape[4] == 7:
-            frame_size = (image_seqs.shape[2]*3, image_seqs.shape[3])
-        else:
-            frame_size = (image_seqs.shape[2]*2, image_seqs.shape[3])
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_file, fourcc, frame_rate, frame_size)
-
-        for i in range(len(image_seqs)):
-            rgb = image_seqs[i, 0, :, :, :3].to('cpu').detach().numpy().copy() * 255
-            depth = image_seqs[i, 0, :, :, 3].to('cpu').detach().numpy().copy()
-            depth = np.uint8(cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX))
-            depth = np.array(cv2.applyColorMap(depth, cv2.COLORMAP_JET))
-            if image_seqs.shape[4] == 7:
-                semantic = image_seqs[i, 0, :, :, 4:].to('cpu').detach().numpy().copy() * 255
-                frame = np.concatenate([rgb, depth, semantic], axis=1)
-            else:
-                frame = np.concatenate([rgb, depth], axis=1)
-            
-            frame = np.clip(frame, 0, 255).astype(np.uint8)
-            out.write(frame)
-
-        out.release()
-        cv2.destroyAllWindows()
-    
     def resize_observation(self, observation):
         observation['rgb'] = cv2.resize(
             observation['rgb'],
@@ -587,7 +562,8 @@ class OracleActionGeneratedInstruction(GeneratedInstruction):
 
         if self.step_cnt == self.episode_len + 1: # Reset episode
             assert self._sim._episode_step_count == 0
-            self.get_all_observations_for_an_episode()
+            self.generated_instructions = np.array(episode.instructions)
+            self.episode_len = np.shape(self.generated_instructions)[1]
             self.step_cnt = 0
             generated_instruction = self.generated_instructions[:, self.step_cnt]
             self.step_cnt += 1
