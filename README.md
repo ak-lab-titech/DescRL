@@ -81,6 +81,10 @@ GeneratedInstructionで時間がかかりすぎるので、事前に作成して
 1. DATASET.SPLITで、どのデータセットにおいて生成したいのか選択
     * 1データあたり0.4sくらいかかるので、膨大すぎる場合は事前にsplitして並列でやるのが良い
 
+episodeをsimulationして画像とかまで保存する。diskにあらかじめ保存しておくことでoff-policy事前学習の高速化を期待
+1. DATASET.SPLITで、どのデータセットにおいて生成したいのか選択
+    * instructionが含まれているもの(e.g. train_w_instruction)を選択する必要がある
+
 
 ##### 事前学習
 on-policyで行う場合
@@ -93,6 +97,7 @@ off-policyで行う場合
 2. SPLITを、instructionが含まれているものを選択するようにする
     * e.g. `train_w_instruction`
 3. batch_size (PPO.num_steps)は64くらいまでおとさないとmemoryが足りないのでおとす
+    * ついでにTFのメモリーサイズも64まで落としておいた方が良いかも
 4. multi gpuで学習させたい場合も、job.shのCMDは`single-gpu-train`にする
 
 #### 事前学習ずみをSAViで使う
