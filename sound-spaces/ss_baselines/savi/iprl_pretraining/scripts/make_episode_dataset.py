@@ -18,7 +18,7 @@ from habitat.sims import make_sim
 from ss_baselines.savi.config.default import get_config
 from soundspaces.tasks.semantic_audionav_task import merge_sim_episode_config
 from soundspaces.mp3d_utils import CATEGORY_INDEX_MAPPING
-from ss_baselines.savi.iprl_pretraining.iprl_pretraining_dataset import (
+from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import (
     compute_spectrogram,
     compute_pose,
     get_category,

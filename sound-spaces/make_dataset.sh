@@ -18,11 +18,11 @@ if [ $CMD = "replica_dataset" ]; then
     python soundspaces/datasets/make_dataset.py \
         --yaml_path ./configs/audionav/av_nav/replica/make_dataset.yaml
 elif [ $CMD = "generate_instruction" ]; then
-    python ss_baselines/savi/iprl_pretraining/make_instructions.py \
+    python ss_baselines/savi/iprl_pretraining/scripts/make_instructions.py \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
         --save-dataset-path ./data/datasets/semantic_audionav/mp3d/v1/$DATASET_NAME
 elif [ $CMD = "offpolicy_episode_dataset" ]; then
-    python ss_baselines/savi/iprl_pretraining/make_episode_dataset.py \
+    python ss_baselines/savi/iprl_pretraining/scripts/make_episode_dataset.py \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
         --save-dataset-path ./data/lmdb_dataset/$DATASET_NAME
 else

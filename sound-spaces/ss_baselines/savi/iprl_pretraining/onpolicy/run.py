@@ -16,7 +16,7 @@ warnings.filterwarnings('ignore', category=UserWarning)
 import torch
 
 from ss_baselines.savi.config.default import get_config
-from ss_baselines.savi.iprl_pretraining.iprl_pretraining_trainer import IPRLPretrainingTrainer
+from ss_baselines.savi.iprl_pretraining.onpolicy.iprl_pretraining_trainer import IPRLPretrainingTrainer
 
 
 def main():

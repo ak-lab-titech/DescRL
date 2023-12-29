@@ -49,7 +49,7 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-2nd" ]; then
         --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
         RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
 elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pre-onpolicy" ]; then
-    python ss_baselines/savi/iprl_pretraining/run.py \
+    python ss_baselines/savi/iprl_pretraining/onpolicy/run.py \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
         --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
         RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
@@ -57,7 +57,7 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pre-offpolicy" ]; then
     CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
         --nnodes=1 \
         --nproc_per_node=$NP \
-       ss_baselines/savi/iprl_pretraining/off_policy_train.py \
+       ss_baselines/savi/iprl_pretraining/offpolicy/off_policy_train.py \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
         --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
         RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"

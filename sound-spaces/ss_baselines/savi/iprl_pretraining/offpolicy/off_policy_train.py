@@ -20,8 +20,8 @@ from gym import spaces
 sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
 sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
 
-from ss_baselines.savi.iprl_pretraining.instruction_predictor import AudioNavSMTInstructionPredictor
-from ss_baselines.savi.iprl_pretraining.iprl_pretraining_dataset import IPRLPretrainingDataset, my_collate_fn, compute_spectrogram
+from ss_baselines.savi.iprl_pretraining.common.instruction_predictor import AudioNavSMTInstructionPredictor
+from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import IPRLPretrainingDataset, my_collate_fn, compute_spectrogram
 from ss_baselines.savi.config.default import get_config
 
 sys.path.append("/home/0/19B30511/av-nav/myss")

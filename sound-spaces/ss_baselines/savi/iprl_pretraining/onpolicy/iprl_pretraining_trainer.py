@@ -20,8 +20,8 @@ from habitat import Config, logger
 from ss_baselines.common.base_trainer import BaseRLTrainer
 from ss_baselines.common.env_utils import construct_envs
 from ss_baselines.common.environments import get_env_class
-from ss_baselines.savi.iprl_pretraining.iprl_pretraining_rollout_storage import IPRLPretrainingRolloutStorage
-from ss_baselines.savi.iprl_pretraining.instruction_predictor import AudioNavSMTInstructionPredictorDDP
+from ss_baselines.savi.iprl_pretraining.onpolicy.iprl_pretraining_rollout_storage import IPRLPretrainingRolloutStorage
+from ss_baselines.savi.iprl_pretraining.common.instruction_predictor import AudioNavSMTInstructionPredictorDDP
 from ss_baselines.common.tensorboard_utils import TensorboardWriter
 from ss_baselines.common.utils import batch_obs, linear_decay, observations_to_image, generate_video
 from ss_baselines.savi.ddppo.algo.ddp_utils import (
