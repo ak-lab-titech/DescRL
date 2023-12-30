@@ -94,7 +94,7 @@ def make_episode_data(sim_cfg, sim, episode):
     return data
 
 
-def main(config, sensor_list, save_path):
+def main(config, sensor_list, save_path, start_index=0):
     dataset = make_dataset(
         id_dataset=config.DATASET.TYPE,
         config=config.DATASET,
@@ -110,11 +110,12 @@ def main(config, sensor_list, save_path):
     sim = make_sim(
         sim_cfg.TYPE, config=sim_cfg,
     )
+    map_size = 5 * 1.1e12 # about 5 TB
+    env = lmdb.open(save_path, map_size=int(map_size))
     s = time.time()
-    for i, episode in enumerate(episodes):
-        data = make_episode_data(sim_cfg, sim, episode)
+    for i in range(start_index, len(episodes)):
+        data = make_episode_data(sim_cfg, sim, episodes[i])
 
-        env = lmdb.open(save_path, map_size=int(1.2e12))
         with env.begin(write=True) as txn:
             txn.put(
                 f"{i}".encode(), 
@@ -138,10 +139,11 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str)
     parser.add_argument('--save-dataset-path', type=str)
+    parser.add_argument('--start-index', type=int)
     args = parser.parse_args()
 
     config = get_config(args.config)
     os.makedirs(f"{args.save_dataset_path}", exist_ok=True)
-    main(config.TASK_CONFIG, config.SENSORS, args.save_dataset_path)
+    main(config.TASK_CONFIG, config.SENSORS, args.save_dataset_path, args.start_index)
 
     
