@@ -19,7 +19,8 @@ from soundspaces.tasks.semantic_audionav_task import merge_sim_episode_config
 from soundspaces.mp3d_utils import CATEGORY_INDEX_MAPPING
 
 
-# TODO seedの設定
+np.random.seed(0)
+
 
 class IPRLPretrainingDataset(Dataset):
     def __init__(self, config, sensor_list):
