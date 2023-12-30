@@ -3,6 +3,7 @@
 CMD="offpolicy_episode_dataset"
 DATASET_NAME="iprl_pretrain"
 START_INDEX=0
+FUTURE_OR_PAST="future"
 
 
 pwd
@@ -14,6 +15,7 @@ conda activate av-nav
 echo CMD=$CMD
 echo DATASET_NAME=$DATASET_NAME
 echo START_INDEX=$START_INDEX
+echo FUTURE_OR_PAST=$FUTURE_OR_PAST
 
 
 if [ $CMD = "replica_dataset" ]; then
@@ -22,7 +24,8 @@ if [ $CMD = "replica_dataset" ]; then
 elif [ $CMD = "generate_instruction" ]; then
     python ss_baselines/savi/iprl_pretraining/scripts/make_instructions.py \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
-        --save-dataset-path ./data/datasets/semantic_audionav/mp3d/v1/$DATASET_NAME
+        --save-dataset-path ./data/datasets/semantic_audionav/mp3d/v1/$DATASET_NAME \
+        --future-or-past $FUTURE_OR_PAST
 elif [ $CMD = "offpolicy_episode_dataset" ]; then
     python ss_baselines/savi/iprl_pretraining/scripts/make_episode_dataset.py \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \

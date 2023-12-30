@@ -101,7 +101,7 @@ def get_obs_seqs(sim, future_step_num):
     return image_seqs, action_seqs
 
 
-def make_batch(image_seqs, action_seqs, input_future_step_num):
+def make_batch(image_seqs, action_seqs, input_future_step_num, future_or_past):
     batch_size = np.shape(image_seqs)[0]
     batched_image_seqs = np.zeros(
         (input_future_step_num, batch_size) + np.shape(image_seqs[0][0]),
@@ -114,9 +114,15 @@ def make_batch(image_seqs, action_seqs, input_future_step_num):
     path_masks = np.full((batch_size, input_future_step_num), True)
 
     for i in range(batch_size):
-        image_seq = image_seqs[i:i+input_future_step_num, 0]
+        if future_or_past == "future":
+            image_seq = image_seqs[i:i+input_future_step_num, 0]
+            action_seq = action_seqs[i:i+input_future_step_num, 0]
+        elif future_or_past == "past":
+            image_seq = image_seqs[max(0, i-input_future_step_num+1):i+1, 0]
+            action_seq = action_seqs[max(0, i-input_future_step_num+1):i+1, 0]
+        else:
+            raise Exception(f"future_or_past: {future_or_past}")
         seq_len = np.shape(image_seq)[0]
-        action_seq = action_seqs[i:i+input_future_step_num, 0]
         batched_image_seqs[:seq_len, i] = image_seq
         batched_action_seqs[:seq_len, i] = action_seq
         path_masks[i, :seq_len] = False
@@ -178,6 +184,7 @@ def main(
     sensor_list,
     content_scenes_path,
     save_dataset_path,
+    future_or_past,
 ):
     dataset = make_dataset(
         id_dataset=config.DATASET.TYPE,
@@ -209,7 +216,12 @@ def main(
         sim.reconfigure(sim_cfg)
         _ = sim.reset()
         image_seqs, action_seqs = get_obs_seqs(sim, -1)
-        batched_image_seqs, batched_action_seqs, path_masks = make_batch(image_seqs, action_seqs, config.TASK.GENERATED_INSTRUCTION.FUTURE_STEP_NUM)
+        batched_image_seqs, batched_action_seqs, path_masks = make_batch(
+            image_seqs,
+            action_seqs,
+            config.TASK.GENERATED_INSTRUCTION.FUTURE_STEP_NUM,
+            future_or_past,
+        )
 
         instructions = generate_instruction(
             instruction_generator=instruction_predictor,
@@ -267,6 +279,10 @@ if __name__=="__main__":
         "--save-dataset-path",
         type=str,
     )
+    parser.add_argument(
+        "--future-or-past",
+        type=str,
+    )
     args = parser.parse_args()
     config = get_config(args.config)
     content_scenes_path = "{data_path}/content".format(
@@ -277,7 +293,7 @@ if __name__=="__main__":
     )
     os.makedirs(f"{args.save_dataset_path}/content", exist_ok=True)
 
-    main(config.TASK_CONFIG, config.SENSORS, content_scenes_path, args.save_dataset_path)
+    main(config.TASK_CONFIG, config.SENSORS, content_scenes_path, args.save_dataset_path, args.future_or_past)
 
 
 # simlator: 0.001476287841796875
