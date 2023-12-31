@@ -12,12 +12,20 @@ sys.path.append("/home/0/19B30511/av-nav/myss")
 sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
 sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
 
+from habitat.datasets import make_dataset
+from ss_baselines.savi.config.default import get_config
 from soundspaces.utils import generate_video, visualize_spectrogram
 from xgenerator.common.lang import R2RLang, tokens2sentences
 
 
 class IPRLPretrainingLMDBDataset(Dataset):
-    def __init__(self, lmdb_dataset_path, data_num):
+    def __init__(self, config, lmdb_dataset_path, data_num):
+        dataset = make_dataset(
+            id_dataset=config.DATASET.TYPE,
+            config=config.DATASET,
+        )
+        print(f"dataset.split: {config.DATASET.SPLIT}")
+        self.episodes = dataset.episodes
         self.data_num = data_num
         self.env = lmdb.open(lmdb_dataset_path, readonly=True, lock=False)
     
@@ -27,18 +35,16 @@ class IPRLPretrainingLMDBDataset(Dataset):
     def __getitem__(self, index):
         value = self.get_value(index)
         
-        image_seq = value[0] # (seq_len, 1, image_shape)
-        audio_seq = value[1] # (seq_len, 1, image_sape)
-        pose_seq = value[2]  # (seq_len, 1, image_shape)
-        action_seq = value[3]
-        category = value[4]
-        location = value[5]
-        instruction = value[6]
+        image_seq = value[0]   # (seq_len, 1, image_shape)
+        audio_seq = value[1]   # (seq_len, 1, spectrogram_shape)
+        pose_seq = value[2]    # (seq_len, 1, 4)
+        action_seq = value[3]  # (seq_len, 1)
+        category = value[4]    # (21,)
+        location = value[5]    # (2,)
+        # instruction = value[6] # (40,)
 
-        for i in range(len(value)):
-            f = open("debug.txt", "a")
-            f.write(f"{i}, {np.shape(value[i])}\n")
-            f.close()
+        step = pose_seq[-1, 0, 3]
+        instruction = np.array(self.episodes[index].instructions)[:, int(step)] # (40,)
         
         x = {
             "image_seq": image_seq,
@@ -69,9 +75,11 @@ class IPRLPretrainingLMDBDataset(Dataset):
         action_seq = value[3]
         category = value[4]
         location = value[5]
-        instruction = value[6]
+        # instruction = value[6]
+        step = pose_seq[-1, 0, 3]
+        instruction = np.array(self.episodes[index].instructions)[:, int(step)]
 
-        words = tokens2sentences(instruction.reshape(-1, 1), R2RLang("r2r_lang"))
+        words = tokens2sentences(torch.from_numpy(instruction.reshape(-1, 1)), R2RLang("r2r_lang"))
         
         f = open(f"{output_dir}/output.txt", "w")
         f.write(f"0: found, 1: forward, 2: left, 3: right\n")
@@ -92,8 +100,11 @@ if __name__=="__main__":
     f = open("debug.txt", "w")
     f.write(f"start iprl_pretraining_lmdb_dataset!\n")
     f.close()
+
+    config = get_config("ss_baselines/savi/iprl_pretraining/config.yaml")
+
     dataset = IPRLPretrainingLMDBDataset(
-        "./data/lmdb_dataset/lmdb_test", 100
+        config.TASK_CONFIG, "./data/lmdb_dataset/iprl_pretrain", 100
     )
     for i in range(len(dataset)):
         f = open("debug.txt", "a")
@@ -101,5 +112,7 @@ if __name__=="__main__":
         f.close()
         x, y = dataset[i]
     
-    dataset.visualize_data(0, "./data/videos/offpolicy_lmdb_dataset_0")
+    dataset.visualize_data(0, "./data/videos/offpolicy_past_lmdb_dataset/index_0")
+    dataset.visualize_data(1, "./data/videos/offpolicy_past_lmdb_dataset/index_1")
+    dataset.visualize_data(2, "./data/videos/offpolicy_past_lmdb_dataset/index_2")
 

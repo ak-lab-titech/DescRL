@@ -22,6 +22,7 @@ sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
 
 from ss_baselines.savi.iprl_pretraining.common.instruction_predictor import AudioNavSMTInstructionPredictor
 from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import IPRLPretrainingDataset, my_collate_fn, compute_spectrogram
+from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_lmdb_dataset import IPRLPretrainingLMDBDataset
 from ss_baselines.savi.config.default import get_config
 
 sys.path.append("/home/0/19B30511/av-nav/myss")
@@ -169,6 +170,9 @@ def train(
     logger,
     gpu_id,
     model_dir,
+    use_lmdb_dataset,
+    log_interval,
+    save_interval,
 ):
     logger.info(f"device: {torch.device('cuda', gpu_id)}")
 
@@ -220,7 +224,13 @@ def train(
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info("LOADING DATA...")
     
-    train_dataset = IPRLPretrainingDataset(config.TASK_CONFIG, config.SENSORS)
+    if use_lmdb_dataset:
+        train_dataset = IPRLPretrainingLMDBDataset(
+            config.TASK_CONFIG, "./data/lmdb_dataset/iprl_pretrain", 502103,
+        )
+    else:
+        train_dataset = IPRLPretrainingDataset(config.TASK_CONFIG, config.SENSORS)
+
     train_sampler = DistributedSampler(
         train_dataset,
         num_replicas=int(os.environ["NP"]),
@@ -235,7 +245,8 @@ def train(
         sampler=train_sampler,
     )
     if int(os.environ["LOCAL_RANK"]) == 0:
-        logger.info(f"The number of train data: {len(train_dataset)}, batch: {len(train_dataloader)}")
+        n_batch = len(train_dataloader)
+        logger.info(f"The number of train data: {len(train_dataset)}, batch: {n_batch}")
         logger.info("FINISH LOADING DATA!")
         logger.info("START TRAINING...")
 
@@ -249,12 +260,11 @@ def train(
             else contextlib.suppress()
     ) as writer:
         n_loop = 0
+        save_cnt = 0
+        losses = []
         while True:
             n_loop += 1
-            losses = []
-            s_one_step = time.time()
             for j, (inputs, targets) in enumerate(train_dataloader):
-                s_step = time.time()
                 loss = train_one_step(
                     instruction_predictor,
                     loss_fn,
@@ -262,31 +272,31 @@ def train(
                     targets,
                 )
                 losses.append(loss.item())
-                if int(os.environ["LOCAL_RANK"]) == 0:
-                    logger.info(f"train {j}: {np.mean(losses)}")
-                    logger.info(f"TIME: {time.time() - s_one_step}, train_one_step: {time.time() - s_step}")
-                    s_one_step = time.time()
 
-            train_loss = torch.from_numpy(np.array([np.mean(losses)])).to(gpu_id)
-            all_reduce(train_loss)
-            train_loss = train_loss.item() / int(os.environ["NP"])
+                if j % log_interval == 0:
+                    train_loss = torch.from_numpy(np.array([np.mean(losses)])).to(gpu_id)
+                    all_reduce(train_loss)
+                    train_loss = train_loss.item() / int(os.environ["NP"])
+                    losses = []
 
-            if int(os.environ["LOCAL_RANK"]) == 0:
-                writer.add_scalar("train/loss", train_loss, n_loop)
-            
-            # TODO 多分train_dataloader全て終えるのって結構時間かかると思うので、tensorboardもそうだけど、
-            #      enumerate(train_dataloader)のループの中に入れた方が良い気がする
-            save_checkpoint(
-                instruction_predictor,
-                # config=
-                # file_name=,
-                # extra_state=
-            )
-            if int(os.environ["LOCAL_RANK"]) == 0:
-                logger.info(f"---------- Iteration {n_loop} ----------")
-                logger.info(f"train loss:{train_loss:.5f}")
-                logger.info(f"time:{((time.time() - s) / 60):.2f} [min]")
-                s = time.time()
+                    if int(os.environ["LOCAL_RANK"]) == 0:
+                        n_update = n_batch*(n_loop-1) + j
+                        time_minutes =(time.time() - s) / 60
+                        writer.add_scalar("train/loss", train_loss, n_update)
+                        writer.add_scalar("train/time", time_minutes, n_update)
+
+                        logger.info(f"---------- Update {n_update} ----------")
+                        logger.info(f"train loss:{train_loss:.5f}")
+                        logger.info(f"time:{time_minutes:.2f} [min]")
+                        s = time.time()
+                if j % save_interval == 0:
+                    save_checkpoint(
+                        instruction_predictor,
+                        config=config,
+                        file_name=f"ckpt.{save_cnt}.pth",
+                        extra_state=None,
+                    )
+                    save_cnt += 1
 
 
 if __name__=="__main__":
@@ -304,6 +314,9 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help='the path to config.')
     parser.add_argument('--model-dir', help='the directory to save trained model.')
+    parser.add_argument('--use-lmdb', help='whether to use lmdb dataset or not.')
+    parser.add_argument('--log-interval', help='the interval to log about training.')
+    parser.add_argument('--save-interval', help='the interval to save the trained model.')
     parser.add_argument(
         "opts",
         default=None,
@@ -326,5 +339,14 @@ if __name__=="__main__":
     
     config = get_config(args.config, args.opts, args.model_dir, 'train', False)
     logger.info(config)
+    os.makedirs(config.CHECKPOINT_FOLDER, exist_ok=True)
     
-    train(config, logger, gpu_id, args.model_dir)
+    train(
+        config=config, 
+        logger=logger,
+        gpu_id=gpu_id,
+        model_dir=args.model_dir,
+        use_lmdb_dataset=("True" == args.use_lmdb),
+        log_interval=int(args.log_interval),
+        save_interval=int(args.save_interval),
+    )
