@@ -273,14 +273,15 @@ def train(
                 )
                 losses.append(loss.item())
 
-                if j % log_interval == 0:
+                n_update = n_batch*(n_loop-1) + j
+                if n_update % log_interval == 0:
                     train_loss = torch.from_numpy(np.array([np.mean(losses)])).to(gpu_id)
                     all_reduce(train_loss)
                     train_loss = train_loss.item() / int(os.environ["NP"])
                     losses = []
 
                     if int(os.environ["LOCAL_RANK"]) == 0:
-                        n_update = n_batch*(n_loop-1) + j
+                        
                         time_minutes =(time.time() - s) / 60
                         writer.add_scalar("train/loss", train_loss, n_update)
                         writer.add_scalar("train/time", time_minutes, n_update)
@@ -289,7 +290,7 @@ def train(
                         logger.info(f"train loss:{train_loss:.5f}")
                         logger.info(f"time:{time_minutes:.2f} [min]")
                         s = time.time()
-                if j % save_interval == 0:
+                if n_update % save_interval == 0:
                     save_checkpoint(
                         instruction_predictor,
                         config=config,
