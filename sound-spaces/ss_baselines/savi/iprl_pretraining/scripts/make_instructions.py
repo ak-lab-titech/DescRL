@@ -16,8 +16,8 @@ sys.path.append("/home/0/19B30511/av-nav/myss")
 from habitat.sims import make_sim
 from habitat.datasets import make_dataset
 from habitat_sim.utils.common import quat_from_angle_axis
-from soundspaces.tasks.semantic_audionav_task import merge_sim_episode_config
 from ss_baselines.savi.config.default import get_config
+from soundspaces.tasks.semantic_audionav_task import merge_sim_episode_config
 from xgenerator.common.lang import R2RLang
 from common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from xgenerator.transformer_speaker.model import Seq2SeqTransformer
@@ -209,6 +209,7 @@ def main(
         f for f in os.listdir(content_scenes_path) if os.path.isfile(os.path.join(content_scenes_path, f))
     ]
     dict_dataset = {f: {'episodes': [], 'scene': f.split('/')[0]} for f in scene_file_names}
+    # dict_dataset = {}
 
     print(f"length of episodes: {len(episodes)}\n")
     for episode in episodes:
@@ -258,6 +259,10 @@ def main(
             'instructions': instructions.cpu().numpy().tolist(),
         }
         dict_dataset[f"{sim_cfg.SCENE.split('/')[-1].split('.')[0]}.json.gz"]['episodes'].append(dict_episode)
+        # if f"{sim_cfg.SCENE.split('/')[-1].split('.')[0]}.json.gz" in dict_dataset.keys():
+        #     dict_dataset[f"{sim_cfg.SCENE.split('/')[-1].split('.')[0]}.json.gz"]['episodes'].append(dict_episode)
+        # else:
+        #     dict_dataset[f"{sim_cfg.SCENE.split('/')[-1].split('.')[0]}.json.gz"] = {'episodes': [dict_episode], 'scene': f"{sim_cfg.SCENE.split('/')[-1].split('.')[0]}.json.gz"}
     
     for key, values in dict_dataset.items():
         print(f"len of {key}: {len(values['episodes'])}\n")
