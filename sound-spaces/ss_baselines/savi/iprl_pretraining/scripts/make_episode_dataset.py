@@ -129,6 +129,7 @@ def main(config, sensor_list, save_path, start_index=0):
             f.write(f"TIME: {time.time() - s}\n")
             f.close()
             s = time.time()
+    print("FINISH!")
 
 
 if __name__=="__main__":
