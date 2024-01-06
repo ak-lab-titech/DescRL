@@ -255,6 +255,12 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         category =  observations["category"] # (batch, 21)
         location =  observations["location"] # (batch, 2)
 
+        if self.feedback == "teacher":
+            pass
+        elif self.feedback == "student":
+            targets = None
+        else:
+            raise Exception(f"feedback must be 'teacher' or 'student', not {self.feedback}")
         logits = self.instruction_predictor(
             category=category, # (batch, 21)
             location=location, # (batch, 2)
