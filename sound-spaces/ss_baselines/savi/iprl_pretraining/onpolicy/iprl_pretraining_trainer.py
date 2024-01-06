@@ -874,10 +874,10 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
                 prev_actions.copy_(actions)
 
             
-            if len(self.config.VIDEO_OPTION) > 0 and 'oracle_action_generated_instruction' in batch.keys():
+            if len(self.config.VIDEO_OPTION) > 0 and 'generated_instruction' in batch.keys():
                 _, iprl_tokens = iprl_logits.max(2) # iprl_tokens: (instr_len, batch)
                 iprl_sentences = tokens2sentences(iprl_tokens, lang)
-                true_sentences = tokens2sentences(batch['oracle_action_generated_instruction'].permute(1,0).int(), lang)
+                true_sentences = tokens2sentences(batch['generated_instruction'].permute(1,0).int(), lang)
                 for i in range(len(iprl_sentences)):
                     logger.info(f"Episode {len(stats_episodes)}, Step {step_cnt[i]} Pred: {iprl_sentences[i]}")
                     logger.info(f"  True: {true_sentences[i]}")

@@ -43,9 +43,11 @@ from soundspaces.utils import convert_semantic_object_to_rgb
 from soundspaces.mp3d_utils import HouseReader
 
 sys.path.append("/home/0/19B30511/av-nav/myss")
+from scripts.cache_observations import to_category_id
 from xgenerator.common.lang import R2RLang
 from common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from xgenerator.transformer_speaker.model import Seq2SeqTransformer
+from xgenerator.common.load_lmdb import d3_40_colors_rgb
 
 @registry.register_sensor
 class AudioGoalSensor(Sensor):
@@ -407,7 +409,23 @@ class GeneratedInstruction(Sensor):
             rgb_img = observations["rgb"] / 255.0
             
             if "semantic" in observations.keys():
-                semantic_img = np.squeeze(observations["semantic"], axis=3) / 255.0
+                sim_class = self._sim._sim.__class__.__name__
+                if len(np.shape(observations["semantic"])) == 4:
+                    semantic_img = np.squeeze(observations["semantic"], axis=3) / 255.0
+                else:
+                    sim_class = self._sim._sim.__class__.__name__
+                    if sim_class == 'Simulator': # video
+                        semantic = observations["semantic"]
+                        semantic = to_category_id(semantic, self._sim._sim.semantic_scene)
+                        semantic = np.take(
+                            d3_40_colors_rgb,
+                            semantic,
+                            axis=0,
+                        ).astype(np.uint8)
+                        semantic = np.squeeze(semantic, axis=2)
+                        semantic_img = semantic / 255.0
+                    else:
+                        raise Exception(f"semantic_img: {np.shape(observations['semantic'])}, and sim_class: {sim_class}")
                 image = np.concatenate([rgb_img, depth_img, semantic_img], 2).astype(np.float32)
             else:
                 image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
