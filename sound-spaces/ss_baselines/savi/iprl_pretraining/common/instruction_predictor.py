@@ -296,7 +296,9 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             category = observations["category"] # (batch, 21)
             location = observations["pointgoal_with_gps_compass"] # (batch, 2)
         else:
-            category = belief[:, :21]
+            # max_indices = torch.argmax(belief[:, :21], dim=1)
+            # category = torch.nn.functional.one_hot(max_indices, num_classes=21).float().cuda()
+            category = nn.functional.softmax(belief[:, :21], dim=1)
             location = belief[:, 21:21+2*self.goal_num]
         
         if self.feedback == "teacher":
