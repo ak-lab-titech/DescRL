@@ -69,7 +69,7 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi" ]; then
         RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
         RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
 elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pretraining" ]; then
-    python ss_baselines/savi/iprl_pretraining/run.py \
+    python ss_baselines/savi/iprl_pretraining/onpolicy/run.py \
         --run-type eval \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
         --model-dir data/models/ss1-savi/mp3d/$MODEL_NAME \
