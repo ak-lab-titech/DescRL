@@ -64,6 +64,7 @@ def eval(
     logger,
     model_dir,
     indices,
+    dataset_path,
 ):
     logger.info(f"device: {torch.device('cuda', gpu_id)}")
 
@@ -125,7 +126,7 @@ def eval(
         data = get_data(
             index=index,
             episode=episodes[index],
-            dataset_path="./data/lmdb_dataset/iprl_pretrain_val",
+            dataset_path=dataset_path,
             gen_video=True,
             model_dir=model_dir,
         )
@@ -158,8 +159,10 @@ if __name__=="__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help='the path to config.')
-    parser.add_argument('--model-dir', help='the directory to save trained model.')
+    parser.add_argument('--model-dir', help='the directory of model to eval.')
     parser.add_argument('--indices', type=int, nargs="*", help='data indices for eval.')
+    parser.add_argument('--past-or-future', type=str, help='the model to predict the past or future instruction.')
+    parser.add_argument('--dataset-type', type=str, help='the type of dataset') # train, eval, test
     parser.add_argument(
         "opts",
         default=None,
@@ -167,6 +170,16 @@ if __name__=="__main__":
         help="Modify config options from command line",
     )
     args = parser.parse_args()
+
+    args.opts.append("TASK_CONFIG.DATASET.SPLIT")
+    if args.past_or_future == "past":
+        split = f"{args.dataset_type}_w_past_instruction"
+    elif args.past_or_future == "future":
+        split = f"{args.dataset_type}_w_instruction"
+    else:
+        raise Exception(f"args.past_or_future: {args.past_or_future}")
+    print(args.past_or_future, split)
+    args.opts.append(split)
         
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
@@ -187,6 +200,7 @@ if __name__=="__main__":
         logger=logger,
         model_dir=args.model_dir,
         indices=args.indices,
+        dataset_path=f"./data/lmdb_dataset/iprl_pretrain_{args.dataset_type}"
     )
 
 

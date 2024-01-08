@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi
-MODEL="savi"   # avnav, avwan, savi, savi-iprl-pretraining
+MODEL="savi"   # avnav, avwan, savi, savi-on-iprl-pretraining, savi-off-iprl-pretraining
 MODEL_NAME="ss1savi-savi"
 DATASET_NAME="mp3d"
 CKPT_NUM=154
@@ -68,7 +68,7 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi" ]; then
         TEST_EPISODE_COUNT $VIDEO_NUM \
         RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
         RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
-elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pretraining" ]; then
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-on-iprl-pretraining" ]; then
     python ss_baselines/savi/iprl_pretraining/onpolicy/run.py \
         --run-type eval \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
@@ -86,6 +86,20 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pretraining" ]; then
         TEST_EPISODE_COUNT $VIDEO_NUM \
         RL.PPO.use_belief_predictor True \
         RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
+        RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-off-iprl-pretraining" ]; then
+    # 注意：beliefを用いず、GTのcateogryとlocationを入力してtestしている
+    python ss_baselines/savi/iprl_pretraining/offpolicy/off_policy_eval.py \
+        --config ss_baselines/savi/iprl_pretraining/config.yaml \
+        --model-dir  data/models/ss1-savi/mp3d/$MODEL_NAME \
+        --indices 1 2 3 \
+        --past-or-future future \
+        --dataset-type test \
+        CONTINUOUS False \
+        NUM_PROCESSES 1 \
+        RL.DDPPO.pretrained False \
+        RL.DDPPO.pretrained_weights data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        DISPLAY_RESOLUTION 512 \
         RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
