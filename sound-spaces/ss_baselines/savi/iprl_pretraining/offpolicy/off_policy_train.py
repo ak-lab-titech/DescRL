@@ -27,6 +27,7 @@ from ss_baselines.savi.config.default import get_config
 
 sys.path.append("/home/0/19B30511/av-nav/myss")
 from xgenerator.common.load_lmdb import PAD_IDX
+from xgenerator.common.lang import tokens2sentences, R2RLang
 
 
 def setup_instruction_predictor(
@@ -137,7 +138,7 @@ def save_checkpoint(
     )
 
 
-def rollout(instruction_predictor, loss_fn, inputs, targets):
+def rollout(instruction_predictor, loss_fn, inputs, targets, logger, visualize):
     inputs["target"] = targets # (batch, instr_len)
     logits = instruction_predictor(
         observations=inputs,
@@ -147,6 +148,13 @@ def rollout(instruction_predictor, loss_fn, inputs, targets):
         ext_memory_masks=inputs["mask"],
     )
     targets = targets.permute(1, 0)[1:, :] # (instr_len-1, batch)
+    if visualize and int(os.environ["LOCAL_RANK"]) == 0:
+        lang = R2RLang("r2r")
+        _, iprl_tokens = logits.max(2)
+        pred_sentence = tokens2sentences(iprl_tokens, lang)[0]
+        true_sentence = tokens2sentences(inputs["target"].permute(1, 0), lang)[0]
+        logger.info(f"Pred: {pred_sentence}")
+        logger.info(f"True: {true_sentence}")
     loss = loss_fn(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1))
     return loss
 
@@ -156,10 +164,12 @@ def train_one_step(
     loss_fn,
     inputs,
     targets,
+    logger,
+    visualize,
 ):
     instruction_predictor.train()
     instruction_predictor.optimizer.zero_grad()
-    loss = rollout(instruction_predictor, loss_fn, inputs, targets)
+    loss = rollout(instruction_predictor, loss_fn, inputs, targets, logger, visualize)
     loss.backward()
     instruction_predictor.optimizer.step()
     return loss
@@ -226,7 +236,7 @@ def train(
     
     if use_lmdb_dataset:
         train_dataset = IPRLPretrainingLMDBDataset(
-            config.TASK_CONFIG, "./data/lmdb_dataset/iprl_pretrain", 502103,
+            config.TASK_CONFIG, "./data/lmdb_dataset/iprl_pretrain_train", 502103,
         )
     else:
         train_dataset = IPRLPretrainingDataset(config.TASK_CONFIG, config.SENSORS)
@@ -243,9 +253,10 @@ def train(
         drop_last=True,
         collate_fn=my_collate_fn,
         sampler=train_sampler,
+        # num_workers=2,
     )
+    n_batch = len(train_dataloader)
     if int(os.environ["LOCAL_RANK"]) == 0:
-        n_batch = len(train_dataloader)
         logger.info(f"The number of train data: {len(train_dataset)}, batch: {n_batch}")
         logger.info("FINISH LOADING DATA!")
         logger.info("START TRAINING...")
@@ -265,15 +276,17 @@ def train(
         while True:
             n_loop += 1
             for j, (inputs, targets) in enumerate(train_dataloader):
+                n_update = n_batch*(n_loop-1) + j
                 loss = train_one_step(
                     instruction_predictor,
                     loss_fn,
                     inputs,
                     targets,
+                    logger,
+                    n_update % save_interval == 0,
                 )
                 losses.append(loss.item())
 
-                n_update = n_batch*(n_loop-1) + j
                 if n_update % log_interval == 0:
                     train_loss = torch.from_numpy(np.array([np.mean(losses)])).to(gpu_id)
                     all_reduce(train_loss)
