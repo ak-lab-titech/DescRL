@@ -31,6 +31,12 @@ elif [ $CMD = "offpolicy_episode_dataset" ]; then
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
         --save-dataset-path ./data/lmdb_dataset/$DATASET_NAME \
         --start-index $START_INDEX
+elif [ $CMD = "sub_episode_dataset" ]; then
+    python ss_baselines/savi/iprl_pretraining/scripts/make_sub_episode_dataset.py \
+        --config ss_baselines/savi/iprl_pretraining/config.yaml \
+        --source-dataset-path ./data/lmdb_dataset/iprl_pretrain_train \
+        --source-data-num 502103 \
+        --data-num 10000
 else
     echo ERROR: CMD=$CMD
 fi
