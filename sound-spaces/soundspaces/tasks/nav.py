@@ -8,6 +8,7 @@ from re import A
 from typing import Any, Type, Union, List
 import logging
 import sys
+import copy
 
 import yaml
 import cv2
@@ -39,7 +40,7 @@ from habitat.utils.geometry_utils import (
 )
 from habitat.tasks.utils import cartesian_to_polar
 from soundspaces.mp3d_utils import CATEGORY_INDEX_MAPPING
-from soundspaces.utils import convert_semantic_object_to_rgb
+from soundspaces.utils import generate_video, convert_semantic_object_to_rgb
 from soundspaces.mp3d_utils import HouseReader
 
 sys.path.append("/home/0/19B30511/av-nav/myss")
@@ -326,6 +327,10 @@ class GeneratedInstruction(Sensor):
         ckpt_num = kwargs["task"]._config["GENERATED_INSTRUCTION"]["XGENERATOR_CKPT"]
         self.max_instr_len = kwargs["task"]._config["GENERATED_INSTRUCTION"]["MAX_INSTRUCTION_LENGTH"]
         self.future_step_num = kwargs["task"]._config["GENERATED_INSTRUCTION"]["FUTURE_STEP_NUM"]
+        self.future_or_past = kwargs["task"]._config["GENERATED_INSTRUCTION"]["FUTURE_OR_PAST"]
+        f = open("debug.txt", "a")
+        f.write(f"self.future_or_past: {self.future_or_past}\n")
+        f.close()
 
         with open(f"../{xgenerator_path}/config.yaml", "r") as yml:
             xgenerator_config = yaml.safe_load(yml)
@@ -386,10 +391,32 @@ class GeneratedInstruction(Sensor):
         current_rotation_angle = self._sim._rotation_angle
         current_episode_step_count = self._sim._episode_step_count
         current_prev_sim_obs = self._sim._prev_sim_obs
+        current_past_actions = self._sim.past_actions
 
         image_seqs_list = []
         action_seqs_list = []
-        oracle_actions = self._sim.get_oracle_actions_from_current_pos()
+        if self.future_or_past == "future":
+            oracle_actions = self._sim.get_oracle_actions_from_current_pos()
+        elif self.future_or_past == "past":
+            oracle_actions = copy.deepcopy(self._sim.past_actions)
+            oracle_actions.append(0)
+
+            init_receiver_position_index = self._sim.init_receiver_position_index
+            init_rotation_angle = self._sim.init_rotation_angle
+            init_prev_sim_obs = self._sim.init_prev_sim_obs
+            self._sim._previous_step_collided = False
+            self._sim._is_episode_active = True
+            self._sim._receiver_position_index = init_receiver_position_index
+            self._sim._rotation_angle = init_rotation_angle
+            self._sim._episode_step_count = 0
+            self._sim._prev_sim_obs = init_prev_sim_obs
+            self._sim.past_actions = []
+            self._sim.set_agent_state(
+                position=list(self._sim.graph.nodes[init_receiver_position_index]['point']),
+                rotation=quat_from_angle_axis(np.deg2rad(init_rotation_angle), np.array([0, 1, 0])),
+            )
+        else:
+            raise Exception(f"future_or_past in GeneratedInstruction: {self.future_or_past}")
         future_step_cnt = 0
         # for文だと-1の時に対応できないのでwhile
         while True:
@@ -434,7 +461,11 @@ class GeneratedInstruction(Sensor):
             action_onehot = np.eye(4)[action].astype(np.int8)
             image_seqs_list.append([image])
             action_seqs_list.append([action_onehot])
-            if action == 0 or future_step_cnt == self.future_step_num:
+            if (
+                self.future_or_past == "future" and (action == 0 or future_step_cnt == self.future_step_num)
+            ) or (
+                self.future_or_past == "past" and (action == 0)
+            ):
                 break
             self._sim.step(action)
         
@@ -444,6 +475,7 @@ class GeneratedInstruction(Sensor):
         self._sim._rotation_angle = current_rotation_angle
         self._sim._episode_step_count = current_episode_step_count
         self._sim._prev_sim_obs = current_prev_sim_obs
+        self._sim.past_actions = current_past_actions
         self._sim.set_agent_state(
             position=list(self._sim.graph.nodes[self._sim._receiver_position_index]['point']),
             rotation=quat_from_angle_axis(np.deg2rad(self._sim._rotation_angle), np.array([0, 1, 0])),
@@ -451,6 +483,10 @@ class GeneratedInstruction(Sensor):
 
         image_seqs = np.array(image_seqs_list)
         action_seqs = np.array(action_seqs_list)
+
+        if self.future_or_past == "past" and len(oracle_actions) > self.future_step_num:
+            image_seqs = image_seqs[-self.future_step_num:]
+            action_seqs = action_seqs[-self.future_step_num:]
 
         if return_tensor:
             image_seqs = torch.from_numpy(image_seqs)

@@ -131,6 +131,10 @@ class SoundSpacesSim(Simulator, ABC):
         self._house_readers = dict()
         self._use_oracle_planner = True
         self._oracle_actions = list()
+        self.past_actions = list()
+        self.init_receiver_position_index = None
+        self.init_rotation_angle = None
+        self.init_prev_sim_obs = None
 
         self.points, self.graph = load_metadata(self.metadata_dir)
         for node in self.graph.nodes():
@@ -413,6 +417,8 @@ class SoundSpacesSim(Simulator, ABC):
         # so rotation angle 90 means the agent rotate about +Y 90 degrees
         self._rotation_angle = int(np.around(np.rad2deg(quat_to_angle_axis(quat_from_coeffs(
                              self.config.AGENT_0.START_ROTATION))[0]))) % 360
+        self.init_receiver_position_index = self._receiver_position_index
+        self.init_rotation_angle = self._rotation_angle
         if self.config.USE_RENDERED_OBSERVATIONS:
             self._sim.set_agent_state(list(self.graph.nodes[self._receiver_position_index]['point']),
                                       quat_from_coeffs(self.config.AGENT_0.START_ROTATION))
@@ -427,6 +433,8 @@ class SoundSpacesSim(Simulator, ABC):
 
         if self._use_oracle_planner:
             self._oracle_actions = self.compute_oracle_actions()
+        
+        self.past_actions = []
 
         logging.debug("Initial source, agent at: {}, {}, orientation: {}".
                       format(self._source_position_index, self._receiver_position_index, self.get_orientation()))
@@ -477,6 +485,7 @@ class SoundSpacesSim(Simulator, ABC):
 
         self._is_episode_active = True
         self._prev_sim_obs = sim_obs
+        self.init_prev_sim_obs = self._prev_sim_obs
         self._previous_step_collided = False
         # Encapsule data under Observations class
         observations = self._sensor_suite.get_observations(sim_obs)
@@ -498,6 +507,8 @@ class SoundSpacesSim(Simulator, ABC):
             "episode is not active, environment not RESET or "
             "STOP action called previously"
         )
+
+        self.past_actions.append(action)
 
         self._previous_step_collided = False
         # STOP: 0, FORWARD: 1, LEFT: 2, RIGHT: 2
