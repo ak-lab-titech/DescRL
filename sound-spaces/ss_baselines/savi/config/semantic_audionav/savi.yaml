@@ -43,7 +43,7 @@ RL:
       num_decoder_layers: 1
       dropout: 0.0
       activation: 'relu'
-      use_pretrained: False
+      use_pretrained: True
       pretrained_path: ''
       freeze_encoders: True
       pretraining: False
@@ -62,7 +62,7 @@ RL:
       nhead: 8
       dim_feedforward: 512
       dropout: 0.2
-      iprl_use_gt_D: True
+      iprl_use_gt_D: False
       feedback: "teacher" # teacher or student
   DDPPO:
     sync_frac: 0.6
