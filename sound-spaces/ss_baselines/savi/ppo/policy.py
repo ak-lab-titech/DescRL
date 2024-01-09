@@ -565,7 +565,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             direct_map_size,
             goal_num,
             hidden_size,
-            use_pretrained,
+            False, # use_pretrained (superの中では呼ばない)
             pretrained_path,
             use_belief_as_goal,
             use_label_belief,
@@ -591,7 +591,16 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         self.iprl_use_gt_D = iprl_use_gt_D
         self.feedback = iprl_feedback
 
+        if use_pretrained:
+            assert(pretrained_path != '')
+            self.pretrained_initialization(pretrained_path)
+
         self.train()
+    
+    def pretrained_initialization(self, path):
+        logging.info(f'AudioNavSMTNet ===> Loading pretrained model from {path}')
+        state_dict = torch.load(path)['state_dict']
+        self.load_state_dict(state_dict, strict=False)
     
     def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, need_logits=False):
         x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
@@ -604,7 +613,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             category = observations["category"] # (batch, 21)
             location = observations["pointgoal_with_gps_compass"] # (batch, 2)
         else:
-            category = belief[:, :21]
+            category = nn.functional.softmax(belief[:, :21], dim=1)
             location = belief[:, 21:21+2*self.goal_num]
         
         if self.feedback == "teacher":
