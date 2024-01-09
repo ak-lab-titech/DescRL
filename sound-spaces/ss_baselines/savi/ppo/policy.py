@@ -599,7 +599,10 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
     
     def pretrained_initialization(self, path):
         logging.info(f'AudioNavSMTNet ===> Loading pretrained model from {path}')
-        state_dict = torch.load(path)['state_dict']
+        state_dict = torch.load(
+            path,
+            map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
+        )['state_dict']
         self.load_state_dict(state_dict, strict=False)
     
     def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, need_logits=False):
