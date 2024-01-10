@@ -571,47 +571,6 @@ class OracleActionGeneratedInstruction(GeneratedInstruction):
     def _get_uuid(self, *args: Any, **kwargs: Any):
         return "oracle_action_generated_instruction"
 
-    def get_all_observations_for_an_episode(self):
-        self.future_step_num = -1
-        image_seqs, action_seqs = self.get_obs_seqs(return_tensor=False) # (seq_len, 1, shape)
-        self.episode_len = np.shape(image_seqs)[0]
-        batched_image_seqs, batched_action_seqs, path_masks = self.make_batch(image_seqs, action_seqs)
-        
-        batch_size = batched_image_seqs.size()[1]
-        self.generated_instructions = self.generate_instruction(batched_image_seqs, batched_action_seqs, batch_size, path_masks)
-        self.generated_instructions = self.generated_instructions.cpu()
-    
-    def make_batch(self, image_seqs, action_seqs):
-        batch_size = self.episode_len
-        batched_image_seqs = np.zeros(
-            (self.input_future_step_num, batch_size) + np.shape(image_seqs[0][0]),
-            np.float32,
-        )
-        batched_action_seqs = np.zeros(
-            (self.input_future_step_num, batch_size, 4),
-            np.float32,
-        )
-        path_masks = np.full((batch_size, self.input_future_step_num), True)
-
-        for i in range(batch_size):
-            image_seq = image_seqs[i:i+self.input_future_step_num, 0]
-            seq_len = np.shape(image_seq)[0]
-            action_seq = action_seqs[i:i+self.input_future_step_num, 0]
-            batched_image_seqs[:seq_len, i] = image_seq
-            batched_action_seqs[:seq_len, i] = action_seq
-            path_masks[i, :seq_len] = False
-
-        batched_image_seqs = torch.from_numpy(np.array(batched_image_seqs))
-        batched_action_seqs = torch.from_numpy(np.array(batched_action_seqs))
-        path_masks = torch.from_numpy(np.array(path_masks))
-        if torch.cuda.is_available():
-            batched_image_seqs = batched_image_seqs.cuda()
-            batched_action_seqs = batched_action_seqs.cuda()
-            path_masks = path_masks.cuda()
-
-        return batched_image_seqs, batched_action_seqs, path_masks
-
-
     def get_observation(self, *args: Any, observations, episode: Episode, **kwargs: Any):
 
         if self.step_cnt == self.episode_len + 1: # Reset episode
@@ -630,39 +589,6 @@ class OracleActionGeneratedInstruction(GeneratedInstruction):
             generated_instruction = self.generated_instructions[:, self.step_cnt-1]
             self.step_cnt += 1
         return generated_instruction
-    
-    def generate_instruction(self, image_seqs, action_seqs, batch_size, path_mask):
-        """
-        image_seqs: (seq_l, batch, image_shape)
-        action_seqs: (seq_l, batch, 4)
-        """
-        ended = torch.full((1, batch_size), False)
-        with torch.no_grad():
-            memory = self.instruction_generator.encode(
-                src_image=image_seqs,
-                src_action=action_seqs,
-                src_mask=None,
-                src_padding_mask=path_mask,
-            )
-            past_tokens = torch.full((1, batch_size), BOS_IDX)
-            if torch.cuda.is_available():
-                past_tokens = past_tokens.cuda()
-            
-            for _ in range(self.max_instr_len-1):
-                logits = self.instruction_generator.decode(
-                    trg=past_tokens,
-                    memory=memory,
-                    tgt_mask=None,
-                    memory_mask=None,
-                    tgt_padding_mask=None,
-                    memory_key_padding_mask=path_mask,
-                )[-1, :, :] # (batch, vocab_size)
-                _, next_tokens = logits.max(1)
-                next_tokens = next_tokens.view(1, batch_size)
-                next_tokens[ended] = PAD_IDX
-                ended[next_tokens == EOS_IDX] = True
-                past_tokens = torch.cat([past_tokens, next_tokens], dim=0)
-        return past_tokens
 
 
 @registry.register_measure
