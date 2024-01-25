@@ -464,7 +464,16 @@ class SoundSpacesSim(Simulator, ABC):
     def _get_sim_observation(self):
         joint_index = (self._receiver_position_index, self._rotation_angle)
         if joint_index in self._frame_cache:
-            return self._frame_cache[joint_index]
+            obs = self._frame_cache[joint_index]
+            if self.config.USE_RENDERED_OBSERVATIONS:
+                modified_obs = {
+                    "rgb": obs["rgb"],
+                    "depth": obs["depth"] * 10,
+                    "semantic": obs["semantic"],
+                }
+                return modified_obs
+            else:
+                return obs
         else:
             assert not self.config.USE_RENDERED_OBSERVATIONS
             sim_obs = self._sim.get_sensor_observations()

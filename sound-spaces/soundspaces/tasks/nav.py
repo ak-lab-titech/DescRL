@@ -514,10 +514,13 @@ class GeneratedInstruction(Sensor):
                 past_tokens = past_tokens.cuda()
             
             for i in range(self.max_instr_len-1):
+                tgt_mask = torch.triu(torch.full((i+1, i+1), 1), diagonal=1).type(torch.bool)
+                if torch.cuda.is_available():
+                    tgt_mask = tgt_mask.cuda()
                 logits = self.instruction_generator.decode(
                     trg=past_tokens,
                     memory=memory,
-                    tgt_mask=None,
+                    tgt_mask=tgt_mask,
                     memory_mask=None,
                     tgt_padding_mask=None,
                     memory_key_padding_mask=None,

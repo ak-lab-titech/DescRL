@@ -162,11 +162,14 @@ def generate_instruction(
         if torch.cuda.is_available():
             past_tokens = past_tokens.cuda()
         
-        for _ in range(max_instr_len-1):
+        for i in range(max_instr_len-1):
+            tgt_mask = torch.triu(torch.full((i+1, i+1), 1), diagonal=1).type(torch.bool)
+            if torch.cuda.is_available():
+                tgt_mask = tgt_mask.cuda()
             logits = instruction_generator.decode(
                 trg=past_tokens,
                 memory=memory,
-                tgt_mask=None,
+                tgt_mask=tgt_mask,
                 memory_mask=None,
                 tgt_padding_mask=None,
                 memory_key_padding_mask=path_mask,
