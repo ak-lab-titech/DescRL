@@ -83,7 +83,7 @@ GeneratedInstructionで時間がかかりすぎるので、事前に作成して
 
 episodeをsimulationして画像とかまで保存する。diskにあらかじめ保存しておくことでoff-policy事前学習の高速化を期待
 1. DATASET.SPLITで、どのデータセットにおいて生成したいのか選択
-    * instructionが含まれているもの(e.g. train_w_instruction)を選択する必要がある
+    * train, val, test
 
 
 ##### 事前学習

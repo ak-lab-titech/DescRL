@@ -81,7 +81,6 @@ def make_episode_data(sim_cfg, sim, episode):
     category = get_category(episode)
     location = compute_pointgoal_with_gps_compass(sim.get_agent_state(), episode)
     image_seq, audio_seq, pose_seq, action_seq = get_obs_seq(num_step, sim, episode)
-    instruction = np.array(episode.instructions)[:, num_step-1]
     data = [
         image_seq,
         audio_seq,
@@ -89,7 +88,6 @@ def make_episode_data(sim_cfg, sim, episode):
         action_seq,
         category,
         location,
-        instruction,
     ]
     return data
 
