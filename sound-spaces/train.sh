@@ -9,6 +9,7 @@ CKPT_NUM="106"
 # for off-policy iprl pre-training
 LOG_INTERVAL=1
 SAVE_INTERVAL=100
+VAL_INTERVAL=100
 
 pwd
 cd ~/av-nav/myss/sound-spaces
@@ -23,6 +24,7 @@ echo PRETRAINED_MODEL_NAME=$PRETRAINED_MODEL_NAME
 echo CKPT_NUM=$CKPT_NUM
 echo LOG_INTERVAL=$LOG_INTERVAL
 echo SAVE_INTERVAL=$SAVE_INTERVAL
+echo VAL_INTERVAL=$VAL_INTERVAL
 
 
 if [ $ENV = "ss2-avnav" ] && [ $MODEL = "avnav" ]; then
@@ -69,6 +71,7 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pre-offpolicy" ]; then
         --use-lmdb True \
         --log-interval $LOG_INTERVAL \
         --save-interval $SAVE_INTERVAL \
+        --val-interval $VAL_INTERVAL \
         RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.

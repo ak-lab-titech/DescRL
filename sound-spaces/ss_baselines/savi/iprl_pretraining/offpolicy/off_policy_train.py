@@ -138,8 +138,12 @@ def save_checkpoint(
     )
 
 
-def rollout(instruction_predictor, loss_fn, inputs, targets, logger, visualize):
-    inputs["target"] = targets # (batch, instr_len)
+def rollout(instruction_predictor, loss_fn, inputs, targets, logger, visualize, force_student=False):
+    if force_student:
+        inputs["target"] = None
+    else:
+        inputs["target"] = targets # (batch, instr_len)
+
     logits = instruction_predictor(
         observations=inputs,
         prev_actions=inputs["action"],
@@ -152,11 +156,29 @@ def rollout(instruction_predictor, loss_fn, inputs, targets, logger, visualize):
         lang = R2RLang("r2r")
         _, iprl_tokens = logits.max(2)
         pred_sentence = tokens2sentences(iprl_tokens, lang)[0]
-        true_sentence = tokens2sentences(inputs["target"].permute(1, 0), lang)[0]
+        true_sentence = tokens2sentences(targets, lang)[0]
         logger.info(f"Pred: {pred_sentence}")
         logger.info(f"True: {true_sentence}")
     loss = loss_fn(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1))
     return loss
+
+
+def evaluate(instruction_predictor, val_dataloader, loss_fn, logger, writer, n_update):
+    if int(os.environ["LOCAL_RANK"]) == 0:
+        logger.info(f"========== Evaluation ==========")
+    instruction_predictor.eval()
+    s = time.time()
+    losses = []
+    for i, (inputs, targets) in enumerate(val_dataloader):
+        loss = rollout(instruction_predictor, loss_fn, inputs, targets, logger, i%2==0, True)
+        losses.append(loss.item())
+    loss = torch.from_numpy(np.array([np.mean(losses)])).to(gpu_id)
+    all_reduce(loss)
+    if int(os.environ["LOCAL_RANK"]) == 0:
+        loss = loss.item() / int(os.environ["NP"])
+        writer.add_scalar("eval/loss", loss, n_update)
+        logger.info(f"Loss: {loss:.5f}")
+        logger.info(f"Time: {(time.time() - s)/60:.2f} [min]")
 
 
 def train_one_step(
@@ -183,6 +205,7 @@ def train(
     use_lmdb_dataset,
     log_interval,
     save_interval,
+    val_interval,
 ):
     logger.info(f"device: {torch.device('cuda', gpu_id)}")
 
@@ -235,16 +258,31 @@ def train(
         logger.info("LOADING DATA...")
     
     if use_lmdb_dataset:
+        train_split = config.TASK_CONFIG.DATASET.SPLIT
         train_dataset = IPRLPretrainingLMDBDataset(
-            config.TASK_CONFIG, "./data/lmdb_dataset/iprl_pretrain_train", 502103,
+            config.TASK_CONFIG, train_split, "./data/lmdb_dataset/iprl_pretrain_train", 502103,
+        )
+        if "past" in train_split:
+            val_split = "val_w_past_instruction"
+        else:
+            val_split = "val_w_instruction"
+        val_dataset = IPRLPretrainingLMDBDataset(
+            config.TASK_CONFIG, val_split, "./data/lmdb_dataset/iprl_pretrain_val", 500,
         )
     else:
-        train_dataset = IPRLPretrainingDataset(config.TASK_CONFIG, config.SENSORS)
+        # train_dataset = IPRLPretrainingDataset(config.TASK_CONFIG, config.SENSORS)
+        raise NotImplementedError("use_lmdb_dataset must be True.") # val_datasetに対応させてないので
 
     train_sampler = DistributedSampler(
         train_dataset,
         num_replicas=int(os.environ["NP"]),
         shuffle=True,
+        rank=gpu_id,
+    )
+    val_sampler = DistributedSampler(
+        val_dataset,
+        num_replicas=int(os.environ["NP"]),
+        shuffle=False,
         rank=gpu_id,
     )
     train_dataloader = DataLoader(
@@ -254,6 +292,14 @@ def train(
         collate_fn=my_collate_fn,
         sampler=train_sampler,
         # num_workers=2,
+    )
+    val_dataloader = DataLoader(
+        val_dataset,
+        # num_workers=2,
+        batch_size=config.RL.PPO.num_steps,
+        drop_last=False,
+        collate_fn=my_collate_fn,
+        sampler=val_sampler,
     )
     n_batch = len(train_dataloader)
     if int(os.environ["LOCAL_RANK"]) == 0:
@@ -283,7 +329,7 @@ def train(
                     inputs,
                     targets,
                     logger,
-                    n_update % save_interval == 0,
+                    False,
                 )
                 losses.append(loss.item())
 
@@ -311,6 +357,15 @@ def train(
                         extra_state=None,
                     )
                     save_cnt += 1
+                if n_update % val_interval == 0:
+                    evaluate(
+                        instruction_predictor,
+                        val_dataloader,
+                        loss_fn,
+                        logger,
+                        writer,
+                        n_update,
+                    )
 
 
 if __name__=="__main__":
@@ -331,6 +386,7 @@ if __name__=="__main__":
     parser.add_argument('--use-lmdb', help='whether to use lmdb dataset or not.')
     parser.add_argument('--log-interval', help='the interval to log about training.')
     parser.add_argument('--save-interval', help='the interval to save the trained model.')
+    parser.add_argument('--val-interval', help='the interval to evaluate the trained model.')
     parser.add_argument(
         "opts",
         default=None,
@@ -363,4 +419,5 @@ if __name__=="__main__":
         use_lmdb_dataset=("True" == args.use_lmdb),
         log_interval=int(args.log_interval),
         save_interval=int(args.save_interval),
+        val_interval=int(args.val_interval),
     )

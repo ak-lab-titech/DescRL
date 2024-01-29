@@ -19,15 +19,22 @@ from xgenerator.common.lang import R2RLang, tokens2sentences
 
 
 class IPRLPretrainingLMDBDataset(Dataset):
-    def __init__(self, config, lmdb_dataset_path, data_num):
+    def __init__(self, config, split, lmdb_dataset_path, data_num):
+        tmp_split = config.DATASET.SPLIT
+        config.defrost()
+        config.DATASET.SPLIT = split
+        config.freeze()
         dataset = make_dataset(
             id_dataset=config.DATASET.TYPE,
             config=config.DATASET,
         )
-        print(f"dataset.split: {config.DATASET.SPLIT}")
         self.episodes = dataset.episodes
         self.data_num = data_num
         self.env = lmdb.open(lmdb_dataset_path, readonly=True, lock=False)
+
+        config.defrost()
+        config.DATASET.SPLIT = tmp_split
+        config.freeze()
     
     def __len__(self):
         return self.data_num
@@ -41,7 +48,6 @@ class IPRLPretrainingLMDBDataset(Dataset):
         action_seq = value[3]  # (seq_len, 1)
         category = value[4]    # (21,)
         location = value[5]    # (2,)
-        # instruction = value[6] # (40,)
 
         step = pose_seq[-1, 0, 3]
         instruction = np.array(self.episodes[index].instructions)[:, int(step)] # (40,)
@@ -75,7 +81,7 @@ class IPRLPretrainingLMDBDataset(Dataset):
         action_seq = value[3]
         category = value[4]
         location = value[5]
-        # instruction = value[6]
+        
         step = pose_seq[-1, 0, 3]
         instruction = np.array(self.episodes[index].instructions)[:, int(step)]
 
