@@ -106,19 +106,22 @@ if __name__=="__main__":
     f = open("debug.txt", "w")
     f.write(f"start iprl_pretraining_lmdb_dataset!\n")
     f.close()
+    type_of_dataset = "test" # "train", "val", "test"
+    future_or_past = "past"
+    indices = [0, 1, 2, 3]
+
 
     config = get_config("ss_baselines/savi/iprl_pretraining/config.yaml")
 
     dataset = IPRLPretrainingLMDBDataset(
-        config.TASK_CONFIG, "./data/lmdb_dataset/iprl_pretrain", 100
+        config.TASK_CONFIG,
+        f"{type_of_dataset}_w_instruction" if future_or_past == "future" else f"{type_of_dataset}_w_{future_or_past}_instruction",
+        f"./data/lmdb_dataset/iprl_pretrain_{type_of_dataset}",
+        100,
     )
     for i in range(len(dataset)):
-        f = open("debug.txt", "a")
-        f.write(f"-------- i: {i} ---------\n")
-        f.close()
         x, y = dataset[i]
     
-    dataset.visualize_data(0, "./data/videos/offpolicy_past_lmdb_dataset/index_0")
-    dataset.visualize_data(1, "./data/videos/offpolicy_past_lmdb_dataset/index_1")
-    dataset.visualize_data(2, "./data/videos/offpolicy_past_lmdb_dataset/index_2")
-
+    save_path = f"./data/videos/offpolicy_lmdb_dataset/{future_or_past}_{type_of_dataset}_dataset"
+    for idx in indices:
+        dataset.visualize_data(idx, f"{save_path}/index_{idx}")
