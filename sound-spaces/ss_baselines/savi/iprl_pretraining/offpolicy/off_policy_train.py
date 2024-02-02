@@ -170,7 +170,7 @@ def evaluate(instruction_predictor, val_dataloader, loss_fn, logger, writer, n_u
     s = time.time()
     losses = []
     for i, (inputs, targets) in enumerate(val_dataloader):
-        loss = rollout(instruction_predictor, loss_fn, inputs, targets, logger, i%2==0, True)
+        loss = rollout(instruction_predictor, loss_fn, inputs, targets, logger, True, True)
         losses.append(loss.item())
     loss = torch.from_numpy(np.array([np.mean(losses)])).to(gpu_id)
     all_reduce(loss)
