@@ -117,13 +117,16 @@ def eval(
         pretrained_weights=config.RL.DDPPO.pretrained_weights,
     )
 
-    state_dict = torch.load(config.RL.DDPPO.pretrained_weights, map_location="cpu")["state_dict"]
-    state_dict_removed = {}
-    for k, v in state_dict.items():
-        if not "actor_critic.action_distribution." in k and not "actor_critic.critic." in k:
-            state_dict_removed[k[len("actor_critic.net."):]] = v       
+    # state_dict = torch.load(config.RL.DDPPO.pretrained_weights, map_location="cpu")["state_dict"]
+    # state_dict_removed = {}
+    # for k, v in state_dict.items():
+    #     if not "actor_critic.action_distribution." in k and not "actor_critic.critic." in k:
+    #         state_dict_removed[k[len("actor_critic.net."):]] = v       
+    # instruction_predictor.load_state_dict(
+    #     state_dict_removed
+    # )
     instruction_predictor.load_state_dict(
-        state_dict_removed
+        torch.load(config.RL.DDPPO.pretrained_weights, map_location="cpu")["state_dict"]
     )
     instruction_predictor.eval()
 
