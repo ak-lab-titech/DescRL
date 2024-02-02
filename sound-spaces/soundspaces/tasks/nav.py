@@ -319,6 +319,7 @@ class GeneratedInstruction(Sensor):
         sim's type is soundspaces.simulator.SoundSpacesSim.
         """
         self._sim = sim
+        self._sim.prev_k = kwargs["task"]._config["GENERATED_INSTRUCTION"]["FUTURE_STEP_NUM"]
 
         lang = R2RLang(name="r2r_train")
         self.vocab_size = lang.vocab_size
@@ -398,23 +399,19 @@ class GeneratedInstruction(Sensor):
         if self.future_or_past == "future":
             oracle_actions = self._sim.get_oracle_actions_from_current_pos()
         elif self.future_or_past == "past":
-            oracle_actions = copy.deepcopy(self._sim.past_actions)
-            oracle_actions.append(0)
-
-            init_receiver_position_index = self._sim.init_receiver_position_index
-            init_rotation_angle = self._sim.init_rotation_angle
-            init_prev_sim_obs = self._sim.init_prev_sim_obs
-            self._sim._previous_step_collided = False
+            self._sim._previous_step_collided = self._sim.k_prev_previous_step_collided[0]
             self._sim._is_episode_active = True
-            self._sim._receiver_position_index = init_receiver_position_index
-            self._sim._rotation_angle = init_rotation_angle
-            self._sim._episode_step_count = 0
-            self._sim._prev_sim_obs = init_prev_sim_obs
+            self._sim._receiver_position_index = self._sim.k_prev_reciever_position_index[0]
+            self._sim._rotation_angle = self._sim.k_prev_rotation_angle[0]
+            self._sim._episode_step_count = self._sim._episode_step_count - len(self._sim.k_prev_actions)
+            self._sim._prev_sim_obs = self._sim.k_prev_prev_sim_obs[0]
             self._sim.past_actions = []
             self._sim.set_agent_state(
-                position=list(self._sim.graph.nodes[init_receiver_position_index]['point']),
-                rotation=quat_from_angle_axis(np.deg2rad(init_rotation_angle), np.array([0, 1, 0])),
+                position=list(self._sim.graph.nodes[self._sim._receiver_position_index]['point']),
+                rotation=quat_from_angle_axis(np.deg2rad(self._sim._rotation_angle), np.array([0, 1, 0])),
             )
+            oracle_actions = [self._sim.k_prev_actions[i] for i in range(len(self._sim.k_prev_actions))]
+            oracle_actions = oracle_actions + [0]
         else:
             raise Exception(f"future_or_past in GeneratedInstruction: {self.future_or_past}")
         future_step_cnt = 0
@@ -467,7 +464,7 @@ class GeneratedInstruction(Sensor):
                 self.future_or_past == "past" and (action == 0)
             ):
                 break
-            self._sim.step(action)
+            self._sim.step(action, append_k_prev=False)
         
         self._sim._previous_step_collided = current_previous_step_collided
         self._sim._is_episode_active = current_is_episode_active
@@ -484,9 +481,6 @@ class GeneratedInstruction(Sensor):
         image_seqs = np.array(image_seqs_list)
         action_seqs = np.array(action_seqs_list)
 
-        if self.future_or_past == "past" and len(oracle_actions) > self.future_step_num:
-            image_seqs = image_seqs[-self.future_step_num:]
-            action_seqs = action_seqs[-self.future_step_num:]
 
         if return_tensor:
             image_seqs = torch.from_numpy(image_seqs)

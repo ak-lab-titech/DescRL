@@ -51,7 +51,7 @@ TASK:
     XGENERATOR_PATH: "xgenerator/data/models/tf-speaker-semantic-24h"
     XGENERATOR_CKPT: 1000
     MAX_INSTRUCTION_LENGTH: 40
-    FUTURE_STEP_NUM: 20 # -1なら最後まで
+    FUTURE_STEP_NUM: 20 # -1なら最後まで。ただしpastでは-1は未実装
     MODEL_RESOLUTION: 128
     FUTURE_OR_PAST: "future" # future or past
 
