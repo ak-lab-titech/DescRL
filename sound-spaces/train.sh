@@ -3,8 +3,8 @@
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi
 MODEL="savi-2nd"   # avnav, avwan, savi-1st, savi-2nd, savi-iprl-pre-onpolicy, savi-iprl-pre-offpolicy
 MODEL_NAME="ss1savi-savi-iprl"
-PRETRAINED_MODEL_NAME="ss1savi-savi-1st"
-CKPT_NUM="106"
+PRETRAINED_MODEL_NAME="ss1savi-savi-1st-v2"
+CKPT_NUM="115"
 
 # for off-policy iprl pre-training
 LOG_INTERVAL=1
