@@ -136,7 +136,7 @@ class SoundSpacesSim(Simulator, ABC):
         self.init_rotation_angle = None
         self.init_prev_sim_obs = None
 
-        self.prev_k = None
+        self.prev_k = -1
 
         self.points, self.graph = load_metadata(self.metadata_dir)
         for node in self.graph.nodes():
@@ -356,11 +356,12 @@ class SoundSpacesSim(Simulator, ABC):
         return self._sim.get_agent(agent_id)
 
     def reconfigure(self, config: Config) -> None:
-        self.k_prev_reciever_position_index = deque(maxlen=self.prev_k)
-        self.k_prev_rotation_angle = deque(maxlen=self.prev_k)
-        self.k_prev_prev_sim_obs = deque(maxlen=self.prev_k)
-        self.k_prev_previous_step_collided = deque(maxlen=self.prev_k)
-        self.k_prev_actions = deque(maxlen=self.prev_k-1)
+        if self.prev_k != -1:
+            self.k_prev_reciever_position_index = deque(maxlen=self.prev_k)
+            self.k_prev_rotation_angle = deque(maxlen=self.prev_k)
+            self.k_prev_prev_sim_obs = deque(maxlen=self.prev_k)
+            self.k_prev_previous_step_collided = deque(maxlen=self.prev_k)
+            self.k_prev_actions = deque(maxlen=self.prev_k-1)
 
         self.config = config
         if hasattr(self.config.AGENT_0, 'OFFSET'):
@@ -428,8 +429,9 @@ class SoundSpacesSim(Simulator, ABC):
         self.init_receiver_position_index = self._receiver_position_index
         self.init_rotation_angle = self._rotation_angle
 
-        self.k_prev_reciever_position_index.append(self._receiver_position_index)
-        self.k_prev_rotation_angle.append(self._rotation_angle)
+        if self.prev_k != -1:
+            self.k_prev_reciever_position_index.append(self._receiver_position_index)
+            self.k_prev_rotation_angle.append(self._rotation_angle)
 
         if self.config.USE_RENDERED_OBSERVATIONS:
             self._sim.set_agent_state(list(self.graph.nodes[self._receiver_position_index]['point']),
@@ -508,8 +510,9 @@ class SoundSpacesSim(Simulator, ABC):
         self._prev_sim_obs = sim_obs
         self.init_prev_sim_obs = self._prev_sim_obs
         self._previous_step_collided = False
-        self.k_prev_prev_sim_obs.append(self._prev_sim_obs)
-        self.k_prev_previous_step_collided.append(False)
+        if self.prev_k != -1:
+            self.k_prev_prev_sim_obs.append(self._prev_sim_obs)
+            self.k_prev_previous_step_collided.append(False)
         # Encapsule data under Observations class
         observations = self._sensor_suite.get_observations(sim_obs)
 
@@ -532,7 +535,7 @@ class SoundSpacesSim(Simulator, ABC):
         )
 
         self.past_actions.append(action)
-        if append_k_prev:
+        if self.prev_k != -1 and append_k_prev:
             self.k_prev_actions.append(action)
 
         self._previous_step_collided = False
@@ -603,7 +606,7 @@ class SoundSpacesSim(Simulator, ABC):
         if self.config.CONTINUOUS_VIEW_CHANGE:
             observations['intermediate'] = intermediate_observations
 
-        if append_k_prev:
+        if self.prev_k != -1 and append_k_prev:
             self.k_prev_reciever_position_index.append(self._receiver_position_index)
             self.k_prev_rotation_angle.append(self._rotation_angle)
             self.k_prev_prev_sim_obs.append(sim_obs)
