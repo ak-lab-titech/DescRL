@@ -161,6 +161,28 @@ class AudioNavSMTInstructionPredictor(nn.Module):
 
         self.train()
     
+    def pretrained_initialization(self, path):
+        logging.info(f'AudioNavSMTNet ===> Loading pretrained model from {path}')
+        state_dict = torch.load(
+            path,
+            map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
+        )
+        if "xgenerator" in path:
+            cleaned_state_dict = {}
+            for k, v in state_dict.items():
+                if "encoder" in k:
+                    cleaned_state_dict[f"smt_state_encoder.{k}"] = v
+                elif "decoder" in k:
+                    if not ".norm." in k:
+                        cleaned_state_dict[f"instruction_predictor.{k[len('transformer.'):]}"] = v
+                elif "generator" in k or "word_vocab_emb" in k or "word_emb" in k:
+                    cleaned_state_dict[f"instruction_predictor.{k}"] = v
+                else:
+                    continue
+        else:
+            cleaned_state_dict = state_dict['state_dict']
+        self.load_state_dict(cleaned_state_dict, strict=False)
+    
     @property
     def memory_dim(self):
         return self._feature_size

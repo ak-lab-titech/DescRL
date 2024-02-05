@@ -188,15 +188,28 @@ class DDPPOTrainer(PPOTrainer):
         if self.config.RL.DDPPO.pretrained:
             # load weights for both actor critic and the encoder
             pretrained_state = torch.load(self.config.RL.DDPPO.pretrained_weights, map_location="cpu")
-            self.actor_critic.load_state_dict(
-                {
-                    k[len("actor_critic."):]: v
-                    for k, v in pretrained_state["state_dict"].items()
-                    if "actor_critic.net.visual_encoder" not in k and
-                       "actor_critic.net.smt_state_encoder" not in k
-                },
-                strict=False
-            )
+            if "xgenerator" in smt_cfg.pretrained_path:
+                self.actor_critic.load_state_dict( # goal_encoder, action_encoder
+                    {
+                        k[len("actor_critic."):]: v
+                        for k, v in pretrained_state["state_dict"].items()
+                        if "actor_critic.net.visual_encoder" not in k and
+                           "actor_critic.net.smt_state_encoder" not in k and
+                           "actor_critic.action_distribution" not in k and
+                           "actor_critic.critic" not in k
+                    },
+                    strict=False
+                )
+            else:
+                self.actor_critic.load_state_dict( # actor, critic, goal_encoder, action_encoder
+                    {
+                        k[len("actor_critic."):]: v
+                        for k, v in pretrained_state["state_dict"].items()
+                        if "actor_critic.net.visual_encoder" not in k and
+                           "actor_critic.net.smt_state_encoder" not in k
+                    },
+                    strict=False
+                )
             self.actor_critic.net.visual_encoder.rgb_encoder.load_state_dict(
                 {
                     k[len("actor_critic.net.visual_encoder.rgb_encoder."):]: v

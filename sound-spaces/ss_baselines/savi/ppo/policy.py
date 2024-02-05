@@ -602,8 +602,22 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         state_dict = torch.load(
             path,
             map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
-        )['state_dict']
-        self.load_state_dict(state_dict, strict=False)
+        )
+        if "xgenerator" in path:
+            cleaned_state_dict = {}
+            for k, v in state_dict.items():
+                if "encoder" in k:
+                    cleaned_state_dict[f"smt_state_encoder.{k}"] = v
+                elif "decoder" in k:
+                    if not ".norm." in k:
+                        cleaned_state_dict[f"instruction_predictor.{k[len('transformer.'):]}"] = v
+                elif "generator" in k or "word_vocab_emb" in k or "word_emb" in k:
+                    cleaned_state_dict[f"instruction_predictor.{k}"] = v
+                else:
+                    continue
+        else:
+            cleaned_state_dict = state_dict['state_dict']
+        self.load_state_dict(cleaned_state_dict, strict=False)
     
     def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, need_logits=False):
         x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
