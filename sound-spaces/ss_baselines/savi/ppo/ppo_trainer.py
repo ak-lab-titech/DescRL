@@ -790,7 +790,7 @@ class PPOTrainer(BaseRLTrainer):
             observation_space = self.envs.observation_spaces[0]
         self._setup_actor_critic_agent(ppo_cfg, observation_space)
 
-        self.agent.load_state_dict(ckpt_dict["state_dict"])
+        self.agent.load_state_dict(ckpt_dict["state_dict"], strict=False)
         self.actor_critic = self.agent.actor_critic
         if self.config.RL.PPO.use_belief_predictor and "belief_predictor" in ckpt_dict:
             self.belief_predictor.load_state_dict(ckpt_dict["belief_predictor"])
