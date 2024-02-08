@@ -13,6 +13,7 @@ from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
 
 sys.path.append("/home/0/19B30511/av-nav/myss")
 from xgenerator.common.lang import R2RLang
+from xgenerator.common.model import VisualImageEncoder
 
 
 class DecentralizedDistributedMixinInstruction:
@@ -68,6 +69,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         iprl_use_gt_D,
         iprl_feedback,
         max_grad_norm,
+        use_xgen_visual_encoder,
         on_or_off="on",
         hidden_size=128,
         use_pretrained=False,
@@ -95,13 +97,18 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         self._use_category_input = use_category_input
         self.goal_num = goal_num
         self.on_or_off = on_or_off
+        self.use_xgen_visual_encoder = use_xgen_visual_encoder
 
         super().__init__()
         assert SpectrogramSensor.cls_uuid in observation_space.spaces
         self.goal_encoder = AudioCNN(observation_space, 128, SpectrogramSensor.cls_uuid)
         audio_feature_dims = 128
 
-        self.visual_encoder = SMTCNN(observation_space)
+        if self.use_xgen_visual_encoder:
+            self.visual_encoder = VisualImageEncoder((128, 128, 4), 512-4)
+        else:
+            self.visual_encoder = SMTCNN(observation_space)
+
         self.action_encoder = nn.Linear(self._action_size, 16)
         action_encoding_dims = 16
 
@@ -177,6 +184,11 @@ class AudioNavSMTInstructionPredictor(nn.Module):
                         cleaned_state_dict[f"instruction_predictor.{k[len('transformer.'):]}"] = v
                 elif "generator" in k or "word_vocab_emb" in k or "word_emb" in k:
                     cleaned_state_dict[f"instruction_predictor.{k}"] = v
+                elif self.use_xgen_visual_encoder and ("visual_emb" in k):
+                    if k == "visual_emb.cnn.0.weight": # torch.Size([32, 7, 8, 8])
+                        cleaned_state_dict[f"visual_encoder.{k[len('visual_emb.'):]}"] = v[:, :4, :, :]
+                    else:
+                        cleaned_state_dict[f"visual_encoder.{k[len('visual_emb.'):]}"] = v
                 else:
                     continue
         else:
@@ -219,7 +231,22 @@ class AudioNavSMTInstructionPredictor(nn.Module):
 
     def get_features(self, observations, prev_actions):
         x = []
-        x.append(self.visual_encoder(observations, self.on_or_off))
+        
+        if self.use_xgen_visual_encoder:
+            if self.on_or_off == "on":
+                raise NotImplementedError()
+            rgb = observations["rgb"]
+            depth = observations["depth"]
+            imgs = torch.cat([rgb, depth], axis=4)
+            L, N, H, W, C = imgs.size()
+            imgs = imgs.view(L*N, H, W, C)
+            visual_features = self.visual_encoder(imgs)
+            visual_features = visual_features.view(L, N, -1)
+            x.append(visual_features)
+        else:
+            observations["rgb"] = observations["rgb"] * 255
+            x.append(self.visual_encoder(observations, self.on_or_off))
+
         if self.on_or_off == "off":
             L, N, _ = prev_actions.size()
             prev_actions = prev_actions.view(L*N, 1)

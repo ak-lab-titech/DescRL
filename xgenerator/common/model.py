@@ -137,6 +137,7 @@ class Flatten(nn.Module):
 class VisualImageEncoder(nn.Module):
     def __init__(self, image_shape, output_size):
         super(VisualImageEncoder, self).__init__()
+        self.feature_dims = output_size
         channel_size = image_shape[2]
         if image_shape[0] == 256 and image_shape[1] == 256:
             last_layer_size = 12544

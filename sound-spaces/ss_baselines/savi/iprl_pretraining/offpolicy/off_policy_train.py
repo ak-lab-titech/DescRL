@@ -58,6 +58,7 @@ def setup_instruction_predictor(
         iprl_use_gt_D=iprl_cfg.iprl_use_gt_D,
         iprl_feedback=iprl_cfg.feedback,
         max_grad_norm=ppo_cfg.max_grad_norm,
+        use_xgen_visual_encoder=smt_cfg.use_xgen_visual_encoder,
         on_or_off="off",
         hidden_size=smt_cfg.hidden_size,
         nhead=smt_cfg.nhead,
