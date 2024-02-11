@@ -15,6 +15,7 @@ import cv2
 import numpy as np
 import torch
 import cv2
+import pickle
 import librosa
 import librosa.display
 from gym import spaces
@@ -992,6 +993,45 @@ class CategoryBelief(Sensor):
     ) -> object:
         belief = np.zeros(len(CATEGORY_INDEX_MAPPING.keys()))
 
+        return belief
+
+
+@registry.register_sensor(name="KSAVENCategoryBelief")
+class KSAVENCategoryBelief(Sensor):
+    cls_uuid: str = "ksaven_category_belief"
+
+    def __init__(
+        self, sim: Union[Simulator, Config], config: Config, *args: Any, **kwargs: Any
+    ):
+        super().__init__(config=config)
+        self._sim = sim
+
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return self.cls_uuid
+
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.COLOR
+
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+
+        mp3d_objects_of_interest_filepath = r"data/metadata/mp3d_objects_of_interest_data.bin"
+        with open(mp3d_objects_of_interest_filepath, 'rb') as bin_file:
+            self.ooi_objects_id_name = pickle.load(bin_file)
+            self.ooi_regions_id_name = pickle.load(bin_file)
+        self.num_objects = len(self.ooi_objects_id_name)
+        self.num_regions = len(self.ooi_regions_id_name)
+
+        return spaces.Box(
+            low=0,
+            high=1,
+            shape=(self.num_objects + self.num_regions,),
+            dtype=bool
+        )
+
+    def get_observation(
+        self, *args: Any, observations, episode: Episode, **kwargs: Any
+    ) -> object:
+        belief = np.zeros(self.num_objects + self.num_regions)
         return belief
 
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi
-MODEL="savi-2nd"   # avnav, avwan, savi-1st, savi-2nd, savi-iprl-pre-onpolicy, savi-iprl-pre-offpolicy
+MODEL="savi-2nd"
 MODEL_NAME="ss1savi-savi-iprl"
 PRETRAINED_MODEL_NAME="ss1savi-savi-1st-v2"
 CKPT_NUM="115"
@@ -73,6 +73,27 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-iprl-pre-offpolicy" ]; then
         --save-interval $SAVE_INTERVAL \
         --val-interval $VAL_INTERVAL \
         RL.DDPPO.pretrained_weights "data/models/ss1-savi/mp3d/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-vision" ]; then
+    python ss_baselines/saven/pretraining/vision_model_trainer.py \
+        --run-type train \
+        --model-dir data/models/saven/$MODEL_NAME \
+        --use-multiple-GPU
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-audio" ]; then
+    CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
+        --nnodes=1 \
+        --nproc_per_node=$NP \
+        ss_baselines/saven/pretraining/audio_model_trainer.py \
+            --run-type train \
+            --model-dir data/models/saven/$MODEL_NAME \
+            --use-multiple-GPU
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-1st" ]; then
+    python ss_baselines/saven/run.py \
+        --exp-config ss_baselines/saven/config/semantic_audionav/saven_pretraining.yaml \
+        --model-dir data/models/saven/$MODEL_NAME
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-2nd" ]; then
+    python ss_baselines/saven/run.py \
+        --exp-config ss_baselines/saven/config/semantic_audionav/saven.yaml \
+        --model-dir data/models/saven/$MODEL_NAME
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
 fi
