@@ -8,7 +8,7 @@ conda activate av-nav
 
 
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi
-MODEL="savi"   # avnav, avwan, savi, random
+MODEL="savi"   # avnav, avwan, savi, random, ksaven
 MODEL_NAME="ss1savi-savi"
 DATASET_NAME="mp3d"
 TEST_EPISODE_COUNT=1000
@@ -57,6 +57,20 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi" ]; then
         USE_SYNC_VECENV True \
         RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
         RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven" ]; then
+    python ss_baselines/saven/run.py \
+        --run-type eval \
+        --exp-config ss_baselines/saven/config/semantic_audionav/saven.yaml \
+        --model-dir data/models/saven/$MODEL_NAME \
+        EVAL_CKPT_PATH_DIR data/models/saven/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        LOG_FILE data/models/saven/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
+        TENSORBOARD_DIR data/models/saven/$MODEL_NAME/test \
+        NUM_PROCESSES 10 \
+        CONTINUOUS False \
+        EVAL.SPLIT test \
+        RL.DDPPO.pretrained False \
+        TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
+        USE_SYNC_VECENV True
 elif [ $ENV = "ss2-avnav" ] && [ $MODEL = "random" ]; then
     python ss_baselines/common/simple_agents.py \
          --success-distance 1.0 \

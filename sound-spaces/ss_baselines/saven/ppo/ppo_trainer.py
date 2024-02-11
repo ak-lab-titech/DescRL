@@ -779,7 +779,7 @@ class PPOTrainer(BaseRLTrainer):
 
             descriptor_pred_gt = [[] for _ in range(self.config.NUM_PROCESSES)]
             for i in range(len(descriptor_pred_gt)):
-                category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
+                category_prediction = np.argmax(batch['ksaven_category_belief'].cpu().numpy()[i])
                 location_prediction = batch['location_belief'].cpu().numpy()[i]
                 category_gt = np.argmax(batch['category'].cpu().numpy()[i])
                 location_gt = batch['pointgoal_with_gps_compass'].cpu().numpy()[i]
@@ -846,7 +846,7 @@ class PPOTrainer(BaseRLTrainer):
                 self.belief_predictor.update(batch, dones)
 
                 for i in range(len(descriptor_pred_gt)):
-                    category_prediction = np.argmax(batch['category_belief'].cpu().numpy()[i])
+                    category_prediction = np.argmax(batch['ksaven_category_belief'].cpu().numpy()[i])
                     location_prediction = batch['location_belief'].cpu().numpy()[i]
                     category_gt = np.argmax(batch['category'].cpu().numpy()[i])
                     location_gt = batch['pointgoal_with_gps_compass'].cpu().numpy()[i]
@@ -969,6 +969,7 @@ class PPOTrainer(BaseRLTrainer):
                 not_done_masks,
                 test_em,
                 current_episode_reward,
+                _,
                 prev_actions,
                 batch,
                 rgb_frames,
@@ -978,6 +979,7 @@ class PPOTrainer(BaseRLTrainer):
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
+                None,
                 prev_actions,
                 batch,
                 rgb_frames,

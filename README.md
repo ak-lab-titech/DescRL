@@ -107,6 +107,16 @@ off-policyで行う場合
 1. GENERATED_INSTRUCTION.XGENERATOR_PATHとGENERATED_INSTRUCTION.XGENERATOR_CKPTをSemantic画像対応のXGeneratorに変更
 2. SENSORSに`"SEMANTIC_SENSOR"`を追加
 
+#### K-SAVEN
+[Knowledge-driven Scene Priors for Semantic Audio-Visual Embodied Navigation
+](https://arxiv.org/abs/2212.11345)
+
+audioとvisualの事前学習の際は、Multi-GPUでやる場合も`CMD=single-gpu-train`にする
+
+savi1stとsavi2ndの学習時
+1. `TASK.SENSOR` の `CATEGORY_BELIEF` を `KSAVEN_CATEGORY_BELIEF`にする
+2. 2ndの場合は、`pretrained_weights`を要変更
+
 #### ゴール数の変更
 1. configの`SIMULATOR.AUDIO.NUM`を変更する
 2. configの`DATASET.SPLIT`を変更する

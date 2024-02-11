@@ -11,6 +11,7 @@ import logging
 import pickle
 from collections import OrderedDict
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.models as models
@@ -247,6 +248,8 @@ class SMTCNN_saven(nn.Module):
         if "depth" in self.input_modalities:
             depth_observations = observations["depth"]
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
+            if len(np.shape(depth_observations)) == 5:
+                depth_observations = np.squeeze(depth_observations, axis=4)
             depth_observations = depth_observations.permute(0, 3, 1, 2)
             if self.obs_transform:
                 depth_observations = self.obs_transform(depth_observations)
