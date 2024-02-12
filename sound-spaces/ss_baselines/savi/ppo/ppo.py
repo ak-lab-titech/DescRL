@@ -6,14 +6,17 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 import sys
+import os
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from habitat import logger
 sys.path.append("/home/0/19B30511/av-nav/myss")
 from xgenerator.common.load_lmdb import PAD_IDX
+from xgenerator.common.lang import tokens2sentences, R2RLang
 
 EPS_PPO = 1e-5
 
@@ -159,6 +162,16 @@ class PPO(nn.Module):
                     # logits: (instr_len, batch, vocab_size)
                     iprl_targets = obs_batch["generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
                     iprl_loss = self.iprl_loss_fn(iprl_logits.view(-1, iprl_logits.shape[-1]), iprl_targets.reshape(-1))
+                    if int(os.environ["LOCAL_RANK"]) == 0:
+                        lang = R2RLang("r2r")
+                        _, iprl_tokens = iprl_logits.max(2)
+                        pred_sentence = tokens2sentences(iprl_tokens, lang)
+                        true_sentence = tokens2sentences(iprl_targets, lang)
+                        logger.info(f"Loss: {iprl_loss:.3f}")
+                        logger.info(f"Pred 0: {pred_sentence[0]}")
+                        logger.info(f"Pred -1: {pred_sentence[-1]}")
+                        logger.info(f"True 0: {true_sentence[0]}")
+                        logger.info(f"True -1: {true_sentence[-1]}")
                 else:
                     iprl_loss = 0
 
