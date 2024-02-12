@@ -140,6 +140,17 @@ def init_distrib_slurm(
         torch.distributed.is_available()
     ), "torch.distributed must be available"
 
+    WORLD_SIZE = int(os.getenv("NP"))
+    NNODES = int(os.getenv("NNODES"))
+    NPERNODE = int(os.getenv("NPERNODE"))
+
+    rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
+    os.environ["NODE_RANK"]=str(rank//NPERNODE)
+    os.environ["LOCAL_RANK"]=str(rank%NPERNODE)
+    os.environ["RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(WORLD_SIZE)
+    os.environ["NNODES"] = str(NNODES)
+
     if "GLOO_SOCKET_IFNAME" not in os.environ:
         os.environ["GLOO_SOCKET_IFNAME"] = get_ifname()
 
@@ -151,22 +162,27 @@ def init_distrib_slurm(
 
     # Check to see if we should parse from torch.distributed.launch
     if os.environ.get("LOCAL_RANK", None) is not None:
+        print("LOCAL_RANK")
         local_rank = int(os.environ["LOCAL_RANK"])
         world_rank = int(os.environ["RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
     # Else parse from SLURM is using SLURM
     elif os.environ.get("SLURM_JOBID", None) is not None:
+        print("SLURM_JOBID")
         local_rank = int(os.environ["SLURM_LOCALID"])
         world_rank = int(os.environ["SLURM_PROCID"])
         world_size = int(os.environ["SLURM_NTASKS"])
     # Otherwise setup for just 1 process, this is nice for testing
     else:
+        print("ELSE")
         local_rank = 0
         world_rank = 0
         world_size = 1
 
     # world_size = 1
-    tcp_store = distrib.TCPStore(master_addr, master_port, world_size, world_rank == 0)
+    tcp_store = distrib.TCPStore(
+        master_addr, master_port, world_size, world_rank == 0
+    )
     distrib.init_process_group(
         backend, store=tcp_store, rank=world_rank, world_size=world_size
     )
