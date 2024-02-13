@@ -48,6 +48,7 @@ RL:
       activation: 'relu'
       use_pretrained: False # SMTのpretrainedのモデルを使うかどうか
       pretrained_path: '' # pretrainedのモデルを使う場合のpretrainedのモデルのパス
+      use_xgen_visual_encoder: False # XGeneratorで使われているVisualEncoderにするか、デフォルトのSMTCNNにするか
       freeze_encoders: False # encoder(visual, action, goal)をfreezeさせるかどうか
       pretraining: True # savi1stであるかどうか（正確にはexternal_memoryからの入力をmaskするかどうか）
     BELIEF_PREDICTOR: 

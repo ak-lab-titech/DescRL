@@ -29,6 +29,7 @@ from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
 
 sys.path.append("/home/0/19B30511/av-nav/myss")
 from xgenerator.common.lang import R2RLang
+from xgenerator.common.model import VisualImageEncoder
 
 DUAL_GOAL_DELIMITER = ','
 
@@ -358,6 +359,7 @@ class AudioNavSMTNet(Net):
         use_belief_encoding=False,
         normalize_category_distribution=False,
         use_category_input=False,
+        use_xgen_visual_encoder=False,
         **kwargs
     ):
         super().__init__()
@@ -373,12 +375,17 @@ class AudioNavSMTNet(Net):
         self._use_category_input = use_category_input
         self.direct_map_size = direct_map_size
         self.goal_num = goal_num
+        self.use_xgen_visual_encoder = use_xgen_visual_encoder
 
         assert SpectrogramSensor.cls_uuid in observation_space.spaces
         self.goal_encoder = AudioCNN(observation_space, 128, SpectrogramSensor.cls_uuid)
         audio_feature_dims = 128
 
-        self.visual_encoder = SMTCNN(observation_space)
+        if self.use_xgen_visual_encoder:
+            self.visual_encoder = VisualImageEncoder((128, 128, 4), 512-4)
+        else:
+            self.visual_encoder = SMTCNN(observation_space)
+        
         if self._use_action_encoding:
             self.action_encoder = nn.Linear(self._action_size, 16)
             action_encoding_dims = 16
@@ -514,7 +521,17 @@ class AudioNavSMTNet(Net):
 
     def get_features(self, observations, prev_direct_map, prev_actions):
         x = []
-        x.append(self.visual_encoder(observations))
+        if self.use_xgen_visual_encoder:
+            rgb = observations["rgb"] / 255.0
+            depth = observations["depth"]
+            imgs = torch.cat([rgb, depth], axis=3)
+            visual_features = self.visual_encoder(imgs)
+            pass
+        else:
+            rgb = observations["rgb"]
+            depth = observations["depth"]
+            visual_features = self.visual_encoder(observations)
+        x.append(visual_features)
         x.append(self.action_encoder(self._get_one_hot(prev_actions)))
         x.append(self.goal_encoder(observations))
         if self.direct_map_size is not None:
@@ -558,6 +575,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         use_belief_encoding=False,
         normalize_category_distribution=False,
         use_category_input=False,
+        use_xgen_visual_encoder=False,
         **kwargs
     ):
         super().__init__(
@@ -574,6 +592,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             use_belief_encoding,
             normalize_category_distribution,
             use_category_input,
+            use_xgen_visual_encoder,
             **kwargs,
         )
         lang = R2RLang(name="r2r_train")
@@ -615,6 +634,11 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
                         cleaned_state_dict[f"instruction_predictor.{k[len('transformer.'):]}"] = v
                 elif "generator" in k or "word_vocab_emb" in k or "word_emb" in k:
                     cleaned_state_dict[f"instruction_predictor.{k}"] = v
+                elif self.use_xgen_visual_encoder and ("visual_emb" in k):
+                    if k == "visual_emb.cnn.0.weight": # torch.Size([32, 7, 8, 8])
+                        cleaned_state_dict[f"visual_encoder.{k[len('visual_emb.'):]}"] = v[:, :4, :, :]
+                    else:
+                        cleaned_state_dict[f"visual_encoder.{k[len('visual_emb.'):]}"] = v
                 else:
                     continue
         else:

@@ -45,6 +45,7 @@ RL:
       activation: 'relu'
       use_pretrained: True
       pretrained_path: ''
+      use_xgen_visual_encoder: False
       freeze_encoders: True
       pretraining: False
     BELIEF_PREDICTOR:

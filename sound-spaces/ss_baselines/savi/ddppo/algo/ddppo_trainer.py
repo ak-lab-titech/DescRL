@@ -160,6 +160,7 @@ class DDPPOTrainer(PPOTrainer):
                     use_location_belief=belief_cfg.use_location_belief,
                     normalize_category_distribution=belief_cfg.normalize_category_distribution,
                     use_category_input=has_distractor_sound,
+                    use_xgen_visual_encoder=smt_cfg.use_xgen_visual_encoder,
                 )
 
             if smt_cfg.freeze_encoders:
