@@ -33,7 +33,7 @@ SIMULATOR:
   SCENE_DATASET: "mp3d"
   GRID_SIZE: 1.0
   AUDIO:
-    EVERLASTING: True # 音を永続的にするかどうか
+    EVERLASTING: False # 音を永続的にするかどうか
     RIR_SAMPLING_RATE: 16000
     SOURCE_SOUND_DIR: "data/sounds/semantic_splits"
     NUM: 1
