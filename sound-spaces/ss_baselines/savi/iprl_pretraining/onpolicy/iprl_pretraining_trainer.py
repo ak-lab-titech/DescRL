@@ -80,6 +80,7 @@ class IPRLPretrainingTrainer(BaseRLTrainer):
             iprl_dropout=iprl_cfg.dropout,
             iprl_use_gt_D=iprl_cfg.iprl_use_gt_D,
             iprl_feedback=iprl_cfg.feedback,
+            iprl_use_bos=iprl_cfg.use_bos,
             max_grad_norm=ppo_cfg.max_grad_norm,
             use_xgen_visual_encoder=smt_cfg.use_xgen_visual_encoder,
             hidden_size=smt_cfg.hidden_size,

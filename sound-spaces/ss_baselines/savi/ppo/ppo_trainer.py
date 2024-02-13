@@ -147,6 +147,7 @@ class PPOTrainer(BaseRLTrainer):
                     iprl_dropout=iprl_cfg.dropout,
                     iprl_use_gt_D=iprl_cfg.iprl_use_gt_D,
                     iprl_feedback=iprl_cfg.feedback,
+                    iprl_use_bos=iprl_cfg.use_bos,
                     hidden_size=smt_cfg.hidden_size,
                     nhead=smt_cfg.nhead,
                     num_encoder_layers=smt_cfg.num_encoder_layers,

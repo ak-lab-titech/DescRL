@@ -68,6 +68,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         iprl_dropout,
         iprl_use_gt_D,
         iprl_feedback,
+        iprl_use_bos,
         max_grad_norm,
         use_xgen_visual_encoder,
         on_or_off="on",
@@ -160,6 +161,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             dim_feedforward=iprl_dim_feedforward,
             dropout=iprl_dropout,
             pretraining=kwargs["pretraining"],
+            use_bos=iprl_use_bos,
         )
         self.iprl_use_gt_D = iprl_use_gt_D
         self.feedback = iprl_feedback

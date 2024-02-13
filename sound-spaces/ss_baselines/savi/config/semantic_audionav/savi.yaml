@@ -64,6 +64,7 @@ RL:
       dropout: 0.2
       iprl_use_gt_D: False
       feedback: "teacher" # teacher or student
+      use_bos: False
   DDPPO:
     sync_frac: 0.6
     distrib_backend: "GLOO"

@@ -45,12 +45,14 @@ class InstructionPredictor(nn.Module):
         dim_feedforward: int,
         dropout: float,
         pretraining: bool = False,
+        use_bos: bool = False,
     ):
         self.vocab_emb_size = vocab_emb_size
         self.emb_size = emb_size
         self.max_instr_len = max_instr_len
         self._pretraining = pretraining
         self.belief_dim = 23
+        self.use_bos = use_bos
         super(InstructionPredictor, self).__init__()
 
         decoder_layer = nn.TransformerDecoderLayer(
@@ -105,7 +107,10 @@ class InstructionPredictor(nn.Module):
         for i in range(self.max_instr_len-1):
             if i != self.max_instr_len-2:
                 with torch.no_grad():
-                    past_words = self.embed_word_tokens(past_tokens, category, location)
+                    if self.use_bos:
+                        past_words = self.embed_word_tokens_using_bos(past_tokens)
+                    else:
+                        past_words = self.embed_word_tokens(past_tokens, category, location)
                     tgt_mask = torch.triu(torch.full((i+1, i+1), 1), diagonal=1).type(torch.bool)
                     tgt_mask = tgt_mask.cuda() if torch.cuda.is_available() else tgt_mask
                     decoder_output = self.decoder(
@@ -121,7 +126,10 @@ class InstructionPredictor(nn.Module):
             else:
                 tgt_mask = torch.triu(torch.full((i+1, i+1), 1), diagonal=1).type(torch.bool)
                 tgt_mask = tgt_mask.cuda() if torch.cuda.is_available() else tgt_mask
-                past_words = self.embed_word_tokens(past_tokens, category, location)
+                if self.use_bos:
+                    past_words = self.embed_word_tokens_using_bos(past_tokens)
+                else:
+                    past_words = self.embed_word_tokens(past_tokens, category, location)
                 decoder_output = self.decoder(
                     tgt=past_words, # (instr_len, batch, embed)
                     memory=memory, # (mem_size, batch, smt_hidden)
@@ -137,7 +145,10 @@ class InstructionPredictor(nn.Module):
         
         tgt_mask = torch.triu(torch.full((instr_len-1, instr_len-1), 1), diagonal=1).type(torch.bool)
         tgt_mask = tgt_mask.cuda() if torch.cuda.is_available() else tgt_mask
-        past_words = self.embed_word_tokens(target, category, location)
+        if self.use_bos:
+            past_words = self.embed_word_tokens_using_bos(target)
+        else:
+            past_words = self.embed_word_tokens(target, category, location)
         decoder_output = self.decoder(
             tgt=past_words, # (instr_len, batch, embed)
             memory=memory, # (mem_size, batch, smt_hidden)
@@ -168,6 +179,18 @@ class InstructionPredictor(nn.Module):
                 dim=0,
             ) # (instr_len, batch, embed)
         embs = embs.view(instr_len*batch_size, self.vocab_emb_size)
+        words = self.word_emb(embs) # (instr_len*batch, embed)
+        words = words.view(instr_len, batch_size, self.emb_size) # (instr_len, batch, embed)
+        words = self.positional_encoding(words)
+        return words
+    
+    def embed_word_tokens_using_bos(self, word_tokens):
+        """
+        word_tokens: (instr_len, batch)
+        """
+        instr_len, batch_size = word_tokens.shape
+        word_tokens = word_tokens.reshape(instr_len * batch_size) # (instr_len*batch,)
+        embs = self.word_vocab_emb(word_tokens) # (instr_len*batch, 50)
         words = self.word_emb(embs) # (instr_len*batch, embed)
         words = words.view(instr_len, batch_size, self.emb_size) # (instr_len, batch, embed)
         words = self.positional_encoding(words)

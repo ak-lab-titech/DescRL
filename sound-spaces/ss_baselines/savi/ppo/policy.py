@@ -548,6 +548,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         iprl_dropout,
         iprl_use_gt_D,
         iprl_feedback,
+        iprl_use_bos,
         hidden_size=128,
         use_pretrained=False,
         pretrained_path='',
@@ -587,6 +588,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             dim_feedforward=iprl_dim_feedforward,
             dropout=iprl_dropout,
             pretraining=kwargs["pretraining"],
+            use_bos=iprl_use_bos,
         )
         self.iprl_use_gt_D = iprl_use_gt_D
         self.feedback = iprl_feedback
