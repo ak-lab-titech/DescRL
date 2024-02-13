@@ -65,6 +65,7 @@ class PPO(nn.Module):
 
         self.device = next(actor_critic.parameters()).device
         self.use_normalized_advantage = use_normalized_advantage
+        self.update_cnt = 0
 
     def forward(self, *x):
         raise NotImplementedError
@@ -162,15 +163,12 @@ class PPO(nn.Module):
                     # logits: (instr_len, batch, vocab_size)
                     iprl_targets = obs_batch["generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
                     iprl_loss = self.iprl_loss_fn(iprl_logits.view(-1, iprl_logits.shape[-1]), iprl_targets.reshape(-1))
-                    if int(os.environ["LOCAL_RANK"]) == 0:
+                    if int(os.environ["LOCAL_RANK"]) == 0 and e == 0 and self.update_cnt % 5 == 0:
                         lang = R2RLang("r2r")
                         _, iprl_tokens = iprl_logits.max(2)
                         pred_sentence = tokens2sentences(iprl_tokens, lang)
                         true_sentence = tokens2sentences(iprl_targets, lang)
-                        logger.info(f"Loss: {iprl_loss:.3f}")
-                        logger.info(f"Pred 0: {pred_sentence[0]}")
                         logger.info(f"Pred -1: {pred_sentence[-1]}")
-                        logger.info(f"True 0: {true_sentence[0]}")
                         logger.info(f"True -1: {true_sentence[-1]}")
                 else:
                     iprl_loss = 0
@@ -212,6 +210,8 @@ class PPO(nn.Module):
         dist_entropy_epoch /= num_updates
         direct_map_loss_epoch /= num_updates
         iprl_loss_epoch /= num_updates
+
+        self.update_cnt += 1
 
         return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, direct_map_loss_epoch, iprl_loss_epoch
 
