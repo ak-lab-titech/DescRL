@@ -117,6 +117,11 @@ savi1stとsavi2ndの学習時
 1. `TASK.SENSOR` の `CATEGORY_BELIEF` を `KSAVEN_CATEGORY_BELIEF`にする
 2. 2ndの場合は、`pretrained_weights`を要変更
 
+
+#### 音を永続的にする場合
+1. `SIMULATOR.AUDIO.EVERLASTING`をTrueにする
+2. train.shで、PRETRAINED_MODEL_NAMEとCKPT_NUMを永続的なもので学習したやつにする
+
 #### ゴール数の変更
 1. configの`SIMULATOR.AUDIO.NUM`を変更する
 2. configの`DATASET.SPLIT`を変更する
