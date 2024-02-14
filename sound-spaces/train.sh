@@ -7,6 +7,8 @@ MODEL_NAME="ss1savi-savi-iprl"
 # CKPT_NUM="115"
 PRETRAINED_MODEL_NAME="ss1savi-savi-1st-duraion"
 CKPT_NUM="55"
+# PRETRAINED_MODEL_NAME="ss1savi-ksaven-1st-duration"
+# CKPT_NUM="54"
 
 # for off-policy iprl pre-training
 LOG_INTERVAL=1
@@ -95,7 +97,8 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-1st" ]; then
 elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-2nd" ]; then
     python ss_baselines/saven/run.py \
         --exp-config ss_baselines/saven/config/semantic_audionav/saven.yaml \
-        --model-dir data/models/saven/$MODEL_NAME
+        --model-dir data/models/saven/$MODEL_NAME \
+        RL.DDPPO.pretrained_weights "data/models/saven/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
 fi
