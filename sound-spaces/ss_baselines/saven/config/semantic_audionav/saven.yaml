@@ -36,7 +36,7 @@ RL:
       memory_size: 150
       hidden_size: 256
       nhead: 8
-      num_encoder_layers: 1
+      num_encoder_layers: 2 # 1
       num_decoder_layers: 1
       dropout: 0.0
       activation: 'relu'
