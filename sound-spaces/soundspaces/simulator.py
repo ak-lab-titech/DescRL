@@ -376,7 +376,12 @@ class SoundSpacesSim(Simulator, ABC):
         self._audio_index = 0
         is_same_sound = config.AGENT_0.SOUND_ID == self._current_sound
         if not is_same_sound:
-            self._current_sound = self.config.AGENT_0.SOUND_ID
+            if self.config.AUDIO.HEARD_TEST:
+                sound_id = self.config.AGENT_0.SOUND_ID.split("/")
+                self._current_sound = f"{sound_id[0]}_heard/{sound_id[1]}"
+            else:
+                self._current_sound = self.config.AGENT_0.SOUND_ID
+
             self._load_single_source_sound()
             logging.debug("Switch to sound {} with duration {} seconds".format(self._current_sound, self._duration))
 
