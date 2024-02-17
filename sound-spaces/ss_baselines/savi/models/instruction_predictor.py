@@ -46,12 +46,13 @@ class InstructionPredictor(nn.Module):
         dropout: float,
         pretraining: bool = False,
         use_bos: bool = False,
+        belief_dim: int = 23,
     ):
         self.vocab_emb_size = vocab_emb_size
         self.emb_size = emb_size
         self.max_instr_len = max_instr_len
         self._pretraining = pretraining
-        self.belief_dim = 23
+        self.belief_dim = belief_dim
         self.use_bos = use_bos
         super(InstructionPredictor, self).__init__()
 
@@ -67,15 +68,19 @@ class InstructionPredictor(nn.Module):
             self.word_vocab_emb.weight.data[...] = torch.from_numpy(glove)
             self.word_vocab_emb.weight.requires_grad = False
 
-        with gzip.open(
-            "/home/0/19B30511/av-nav/myss/sound-spaces/data/category_embed/savi_21_categorys.json.gz",
-            'rt',
-            encoding='utf-8',
-        ) as f:
-            category_emb_vec = np.array(json.load(f))
-        self.category_emb = nn.Linear(self.belief_dim-2, vocab_emb_size-2)
-        self.category_emb.weight.data[...] = torch.from_numpy(category_emb_vec)
-        self.category_emb.weight.requires_grad = False
+        if self.belief_dim == 23:
+            with gzip.open(
+                "/home/0/19B30511/av-nav/myss/sound-spaces/data/category_embed/savi_21_categorys.json.gz",
+                'rt',
+                encoding='utf-8',
+            ) as f:
+                category_emb_vec = np.array(json.load(f))
+            self.category_emb = nn.Linear(self.belief_dim-2, vocab_emb_size-2)
+            self.category_emb.weight.data[...] = torch.from_numpy(category_emb_vec)
+            self.category_emb.weight.requires_grad = False
+        else:
+            self.category_emb = nn.Linear(self.belief_dim-2, vocab_emb_size-2)
+
 
         self.word_emb = nn.Linear(vocab_emb_size, emb_size)
         self.positional_encoding = PositionalEncoding(

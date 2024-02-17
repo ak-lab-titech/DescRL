@@ -124,6 +124,10 @@ class RolloutStorage:
                 )
             elif sensor == "semantic":
                 continue
+            elif sensor == "generated_instruction":
+                self.observations[sensor][self.step + 1].copy_(
+                    np.squeeze(observations[sensor], axis=1)
+                )
             else:
                 self.observations[sensor][self.step + 1].copy_(
                     observations[sensor]

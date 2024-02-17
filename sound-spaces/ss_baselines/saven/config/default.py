@@ -150,6 +150,12 @@ _TC.TASK.AUDIOGOAL_SENSOR.TYPE = "AudioGoalSensor"
 _TC.TASK.SPECTROGRAM_SENSOR = CN()
 _TC.TASK.SPECTROGRAM_SENSOR.TYPE = "SpectrogramSensor"
 # -----------------------------------------------------------------------------
+# GENERATED_INSTRUCTION
+# -----------------------------------------------------------------------------
+_TC.TASK.GENERATED_INSTRUCTION = CN()
+_TC.TASK.GENERATED_INSTRUCTION.TYPE = "GeneratedInstruction"
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # soundspaces
 # -----------------------------------------------------------------------------
 _TC.SIMULATOR.GRID_SIZE = 0.5

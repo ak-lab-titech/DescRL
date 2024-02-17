@@ -234,10 +234,14 @@ class SMTCNN_saven(nn.Module):
     #
     #     self.apply(weights_init)
 
-    def forward(self, observations):
+    def forward(self, observations, on_or_off="on"):
         cnn_features = []
         if "rgb" in self.input_modalities:
             rgb_observations = observations["rgb"]
+            if on_or_off == "off":
+                L, N, H, W, C = rgb_observations.size()
+                rgb_observations = rgb_observations.view(L*N, H, W, C)
+
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             rgb_observations = rgb_observations.permute(0, 3, 1, 2)
             rgb_observations = rgb_observations / 255.0  # normalize RGB
@@ -247,9 +251,11 @@ class SMTCNN_saven(nn.Module):
 
         if "depth" in self.input_modalities:
             depth_observations = observations["depth"]
-            # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
+            if on_or_off == "off":
+                depth_observations = depth_observations.view(L*N, H, W, 1)
             if len(np.shape(depth_observations)) == 5:
                 depth_observations = np.squeeze(depth_observations, axis=4)
+            # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             depth_observations = depth_observations.permute(0, 3, 1, 2)
             if self.obs_transform:
                 depth_observations = self.obs_transform(depth_observations)
@@ -272,6 +278,8 @@ class SMTCNN_saven(nn.Module):
         #     cnn_features.append(self.semantic_encoder(semantic_observations))
 
         cnn_features = torch.cat(cnn_features, dim=1)
+        if on_or_off == "off":
+            cnn_features = cnn_features.view(L, N, -1)
 
         return cnn_features
 
@@ -317,14 +325,20 @@ class VisionPredictor(nn.Module):
         for param in self.parameters():
             param.requires_grad = False
 
-    def forward(self, observations):
+    def forward(self, observations, on_or_off="on"):
 
         rgb_observations = observations["rgb"]
+        if on_or_off == "off":
+            L, N, H, W, C = rgb_observations.size()
+            rgb_observations = rgb_observations.view(L*N, H, W, C)
         # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
         rgb_observations = rgb_observations.permute(0, 3, 1, 2)
         rgb_observations = rgb_observations / 255.0  # normalize RGB
 
         x = self.predictor(rgb_observations)
         x = self.sigmoid(x)
+
+        if on_or_off == "off":
+            x = x.view(L, N, -1)
 
         return x

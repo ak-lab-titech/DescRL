@@ -7,6 +7,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import sys
 import time
 import logging
 from collections import deque, defaultdict
@@ -51,6 +52,9 @@ from ss_baselines.saven.models.belief_predictor import BeliefPredictor
 from habitat.tasks.nav.nav import IntegratedPointGoalGPSAndCompassSensor
 from soundspaces.tasks.nav import LocationBelief, KSAVENCategoryBelief, SpectrogramSensor
 
+sys.path.append("/home/0/19B30511/av-nav/myss")
+from xgenerator.common.lang import tokens2sentences, R2RLang
+
 
 class DataParallelPassthrough(torch.nn.DataParallel):
     def __getattr__(self, name):
@@ -87,6 +91,8 @@ class PPOTrainer(BaseRLTrainer):
         """
         logger.add_filehandler(self.config.LOG_FILE)
 
+        self.use_iprl = ppo_cfg.INSTRUCTION_PREDICTOR.use_iprl
+
         if observation_space is None:
             observation_space = self.envs.observation_spaces[0]
 
@@ -100,21 +106,47 @@ class PPOTrainer(BaseRLTrainer):
             )
         else:
             smt_cfg = ppo_cfg.SCENE_MEMORY_TRANSFORMER
-            self.actor_critic = AudioNavSMTPolicy(
-                observation_space=observation_space,
-                action_space=self.envs.action_spaces[0],
-                hidden_size=smt_cfg.hidden_size,
-                nhead=smt_cfg.nhead,
-                num_encoder_layers=smt_cfg.num_encoder_layers,
-                num_decoder_layers=smt_cfg.num_decoder_layers,
-                dropout=smt_cfg.dropout,
-                activation=smt_cfg.activation,
-                use_pretrained=smt_cfg.use_pretrained,
-                pretrained_path=smt_cfg.pretrained_path,
-                use_belief_as_goal=ppo_cfg.use_belief_predictor,
-                use_label_belief=smt_cfg.use_label_belief,
-                use_location_belief=smt_cfg.use_location_belief
-            )
+            belief_cfg = ppo_cfg.BELIEF_PREDICTOR
+            iprl_cfg = ppo_cfg.INSTRUCTION_PREDICTOR
+            if not self.use_iprl:
+                self.actor_critic = AudioNavSMTPolicy(
+                    observation_space=observation_space,
+                    action_space=self.envs.action_spaces[0],
+                    hidden_size=smt_cfg.hidden_size,
+                    nhead=smt_cfg.nhead,
+                    num_encoder_layers=smt_cfg.num_encoder_layers,
+                    num_decoder_layers=smt_cfg.num_decoder_layers,
+                    dropout=smt_cfg.dropout,
+                    activation=smt_cfg.activation,
+                    use_pretrained=smt_cfg.use_pretrained,
+                    pretrained_path=smt_cfg.pretrained_path,
+                    use_belief_as_goal=ppo_cfg.use_belief_predictor,
+                    use_label_belief=smt_cfg.use_label_belief,
+                    use_location_belief=smt_cfg.use_location_belief,
+                )
+            else:
+                self.actor_critic = IPRLAudioNavSMTPolicy(
+                    observation_space=observation_space,
+                    action_space=self.envs.action_spaces[0],
+                    iprl_max_instr_len=iprl_cfg.max_instr_len,
+                    iprl_num_decoder_layers=iprl_cfg.num_decoder_layers,
+                    iprl_vocab_emb_size=iprl_cfg.vocab_emb_size,
+                    iprl_emb_size=iprl_cfg.emb_size,
+                    iprl_nhead=iprl_cfg.nhead,
+                    iprl_dim_feedforward=iprl_cfg.dim_feedforward,
+                    iprl_dropout=iprl_cfg.dropout,
+                    hidden_size=smt_cfg.hidden_size,
+                    nhead=smt_cfg.nhead,
+                    num_encoder_layers=smt_cfg.num_encoder_layers,
+                    num_decoder_layers=smt_cfg.num_decoder_layers,
+                    dropout=smt_cfg.dropout,
+                    activation=smt_cfg.activation,
+                    use_pretrained=smt_cfg.use_pretrained,
+                    pretrained_path=smt_cfg.pretrained_path,
+                    use_belief_as_goal=ppo_cfg.use_belief_predictor,
+                    use_label_belief=smt_cfg.use_label_belief,
+                    use_location_belief=smt_cfg.use_location_belief,
+                )
 
             if ppo_cfg.use_belief_predictor:
                 belief_cfg = ppo_cfg.BELIEF_PREDICTOR
@@ -273,7 +305,8 @@ class PPOTrainer(BaseRLTrainer):
                 actions,
                 actions_log_probs,
                 recurrent_hidden_states,
-                external_memory_features
+                external_memory_features,
+                _,
             ) = self.actor_critic.act(
                 step_observation,
                 rollouts.recurrent_hidden_states[rollouts.step],
@@ -428,7 +461,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value, ppo_cfg.use_gae, ppo_cfg.gamma, ppo_cfg.tau
         )
 
-        value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, iprl_loss = self.agent.update(rollouts)
 
         rollouts.after_update()
 
@@ -437,6 +470,7 @@ class PPOTrainer(BaseRLTrainer):
             value_loss,
             action_loss,
             dist_entropy,
+            iprl_loss,
         )
 
     def train(self) -> None:
@@ -802,6 +836,7 @@ class PPOTrainer(BaseRLTrainer):
         if self.config.RL.PPO.use_belief_predictor:
             self.belief_predictor.eval()
         t = tqdm(total=self.config.TEST_EPISODE_COUNT)
+        step_cnt = [0 for _ in range(self.config.NUM_PROCESSES)]
         while (
             len(stats_episodes) < self.config.TEST_EPISODE_COUNT
             and self.envs.num_envs > 0
@@ -809,7 +844,9 @@ class PPOTrainer(BaseRLTrainer):
             current_episodes = self.envs.current_episodes()
 
             with torch.no_grad():
-                _, actions, _, test_recurrent_hidden_states, test_em_features = self.actor_critic.act(
+                for i in range(len(step_cnt)):
+                    step_cnt[i] += 1
+                _, actions, _, test_recurrent_hidden_states, test_em_features, iprl_logits = self.actor_critic.act(
                     batch,
                     test_recurrent_hidden_states,
                     prev_actions,
@@ -820,6 +857,14 @@ class PPOTrainer(BaseRLTrainer):
                 )
 
                 prev_actions.copy_(actions)
+        
+            if len(self.config.VIDEO_OPTION) > 0 and 'generated_instruction' in batch.keys():
+                _, iprl_tokens = iprl_logits.max(2) # iprl_tokens: (instr_len, batch)
+                iprl_sentences = tokens2sentences(iprl_tokens, lang)
+                true_sentences = tokens2sentences(batch['generated_instruction'].permute(1,0).int(), lang)
+                for i in range(len(iprl_sentences)):
+                    logger.info(f"Episode {len(stats_episodes)}, Step {step_cnt[i]} Pred: {iprl_sentences[i]}")
+                    logger.info(f"  True: {true_sentences[i]}")
 
             actions = [a[0].item() for a in actions]
             outputs = self.envs.step(actions)
@@ -859,6 +904,10 @@ class PPOTrainer(BaseRLTrainer):
                         pair += (observations[i]['view_point_goals'],)
                     descriptor_pred_gt[i].append(pair)
                     
+            for i in range(len(dones)):
+                if dones[i]:
+                    step_cnt[i] = 0
+            
             for i in range(self.envs.num_envs):
                 if len(self.config.VIDEO_OPTION) > 0:
                     if self.config.RL.PPO.use_belief_predictor:

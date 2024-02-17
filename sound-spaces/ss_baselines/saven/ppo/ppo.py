@@ -6,9 +6,17 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import sys
+import os
+
+from habitat import logger
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
+sys.path.append("/home/0/19B30511/av-nav/myss")
+from xgenerator.common.load_lmdb import PAD_IDX
+from xgenerator.common.lang import tokens2sentences, R2RLang
 
 EPS_PPO = 1e-5
 
@@ -17,9 +25,11 @@ class PPO(nn.Module):
     def __init__(
         self,
         actor_critic,
+        use_iprl,
         clip_param,
         ppo_epoch,
         num_mini_batch,
+        iprl_loss_coef,
         value_loss_coef,
         entropy_coef,
         lr=None,
@@ -32,6 +42,10 @@ class PPO(nn.Module):
         super().__init__()
 
         self.actor_critic = actor_critic
+
+        self.use_iprl = use_iprl
+        self.iprl_loss_coef = iprl_loss_coef
+        self.iprl_loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)
 
         self.clip_param = clip_param
         self.ppo_epoch = ppo_epoch
@@ -47,6 +61,8 @@ class PPO(nn.Module):
 
         self.device = next(actor_critic.parameters()).device
         self.use_normalized_advantage = use_normalized_advantage
+
+        self.update_cnt = 0
 
     def forward(self, *x):
         raise NotImplementedError
@@ -64,6 +80,7 @@ class PPO(nn.Module):
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
+        iprl_loss_epoch = 0
 
         for e in range(self.ppo_epoch):
             data_generator = rollouts.recurrent_generator(
@@ -92,6 +109,7 @@ class PPO(nn.Module):
                     dist_entropy,
                     _,
                     _,
+                    iprl_logits,
                 ) = self.actor_critic.evaluate_actions(
                     obs_batch,
                     recurrent_hidden_states_batch,
@@ -128,12 +146,27 @@ class PPO(nn.Module):
                     )
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
+                
+                if self.use_iprl:
+                    # logits: (instr_len, batch, vocab_size)
+                    iprl_targets = obs_batch["generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
+                    iprl_loss = self.iprl_loss_fn(iprl_logits.view(-1, iprl_logits.shape[-1]), iprl_targets.reshape(-1))
+                    if int(os.environ["LOCAL_RANK"]) == 0 and e == 0 and self.update_cnt % 5 == 0:
+                        lang = R2RLang("r2r")
+                        _, iprl_tokens = iprl_logits.max(2)
+                        pred_sentence = tokens2sentences(iprl_tokens, lang)
+                        true_sentence = tokens2sentences(iprl_targets, lang)
+                        logger.info(f"Pred -1: {pred_sentence[-1]}")
+                        logger.info(f"True -1: {true_sentence[-1]}")
+                else:
+                    iprl_loss = 0
 
                 self.optimizer.zero_grad()
                 total_loss = (
                     value_loss * self.value_loss_coef
                     + action_loss
                     - dist_entropy * self.entropy_coef
+                    + iprl_loss * self.iprl_loss_coef
                 )
 
                 self.before_backward(total_loss)
@@ -147,14 +180,21 @@ class PPO(nn.Module):
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
+                if self.use_iprl:
+                    iprl_loss_epoch += iprl_loss.item()
+                else:
+                    iprl_loss_epoch += 0
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
         value_loss_epoch /= num_updates
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
+        iprl_loss_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+        self.update_cnt += 1
+
+        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch, iprl_loss_epoch
 
     def before_backward(self, loss):
         pass

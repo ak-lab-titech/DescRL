@@ -37,7 +37,7 @@ from ss_baselines.saven.ddppo.algo.ddp_utils import (
 from ss_baselines.saven.ddppo.algo.ddppo import DDPPO
 from ss_baselines.saven.models.belief_predictor import BeliefPredictor, BeliefPredictorDDP
 from ss_baselines.saven.ppo.ppo_trainer import PPOTrainer
-from ss_baselines.saven.ppo.policy import AudioNavSMTPolicy, AudioNavBaselinePolicy
+from ss_baselines.saven.ppo.policy import AudioNavSMTPolicy, AudioNavBaselinePolicy, IPRLAudioNavSMTPolicy
 
 
 @baseline_registry.register_trainer(name="ddppo")
@@ -70,6 +70,8 @@ class DDPPOTrainer(PPOTrainer):
         action_space = self.envs.action_spaces[0]
         self.action_space = action_space
 
+        self.use_iprl = ppo_cfg.INSTRUCTION_PREDICTOR.use_iprl
+
         has_distractor_sound = self.config.TASK_CONFIG.SIMULATOR.AUDIO.HAS_DISTRACTOR_SOUND
         if ppo_cfg.policy_type == 'rnn':
             self.actor_critic = AudioNavBaselinePolicy(
@@ -99,25 +101,57 @@ class DDPPOTrainer(PPOTrainer):
         elif ppo_cfg.policy_type == 'smt':
             smt_cfg = ppo_cfg.SCENE_MEMORY_TRANSFORMER
             belief_cfg = ppo_cfg.BELIEF_PREDICTOR
-            self.actor_critic = AudioNavSMTPolicy(
-                observation_space=self.envs.observation_spaces[0],
-                action_space=self.envs.action_spaces[0],
-                hidden_size=smt_cfg.hidden_size,
-                nhead=smt_cfg.nhead,
-                num_encoder_layers=smt_cfg.num_encoder_layers,
-                num_decoder_layers=smt_cfg.num_decoder_layers,
-                dropout=smt_cfg.dropout,
-                activation=smt_cfg.activation,
-                use_pretrained=smt_cfg.use_pretrained,
-                pretrained_path=smt_cfg.pretrained_path,
-                pretraining=smt_cfg.pretraining,
-                use_belief_encoding=smt_cfg.use_belief_encoding,
-                use_belief_as_goal=ppo_cfg.use_belief_predictor,
-                use_label_belief=belief_cfg.use_label_belief,
-                use_location_belief=belief_cfg.use_location_belief,
-                normalize_category_distribution=belief_cfg.normalize_category_distribution,
-                use_category_input=has_distractor_sound
-            )
+            iprl_cfg = ppo_cfg.INSTRUCTION_PREDICTOR
+            if not self.use_iprl:
+                self.actor_critic = AudioNavSMTPolicy(
+                    observation_space=self.envs.observation_spaces[0],
+                    action_space=self.envs.action_spaces[0],
+                    hidden_size=smt_cfg.hidden_size,
+                    nhead=smt_cfg.nhead,
+                    num_encoder_layers=smt_cfg.num_encoder_layers,
+                    num_decoder_layers=smt_cfg.num_decoder_layers,
+                    dropout=smt_cfg.dropout,
+                    activation=smt_cfg.activation,
+                    use_pretrained=smt_cfg.use_pretrained,
+                    pretrained_path=smt_cfg.pretrained_path,
+                    pretraining=smt_cfg.pretraining,
+                    use_belief_encoding=smt_cfg.use_belief_encoding,
+                    use_belief_as_goal=ppo_cfg.use_belief_predictor,
+                    use_label_belief=belief_cfg.use_label_belief,
+                    use_location_belief=belief_cfg.use_location_belief,
+                    normalize_category_distribution=belief_cfg.normalize_category_distribution,
+                    use_category_input=has_distractor_sound,
+                )
+            else:
+                self.actor_critic = IPRLAudioNavSMTPolicy(
+                    observation_space=self.envs.observation_spaces[0],
+                    action_space=self.envs.action_spaces[0],
+                    iprl_max_instr_len=iprl_cfg.max_instr_len,
+                    iprl_num_decoder_layers=iprl_cfg.num_decoder_layers,
+                    iprl_vocab_emb_size=iprl_cfg.vocab_emb_size,
+                    iprl_emb_size=iprl_cfg.emb_size,
+                    iprl_nhead=iprl_cfg.nhead,
+                    iprl_dim_feedforward=iprl_cfg.dim_feedforward,
+                    iprl_dropout=iprl_cfg.dropout,
+                    iprl_use_gt_D=iprl_cfg.iprl_use_gt_D,
+                    iprl_feedback=iprl_cfg.feedback,
+                    iprl_use_bos=iprl_cfg.use_bos,
+                    hidden_size=smt_cfg.hidden_size,
+                    nhead=smt_cfg.nhead,
+                    num_encoder_layers=smt_cfg.num_encoder_layers,
+                    num_decoder_layers=smt_cfg.num_decoder_layers,
+                    dropout=smt_cfg.dropout,
+                    activation=smt_cfg.activation,
+                    use_pretrained=smt_cfg.use_pretrained,
+                    pretrained_path=smt_cfg.pretrained_path,
+                    pretraining=smt_cfg.pretraining,
+                    use_belief_encoding=smt_cfg.use_belief_encoding,
+                    use_belief_as_goal=ppo_cfg.use_belief_predictor,
+                    use_label_belief=belief_cfg.use_label_belief,
+                    use_location_belief=belief_cfg.use_location_belief,
+                    normalize_category_distribution=belief_cfg.normalize_category_distribution,
+                    use_category_input=has_distractor_sound,
+                )
             logger.info("self.actor_critic: {}".format(self.actor_critic))
             if smt_cfg.freeze_encoders:
                 self._static_smt_encoder = True
@@ -169,6 +203,14 @@ class DDPPOTrainer(PPOTrainer):
                     if "actor_critic.net.visual_encoder.depth_encoder." in k
                 },
             )
+            if ppo_cfg.use_belief_predictor:
+                self.belief_predictor.predictor.load_state_dict(
+                    {
+                        k[len("predictor."):]: v
+                        for k, v in pretrained_state['belief_predictor'].items()
+                        if "predictor." in k
+                    }
+                )
 
         if self.config.RL.DDPPO.reset_critic:
             nn.init.orthogonal_(self.actor_critic.critic.fc.weight)
@@ -176,10 +218,12 @@ class DDPPOTrainer(PPOTrainer):
 
         self.agent = DDPPO(
             actor_critic=self.actor_critic,
+            use_iprl=self.use_iprl,
             clip_param=ppo_cfg.clip_param,
             ppo_epoch=ppo_cfg.ppo_epoch,
             num_mini_batch=ppo_cfg.num_mini_batch,
             value_loss_coef=ppo_cfg.value_loss_coef,
+            iprl_loss_coef=ppo_cfg.iprl_loss_coef,
             entropy_coef=ppo_cfg.entropy_coef,
             lr=ppo_cfg.lr,
             eps=ppo_cfg.eps,
@@ -441,6 +485,7 @@ class DDPPOTrainer(PPOTrainer):
                     value_loss,
                     action_loss,
                     dist_entropy,
+                    iprl_loss
                 ) = self._update_agent(ppo_cfg, rollouts)
                 pth_time += delta_pth_time
 
@@ -454,7 +499,7 @@ class DDPPOTrainer(PPOTrainer):
                     window_episode_stats[k].append(stats[i].clone())
 
                 stats = torch.tensor(
-                    [value_loss, action_loss, dist_entropy, location_predictor_loss, prediction_accuracy, count_steps_delta],
+                    [value_loss, action_loss, dist_entropy, location_predictor_loss, prediction_accuracy, count_steps_delta, iprl_loss],
                     device=self.device,
                 )
                 distrib.all_reduce(stats)
@@ -469,6 +514,7 @@ class DDPPOTrainer(PPOTrainer):
                         stats[2].item() / self.world_size,
                         stats[3].item() / self.world_size,
                         stats[4].item() / self.world_size,
+                        stats[6].item() / self.world_size,
                     ]
                     deltas = {
                         k: (
@@ -500,6 +546,7 @@ class DDPPOTrainer(PPOTrainer):
                     writer.add_scalar("Policy/entropy_loss", losses[2], count_steps)
                     writer.add_scalar("Policy/predictor_loss", losses[3], count_steps)
                     writer.add_scalar("Policy/predictor_accuracy", losses[4], count_steps)
+                    writer.add_scalar("Policy/iprl_loss", losses[5], count_steps)
                     writer.add_scalar('Policy/learning_rate', lr_scheduler.get_lr()[0], count_steps)
 
                     # log stats

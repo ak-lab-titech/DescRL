@@ -9,10 +9,12 @@
 import abc
 import logging
 import itertools
+import sys
 
 import torch
 import torch.nn as nn
 from torchsummary import summary
+import numpy as np
 
 from soundspaces.tasks.nav import PoseSensor, SpectrogramSensor, LocationBelief, KSAVENCategoryBelief, Category
 from ss_baselines.common.utils import CategoricalNet
@@ -22,6 +24,11 @@ from ss_baselines.saven.models.audio_cnn import AudioCNN
 from ss_baselines.saven.models.smt_state_encoder import SMTStateEncoder
 from ss_baselines.saven.models.smt_cnn import SMTCNN, SMTCNN_saven, VisionPredictor
 from ss_baselines.saven.models.gcn import GCN, DGL_GCN
+from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
+
+sys.path.append("/home/0/19B30511/av-nav/myss")
+from xgenerator.common.lang import R2RLang
+from xgenerator.common.model import VisualImageEncoder
 
 DUAL_GOAL_DELIMITER = ','
 
@@ -31,6 +38,7 @@ class Policy(nn.Module):
         super().__init__()
         self.net = net
         self.dim_actions = dim_actions
+        self.use_iprl = False
 
         self.action_distribution = CategoricalNet(
             self.net.output_size, self.dim_actions
@@ -48,11 +56,18 @@ class Policy(nn.Module):
         masks,
         ext_memory,
         ext_memory_masks,
+        need_logits=False,
         deterministic=False,
     ):
-        features, rnn_hidden_states, ext_memory_feats = self.net(
-            observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks
-        )
+        iprl_logits = None
+        if self.use_iprl:
+            features, rnn_hidden_states, ext_memory_feats, iprl_logits = self.net(
+                observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks, need_logits
+            )
+        else:
+            features, rnn_hidden_states, ext_memory_feats = self.net(
+                observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks
+            )
         distribution = self.action_distribution(features)
         value = self.critic(features)
 
@@ -63,12 +78,17 @@ class Policy(nn.Module):
 
         action_log_probs = distribution.log_probs(action)
 
-        return value, action, action_log_probs, rnn_hidden_states, ext_memory_feats
+        return value, action, action_log_probs, rnn_hidden_states, ext_memory_feats, iprl_logits
 
     def get_value(self, observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks):
-        features, _, _ = self.net(
-            observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks
-        )
+        if self.use_iprl:
+            features, _, _ , _ = self.net(
+                observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks, False
+            )
+        else:
+            features, _, _ = self.net(
+                observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks
+            )
         return self.critic(features)
 
     def evaluate_actions(
@@ -81,17 +101,24 @@ class Policy(nn.Module):
         ext_memory,
         ext_memory_masks,
     ):
-        features, rnn_hidden_states, ext_memory_feats = self.net(
-            observations, rnn_hidden_states, prev_actions,
-            masks, ext_memory, ext_memory_masks
-        )
+        iprl_logits = None
+        if self.use_iprl:
+            features, rnn_hidden_states, ext_memory_feats, iprl_logits = self.net(
+                observations, rnn_hidden_states, prev_actions,
+                masks, ext_memory, ext_memory_masks, True,
+            )
+        else:
+            features, rnn_hidden_states, ext_memory_feats = self.net(
+                observations, rnn_hidden_states, prev_actions,
+                masks, ext_memory, ext_memory_masks
+            )
         distribution = self.action_distribution(features)
         value = self.critic(features)
 
         action_log_probs = distribution.log_probs(action)
         distribution_entropy = distribution.entropy().mean()
 
-        return value, action_log_probs, distribution_entropy, rnn_hidden_states, ext_memory_feats
+        return value, action_log_probs, distribution_entropy, rnn_hidden_states, ext_memory_feats, iprl_logits
 
 
 class CriticHead(nn.Module):
@@ -138,6 +165,26 @@ class AudioNavSMTPolicy(Policy):
             ),
             action_space.n
         )
+
+
+class IPRLAudioNavSMTPolicy(Policy):
+    def __init__(
+        self,
+        observation_space,
+        action_space,
+        hidden_size=128,
+        **kwargs
+    ):
+        super().__init__(
+            IPRLAudioNavSMTNet(
+                observation_space,
+                action_space,
+                hidden_size=hidden_size,
+                **kwargs
+            ),
+            action_space.n
+        )
+        self.use_iprl = True
 
 
 class Net(nn.Module, metaclass=abc.ABCMeta):
@@ -385,7 +432,7 @@ class AudioNavSMTNet(Net):
     def num_recurrent_layers(self):
         return -1
 
-    def forward(self, observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks):
+    def forward(self, observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks, need_enc_memory=False):
         x = self.get_features(observations, prev_actions)
 
         if self._use_belief_as_goal:
@@ -397,7 +444,7 @@ class AudioNavSMTNet(Net):
                     # belief[:, :21] = observations[KSAVENCategoryBelief.cls_uuid]
 
                     obs_cat_belief = observations[KSAVENCategoryBelief.cls_uuid]
-                    audio_gcn_embds = torch.zeros((obs_cat_belief.shape[0], self.audio_gcn.feature_dims), device=x.device)
+                    audio_gcn_embds = torch.zeros((obs_cat_belief.shape[0], self.audio_gcn.feature_dims), device=x.device) # dim: 254
                     for i in range(len(obs_cat_belief)):
                         audio_gcn_embds[i, :] = self.audio_gcn(obs_cat_belief[i])
                     belief[:, :self.audio_gcn.feature_dims] = audio_gcn_embds
@@ -411,11 +458,14 @@ class AudioNavSMTNet(Net):
         else:
             belief = None
 
-        x_att = self.smt_state_encoder(x, ext_memory, ext_memory_masks, goal=belief)
+        x_att, enc_memory = self.smt_state_encoder(x, ext_memory, ext_memory_masks, need_enc_memory=True, goal=belief)
         if self._use_residual_connection:
             x_att = torch.cat([x_att, x], 1)
 
-        return x_att, rnn_hidden_states, x
+        if need_enc_memory:
+            return x_att, rnn_hidden_states, x, belief, enc_memory
+        else:
+            return x_att, rnn_hidden_states, x
 
     def _get_one_hot(self, actions):
         if actions.shape[1] == self._action_size:
@@ -473,3 +523,110 @@ class AudioNavSMTNet(Net):
         x = torch.cat(x, dim=1)
 
         return x
+
+
+class IPRLAudioNavSMTNet(AudioNavSMTNet):
+    def __init__(
+        self,
+        observation_space,
+        action_space,
+        iprl_max_instr_len,
+        iprl_num_decoder_layers,
+        iprl_vocab_emb_size,
+        iprl_emb_size,
+        iprl_nhead,
+        iprl_dim_feedforward,
+        iprl_dropout,
+        iprl_use_gt_D,
+        iprl_feedback,
+        iprl_use_bos,
+        hidden_size=128,
+        use_pretrained=False,
+        pretrained_path='',
+        use_belief_as_goal=True,
+        use_label_belief=True,
+        use_location_belief=True,
+        use_belief_encoding=False,
+        normalize_category_distribution=False,
+        use_category_input=False,
+        **kwargs
+    ):
+        super().__init__(
+            observation_space,
+            action_space,
+            hidden_size,
+            False, # use_pretrained (superの中では呼ばない)
+            pretrained_path,
+            use_belief_as_goal,
+            use_label_belief,
+            use_location_belief,
+            use_belief_encoding,
+            normalize_category_distribution,
+            use_category_input,
+            **kwargs,
+        )
+        lang = R2RLang(name="r2r_train")
+        self.instruction_predictor = InstructionPredictor(
+            num_decoder_layers=iprl_num_decoder_layers,
+            vocab_emb_size=iprl_vocab_emb_size,
+            emb_size=iprl_emb_size,
+            max_instr_len=iprl_max_instr_len,
+            nhead=iprl_nhead,
+            vocab_size=lang.vocab_size,
+            glove=lang.glove_vec,
+            dim_feedforward=iprl_dim_feedforward,
+            dropout=iprl_dropout,
+            pretraining=kwargs["pretraining"],
+            use_bos=iprl_use_bos,
+            belief_dim=self.audio_gcn.feature_dims+2,
+        )
+        self.iprl_use_gt_D = iprl_use_gt_D
+        self.feedback = iprl_feedback
+
+        if use_pretrained:
+            assert(pretrained_path != '')
+            self.pretrained_initialization(pretrained_path)
+
+        self.train()
+    
+    def pretrained_initialization(self, path):
+        logging.info(f'AudioNavSMTNet ===> Loading pretrained model from {path}')
+        state_dict = torch.load(
+            path,
+            map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
+        )
+        if "xgenerator" in path:
+            raise NotImplementedError()
+        else:
+            cleaned_state_dict = state_dict['state_dict']
+        self.load_state_dict(cleaned_state_dict, strict=False)
+    
+    def forward(self, observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks, need_logits=False):
+        x_att, rnn_hidden_states, x, belief, enc_memory = super().forward(
+            observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks, True,
+        )
+        if not need_logits:
+            return x_att, rnn_hidden_states, x, None
+        
+        if self.iprl_use_gt_D:
+            raise NotImplementedError()
+        else:
+            category = belief[:, :self.audio_gcn.feature_dims]
+            location = belief[:, self.audio_gcn.feature_dims:self.audio_gcn.feature_dims+2]
+        
+        if self.feedback == "teacher":
+            target = observations["generated_instruction"] # (batch, instr_len)
+        elif self.feedback == "student":
+            target = None
+        else:
+            raise Exception(f"feedback must be 'teacher' or 'student', not {self.feedback}")
+
+        logits = self.instruction_predictor(
+            category=category, # (batch, 254)
+            location=location, # (batch, 2)
+            target=target,
+            memory=enc_memory, # (mem_size, batch, smt_hidden)
+            memory_key_padding_mask=(1 - ext_memory_masks) > 0,
+        )
+
+        return x_att, rnn_hidden_states, x, logits
