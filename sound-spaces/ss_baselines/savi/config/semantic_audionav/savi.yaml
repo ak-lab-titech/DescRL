@@ -14,7 +14,7 @@ RL:
     clip_param: 0.2
     ppo_epoch: 2
     num_mini_batch: 2
-    iprl_loss_coef: 0.5
+    iprl_loss_coef: 0.1
     value_loss_coef: 0.5
     direct_map_loss_coef: 100
     entropy_coef: 0.05
