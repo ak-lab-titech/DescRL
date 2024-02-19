@@ -11,6 +11,7 @@ import sys
 import json
 
 sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
+sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
 
 os.environ['MAGNUM_LOG'] = "quiet"
 os.environ['HABITAT_SIM_LOG'] = "quiet"
@@ -42,6 +43,10 @@ class RandomAgent(habitat.Agent):
 
     def is_goal_reached(self, observations):
         # because the frame is in with polar coordinates
+
+        # dist = observations[self.goal_sensor_uuid][0]
+        # return dist <= self.dist_threshold_to_stop
+
         dists = [
             observations[self.goal_sensor_uuid][2*i] for i in range(
                 int(len(observations[self.goal_sensor_uuid])/2)

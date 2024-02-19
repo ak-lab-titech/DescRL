@@ -91,7 +91,7 @@ class Planner:
 
         next_node = next_node_idx = None
         if stop:
-            action = HabitatSimActions.STOP
+            action = HabitatSimActions.FOUND
             self._prev_next_node = None
         else:
             try:

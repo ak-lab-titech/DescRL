@@ -233,12 +233,10 @@ def get_config(
         config.TASK_CONFIG.SIMULATOR.AUDIO.CROSSFADE = True
         config.TASK_CONFIG.DATASET.CONTINUOUS = True
         config.RL.DISTANCE_REWARD_SCALE = 1.0
-
-        # config.TASK_CONFIG.SIMULATOR.STEP_TIME = 1.0
-        # config.TASK_CONFIG.SIMULATOR.FORWARD_STEP_SIZE = 1.0
-        # config.TASK_CONFIG.SIMULATOR.TURN_ANGLE = 90
     else:
-        config.TASK_CONFIG.SIMULATOR.FORWARD_STEP_SIZE = config.TASK_CONFIG.SIMULATOR.GRID_SIZE
+        config.TASK_CONFIG.SIMULATOR.STEP_TIME = 1.0
+        config.TASK_CONFIG.SIMULATOR.FORWARD_STEP_SIZE = 1.0
+        config.TASK_CONFIG.SIMULATOR.TURN_ANGLE = 90
     config.TASK_CONFIG.freeze()
     config.freeze()
     return config

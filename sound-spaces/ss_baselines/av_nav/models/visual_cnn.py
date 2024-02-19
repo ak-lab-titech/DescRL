@@ -145,6 +145,8 @@ class VisualCNN(nn.Module):
 
         if self._n_input_depth > 0:
             depth_observations = observations["depth"]
+            if len(np.shape(depth_observations)) == 5:
+                depth_observations = np.squeeze(depth_observations, axis=4)
             # permute tensor to dimension [BATCH x CHANNEL x HEIGHT X WIDTH]
             depth_observations = depth_observations.permute(0, 3, 1, 2)
             cnn_input.append(depth_observations)

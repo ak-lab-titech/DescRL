@@ -71,10 +71,42 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven" ]; then
         RL.DDPPO.pretrained False \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
         USE_SYNC_VECENV True
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avnav" ]; then
+    python ss_baselines/av_nav/run.py \
+        --run-type eval \
+        --exp-config ss_baselines/av_nav/config/semantic_audionav/mp3d/rgbd_ddppo.yaml \
+        --model-dir data/models/ss1-savi/avnav/mp3d/$MODEL_NAME \
+        TRAINER_NAME "AVNavTrainer" \
+        EVAL_CKPT_PATH_DIR data/models/ss1-savi/avnav/mp3d/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        LOG_FILE data/models/ss1-savi/avnav/mp3d/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
+        TENSORBOARD_DIR data/models/ss1-savi/avnav/mp3d/$MODEL_NAME/test \
+        NUM_PROCESSES 10 \
+        CONTINUOUS False \
+        EVAL.SPLIT test \
+        TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
+        USE_SYNC_VECENV True
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avnav" ]; then
+    python ss_baselines/av_wan/run.py \
+        --run-type eval \
+        --exp-config ss_baselines/av_wan/config/semantic_audionav/mp3d/train_with_am.yaml \
+        --model-dir data/models/ss1-savi/avwan/mp3d/$MODEL_NAME \
+        EVAL_CKPT_PATH_DIR data/models/ss1-savi/avwan/mp3d/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        LOG_FILE data/models/ss1-savi/avwan/mp3d/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
+        TENSORBOARD_DIR data/models/ss1-savi/avwan/mp3d/$MODEL_NAME/test \
+        NUM_PROCESSES 10 \
+        CONTINUOUS False \
+        EVAL.SPLIT test \
+        TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
+        USE_SYNC_VECENV True
 elif [ $ENV = "ss2-avnav" ] && [ $MODEL = "random" ]; then
     python ss_baselines/common/simple_agents.py \
-         --success-distance 1.0 \
-         --task-config configs/audionav/av_nav/replica/pointgoal.yaml
+        --success-distance 1.0 \
+        --task-config configs/audionav/av_nav/replica/pointgoal.yaml
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "random" ]; then
+    python ss_baselines/common/simple_agents.py \
+        --success-distance 1.0 \
+        --task-config configs/semantic_audionav/av_nav/mp3d/semantic_audiogoal.yaml \
+        DATASET.SPLIT test
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
 fi

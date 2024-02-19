@@ -66,7 +66,7 @@ class Policy(nn.Module):
         return self.critic(features)
 
     def evaluate_actions(
-            self, observations, rnn_hidden_states, prev_actions, masks, action
+            self, observations, rnn_hidden_states, prev_direct_map, dm_hidden_states, prev_actions, masks, action
     ):
         features, rnn_hidden_states = self.net(
             observations, rnn_hidden_states, prev_actions, masks
@@ -77,7 +77,7 @@ class Policy(nn.Module):
         action_log_probs = distribution.log_probs(action)
         distribution_entropy = distribution.entropy().mean()
 
-        return value, action_log_probs, distribution_entropy, rnn_hidden_states
+        return value, action_log_probs, distribution_entropy, rnn_hidden_states, None, dm_hidden_states
 
 
 class CriticHead(nn.Module):

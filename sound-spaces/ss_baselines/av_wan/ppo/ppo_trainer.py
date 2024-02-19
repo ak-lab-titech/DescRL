@@ -83,6 +83,7 @@ class PPOTrainer(BaseRLTrainer):
             num_mini_batch=ppo_cfg.num_mini_batch,
             value_loss_coef=ppo_cfg.value_loss_coef,
             entropy_coef=ppo_cfg.entropy_coef,
+            direct_map_loss_coef=ppo_cfg.direct_map_loss_coef,
             lr=ppo_cfg.lr,
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
@@ -120,7 +121,7 @@ class PPOTrainer(BaseRLTrainer):
 
     def _collect_rollout_step(
             self, rollouts, current_episode_reward, current_episode_step, episode_rewards,
-            episode_spls, episode_counts, episode_steps, episode_distances
+            episode_spls, episode_counts, episode_steps, episode_distances, episode_successes, episode_swss, episode_snas,
     ):
         pth_time = 0.0
         env_time = 0.0
@@ -167,6 +168,18 @@ class PPOTrainer(BaseRLTrainer):
             [[info['spl']] for info in infos]
         )
 
+        successes = torch.tensor(
+            [[info['success']] for info in infos]
+        )
+
+        swss = torch.tensor(
+            [[info['sws']] for info in infos]
+        )
+
+        snas = torch.tensor(
+            [[info['sna']] for info in infos]
+        )
+
         distances = torch.tensor(
             [[info['distance_to_goal']] for info in infos]
         )
@@ -179,6 +192,9 @@ class PPOTrainer(BaseRLTrainer):
         # the episode count will also increase by 1
         episode_rewards += (1 - masks) * current_episode_reward
         episode_spls += (1 - masks) * spls
+        episode_successes += (1 - masks) * successes
+        episode_swss += (1 - masks) * swss
+        episode_snas += (1 - masks) * snas
         episode_steps += (1 - masks) * current_episode_step
         episode_counts += 1 - masks
         episode_distances += (1 - masks) * distances
@@ -191,8 +207,11 @@ class PPOTrainer(BaseRLTrainer):
             actions,
             actions_log_probs,
             values,
+            None,
+            None,
             rewards,
-            masks
+            masks,
+            dones,
         )
 
         pth_time += time.time() - t_update_stats
@@ -216,7 +235,7 @@ class PPOTrainer(BaseRLTrainer):
             next_value, ppo_cfg.use_gae, ppo_cfg.gamma, ppo_cfg.tau
         )
 
-        value_loss, action_loss, dist_entropy = self.agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, _ = self.agent.update(rollouts)
 
         rollouts.after_update()
 
@@ -263,7 +282,12 @@ class PPOTrainer(BaseRLTrainer):
             self.envs.num_envs,
             self.envs.observation_spaces[0],
             self.envs.action_spaces[0],
-            ppo_cfg.hidden_size
+            ppo_cfg.hidden_size,
+            self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE,
+            self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP,
+            self.config.TASK_CONFIG.SIMULATOR.DROPOUT_RATE,
+            self.config.TASK_CONFIG.SIMULATOR.NOISE_COEF,
+            num_recurrent_layers=self.actor_critic.net.num_recurrent_layers,
         )
         rollouts.to(self.device)
 
@@ -271,7 +295,15 @@ class PPOTrainer(BaseRLTrainer):
         batch = batch_obs(observations)
 
         for sensor in rollouts.observations:
-            rollouts.observations[sensor][0].copy_(batch[sensor])
+            if sensor == "depth":
+                batch_sensor = np.squeeze(batch[sensor], axis=4)
+            elif sensor == "generated_instruction":
+                batch_sensor = np.squeeze(batch[sensor], axis=1)
+            elif sensor == "semantic":
+                continue
+            else:
+                batch_sensor = batch[sensor]
+            rollouts.observations[sensor][0].copy_(batch_sensor)
 
         # batch and observations may contain shared PyTorch CUDA
         # tensors.  We must explicitly clear them here otherwise
@@ -282,6 +314,9 @@ class PPOTrainer(BaseRLTrainer):
         # episode_rewards and episode_counts accumulates over the entire training course
         episode_rewards = torch.zeros(self.envs.num_envs, 1)
         episode_spls = torch.zeros(self.envs.num_envs, 1)
+        episode_successes = torch.zeros(self.envs.num_envs, 1)
+        episode_snas = torch.zeros(self.envs.num_envs, 1)
+        episode_swss = torch.zeros(self.envs.num_envs, 1)
         episode_steps = torch.zeros(self.envs.num_envs, 1)
         episode_counts = torch.zeros(self.envs.num_envs, 1)
         episode_distances = torch.zeros(self.envs.num_envs, 1)
@@ -289,6 +324,9 @@ class PPOTrainer(BaseRLTrainer):
         current_episode_step = torch.zeros(self.envs.num_envs, 1)
         window_episode_reward = deque(maxlen=ppo_cfg.reward_window_size)
         window_episode_spl = deque(maxlen=ppo_cfg.reward_window_size)
+        window_episode_success = deque(maxlen=ppo_cfg.reward_window_size)
+        window_episode_sna = deque(maxlen=ppo_cfg.reward_window_size)
+        window_episode_sws = deque(maxlen=ppo_cfg.reward_window_size)
         window_episode_step = deque(maxlen=ppo_cfg.reward_window_size)
         window_episode_counts = deque(maxlen=ppo_cfg.reward_window_size)
         window_episode_distances = deque(maxlen=ppo_cfg.reward_window_size)
@@ -336,7 +374,10 @@ class PPOTrainer(BaseRLTrainer):
                         episode_spls,
                         episode_counts,
                         episode_steps,
-                        episode_distances
+                        episode_distances,
+                        episode_successes,
+                        episode_swss,
+                        episode_snas,
                     )
                     pth_time += delta_pth_time
                     env_time += delta_env_time
@@ -352,12 +393,15 @@ class PPOTrainer(BaseRLTrainer):
                 window_episode_step.append(episode_steps.clone())
                 window_episode_counts.append(episode_counts.clone())
                 window_episode_distances.append(episode_distances.clone())
+                window_episode_success.append(episode_successes.clone())
+                window_episode_sws.append(episode_swss.clone())
+                window_episode_sna.append(episode_snas.clone())
 
                 losses = [value_loss, action_loss, dist_entropy]
                 stats = zip(
-                    ["count", "reward", "step", 'spl', 'distance'],
+                    ["count", "reward", "na", 'spl', 'distance_to_goal', "success", "sws", "sna"],
                     [window_episode_counts, window_episode_reward, window_episode_step, window_episode_spl,
-                     window_episode_distances],
+                     window_episode_distances, window_episode_success, window_episode_sws, window_episode_sna],
                 )
                 deltas = {
                     k: (
@@ -371,22 +415,14 @@ class PPOTrainer(BaseRLTrainer):
 
                 # this reward is averaged over all the episodes happened during window_size updates
                 # approximately number of steps is window_size * num_steps
-                writer.add_scalar(
-                    "Environment/Reward", deltas["reward"] / deltas["count"], count_steps
-                )
-
-                writer.add_scalar(
-                    "Environment/SPL", deltas["spl"] / deltas["count"], count_steps
-                )
-
-                logging.debug('Number of steps: {}'.format(deltas["step"] / deltas["count"]))
-                writer.add_scalar(
-                    "Environment/Episode_length", deltas["step"] / deltas["count"], count_steps
-                )
-
-                writer.add_scalar(
-                    "Environment/Distance_to_goal", deltas["distance"] / deltas["count"], count_steps
-                )
+                metrics = {
+                    k: v / deltas["count"]
+                    for k, v in deltas.items()
+                    if k not in {"count"}
+                }
+                if len(metrics) > 0:
+                    for metric, value in metrics.items():
+                        writer.add_scalar(f"Metrics/{metric}", value, count_steps)
 
                 # writer.add_scalars(
                 #     "losses",
@@ -395,16 +431,16 @@ class PPOTrainer(BaseRLTrainer):
                 # )
 
                 writer.add_scalar(
-                    'Policy/Value_Loss', value_loss, count_steps
+                    'Policy/value_loss', value_loss, count_steps
                 )
                 writer.add_scalar(
-                    'Policy/Action_Loss', action_loss, count_steps
+                    'Policy/policy_loss', action_loss, count_steps
                 )
                 writer.add_scalar(
-                    'Policy/Entropy', dist_entropy, count_steps
+                    'Policy/entropy_loss', dist_entropy, count_steps
                 )
                 writer.add_scalar(
-                    'Policy/Learning_Rate', lr_scheduler.get_lr()[0], count_steps
+                    'Policy/learning_rate', lr_scheduler.get_lr()[0], count_steps
                 )
 
                 # log stats
@@ -431,9 +467,13 @@ class PPOTrainer(BaseRLTrainer):
 
                     if window_counts > 0:
                         logger.info(
-                            "Average window size {} reward: {:3f}".format(
+                            "Average window size: {}  {}".format(
                                 len(window_episode_reward),
-                                (window_rewards / window_counts).item(),
+                                "  ".join(
+                                    "{}: {:.3f}".format(k, v / deltas["count"])
+                                    for k, v in deltas.items()
+                                    if k != "count"
+                                ),
                             )
                         )
                     else:
@@ -687,6 +727,7 @@ class PPOTrainer(BaseRLTrainer):
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
+                _,
                 prev_actions,
                 batch,
                 rgb_frames,
@@ -696,6 +737,7 @@ class PPOTrainer(BaseRLTrainer):
                 test_recurrent_hidden_states,
                 not_done_masks,
                 current_episode_reward,
+                None,
                 prev_actions,
                 batch,
                 rgb_frames,

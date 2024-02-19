@@ -9,6 +9,13 @@
 import argparse
 import logging
 import os
+import sys
+
+os.environ['MAGNUM_LOG'] = "quiet"
+os.environ['HABITAT_SIM_LOG'] = "quiet"
+
+sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
+sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
 
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)

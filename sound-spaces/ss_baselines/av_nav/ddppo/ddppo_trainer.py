@@ -195,7 +195,15 @@ class DDPPOTrainer(PPOTrainer):
         rollouts.to(self.device)
 
         for sensor in rollouts.observations:
-            rollouts.observations[sensor][0].copy_(batch[sensor])
+            if sensor == "depth":
+                batch_sensor = np.squeeze(batch[sensor], axis=4)
+            elif sensor == "generated_instruction":
+                batch_sensor = np.squeeze(batch[sensor], axis=1)
+            elif sensor == "semantic":
+                continue
+            else:
+                batch_sensor = batch[sensor]
+            rollouts.observations[sensor][0].copy_(batch_sensor)
             if self.use_direct_map and self.use_gt_direct_map:
                 rollouts.prev_direct_map[1].copy_(batch["direct_map"])
 

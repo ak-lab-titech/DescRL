@@ -581,7 +581,6 @@ class PPOTrainer(BaseRLTrainer):
 
                 prev_actions.copy_(actions)
 
-            prev_sound_diss = self.envs.get_sound_diss()
 
             if self.save_gif:
                 gt_pred_dms.append([
@@ -604,22 +603,6 @@ class PPOTrainer(BaseRLTrainer):
                 if dones[i] and self.use_direct_map:
                     predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
                 
-                if dones[i]:
-                    # 到達したかどうかの判定
-                    for sound, ds in prev_sound_diss[i].items():
-                        if not sound in list(sound_found_nums.keys()):
-                            sound_found_nums[sound] = 0
-                        if not sound in list(sound_all_nums.keys()):
-                            sound_all_nums[sound] = 0
-                        
-                        for d in ds:
-                            if d is None:
-                                sound_found_nums[sound] += 1
-                            elif d < 1.0 and prev_actions[i] == 0:
-                                sound_found_nums[sound] += 1
-                            
-                            sound_all_nums[sound] += 1
-
             for i in range(self.envs.num_envs):
                 if len(self.config.VIDEO_OPTION) > 0:
                     if config.TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE and 'intermediate' in observations[i]:
@@ -763,9 +746,8 @@ class PPOTrainer(BaseRLTrainer):
 
         stats_file = os.path.join(
             config.TENSORBOARD_DIR,
-            "{}_{}_{}.json".format(
+            "{}_{}.json".format(
                 config.EVAL.SPLIT,
-                config.TASK_CONFIG.DATASET.SOUND_TYPE,
                 os.getenv('JOB_ID')
             )
         )
@@ -790,20 +772,6 @@ class PPOTrainer(BaseRLTrainer):
             logger.info(
                 f"STD episode {metric_uuid}: {episode_metrics_std[metric_uuid]:.6f}"
             )
-
-        total_num = 0
-        total_found_num = 0
-        for sound, num in sound_found_nums.items():
-            total_num += sound_all_nums[sound]
-            if sound_all_nums[sound] == 0:
-                logger.info(f"sound_all_nums[{sound}] == 0")
-            else:
-                total_found_num += num
-                logger.info(
-                    f"{sound}: {num / sound_all_nums[sound]} (all num: {sound_all_nums[sound]}, found num: {num})"
-                )
-        logger.info(f"TOTAL NUM: {total_num}")
-        logger.info(f"TOTAL FOUND NUM: {total_found_num}")
 
         if not config.EVAL.SPLIT.startswith('test'):
             writer.add_scalar("{}/reward".format(config.EVAL.SPLIT), episode_reward_mean, checkpoint_index)

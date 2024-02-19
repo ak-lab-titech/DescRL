@@ -80,6 +80,33 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-2nd" ]; then
         USE_SYNC_VECENV True \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
         RL.DDPPO.pretrained False
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avnav" ]; then
+    python ss_baselines/av_nav/run.py \
+        --run-type eval \
+        --exp-config ss_baselines/av_nav/config/semantic_audionav/mp3d/rgbd_ddppo.yaml \
+        --model-dir data/models/ss1-savi/avnav/mp3d/$MODEL_NAME \
+        --prev-ckpt-ind $PREV_CKPT_IND \
+        TRAINER_NAME "AVNavTrainer" \
+        LOG_FILE data/models/ss1-savi/avnav/mp3d/$MODEL_NAME/eval.log \
+        TENSORBOARD_DIR data/models/ss1-savi/avnav/mp3d/$MODEL_NAME/tb_eval \
+        NUM_PROCESSES 10 \
+        CONTINUOUS False \
+        EVAL.SPLIT val \
+        USE_SYNC_VECENV True \
+        TEST_EPISODE_COUNT $TEST_EPISODE_COUNT
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avwan" ]; then
+    python ss_baselines/av_wan/run.py \
+        --run-type eval \
+        --exp-config ss_baselines/av_wan/config/semantic_audionav/mp3d/train_with_am.yaml \
+        --model-dir data/models/ss1-savi/avwan/mp3d/$MODEL_NAME \
+        --prev-ckpt-ind $PREV_CKPT_IND \
+        LOG_FILE data/models/ss1-savi/avwan/mp3d/$MODEL_NAME/eval.log \
+        TENSORBOARD_DIR data/models/ss1-savi/avwan/mp3d/$MODEL_NAME/tb_eval \
+        NUM_PROCESSES 10 \
+        CONTINUOUS False \
+        EVAL.SPLIT val \
+        USE_SYNC_VECENV True \
+        TEST_EPISODE_COUNT $TEST_EPISODE_COUNT
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
 fi

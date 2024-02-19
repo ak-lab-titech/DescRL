@@ -50,6 +50,7 @@ class Benchmark:
         dummy_config.TASK_CONFIG.TASK.SUCCESS.SUCCESS_DISTANCE = 1.0
         dummy_config.TASK_CONFIG.TASK.NUM_SOFT_SUCCESS.SUCCESS_DISTANCE = 1.0
         dummy_config.CONTINUOUS = True
+        # dummy_config.CONTINUOUS = False
         if dummy_config.CONTINUOUS:
             dummy_config.TASK_CONFIG.SIMULATOR.FORWARD_STEP_SIZE = 0.25
             dummy_config.TASK_CONFIG.SIMULATOR.TYPE = "ContinuousSoundSpacesSim"

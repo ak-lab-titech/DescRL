@@ -115,6 +115,11 @@ _TC.TASK.AUDIOGOAL_SENSOR.TYPE = "AudioGoalSensor"
 _TC.TASK.SPECTROGRAM_SENSOR = CN()
 _TC.TASK.SPECTROGRAM_SENSOR.TYPE = "SpectrogramSensor"
 # -----------------------------------------------------------------------------
+# DIRECT_MAP
+# -----------------------------------------------------------------------------
+_TC.TASK.DIRECT_MAP = CN()
+_TC.TASK.DIRECT_MAP.TYPE = "DirectMap"
+# -----------------------------------------------------------------------------
 # habitat_audio
 # -----------------------------------------------------------------------------
 _TC.SIMULATOR.GRID_SIZE = 0.5
@@ -123,6 +128,19 @@ _TC.SIMULATOR.VIEW_CHANGE_FPS = 10
 _TC.SIMULATOR.SCENE_DATASET = 'replica'
 _TC.SIMULATOR.USE_RENDERED_OBSERVATIONS = True
 _TC.SIMULATOR.SCENE_OBSERVATION_DIR = 'data/scene_observations'
+_TC.SIMULATOR.STEP_TIME = 1.0
+_TC.SIMULATOR.DIRECT_MAP_SIZE = None # null means no SDM.
+_TC.SIMULATOR.DIRECT_MAP_DISTANCE = "geodesic"
+_TC.SIMULATOR.SHORTEST_PATH_DIRECTION = False
+_TC.SIMULATOR.USE_GT_DIRECT_MAP = False
+_TC.SIMULATOR.DROPOUT_RATE = 0.2
+_TC.SIMULATOR.NOISE_COEF = 0.0
+_TC.SIMULATOR.DM_USE_VISUAL = False
+_TC.SIMULATOR.DISTANCE_TRANS_METHOD = "1d"
+_TC.SIMULATOR.CLIPPING = True
+_TC.SIMULATOR.DM_USE_GRU = False
+_TC.SIMULATOR.DM_CGO = False
+_TC.SIMULATOR.USE_CONV1D = True
 _TC.SIMULATOR.AUDIO = CN()
 _TC.SIMULATOR.AUDIO.SCENE = ""
 _TC.SIMULATOR.AUDIO.BINAURAL_RIR_DIR = "data/binaural_rirs"
@@ -133,6 +151,7 @@ _TC.SIMULATOR.AUDIO.POINTS_FILE = 'points.txt'
 _TC.SIMULATOR.AUDIO.GRAPH_FILE = 'graph.pkl'
 _TC.SIMULATOR.AUDIO.HAS_DISTRACTOR_SOUND = False
 _TC.SIMULATOR.AUDIO.EVERLASTING = True
+_TC.SIMULATOR.AUDIO.HEARD_TEST = False
 # -----------------------------------------------------------------------------
 # DistanceToGoal Measure
 # -----------------------------------------------------------------------------
@@ -202,6 +221,11 @@ _TC.TASK.NUM_ACTION.TYPE = "NA"
 # -----------------------------------------------------------------------------
 _TC.TASK.SUCCESS_WEIGHTED_BY_NUM_ACTION = CN()
 _TC.TASK.SUCCESS_WEIGHTED_BY_NUM_ACTION.TYPE = "SNA"
+# -----------------------------------------------------------------------------
+# Success when silent
+# -----------------------------------------------------------------------------
+_TC.TASK.SUCCESS_WHEN_SILENT = CN()
+_TC.TASK.SUCCESS_WHEN_SILENT.TYPE = "SWS"
 
 
 def merge_from_path(config, config_paths):
@@ -267,6 +291,12 @@ def get_config(
 
     config.TASK_CONFIG.defrost()
     config.TASK_CONFIG.SIMULATOR.USE_SYNC_VECENV = config.USE_SYNC_VECENV
+    if config.CONTINUOUS:
+        raise NotImplementedError()
+    else:
+        config.TASK_CONFIG.SIMULATOR.STEP_TIME = 1.0
+        config.TASK_CONFIG.SIMULATOR.FORWARD_STEP_SIZE = 1.0
+        config.TASK_CONFIG.SIMULATOR.TURN_ANGLE = 90
     config.TASK_CONFIG.freeze()
 
     config.freeze()

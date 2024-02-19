@@ -45,7 +45,6 @@ from soundspaces.utils import generate_video, convert_semantic_object_to_rgb
 from soundspaces.mp3d_utils import HouseReader
 
 sys.path.append("/home/0/19B30511/av-nav/myss")
-from scripts.cache_observations import to_category_id
 from xgenerator.common.lang import R2RLang
 from common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from xgenerator.transformer_speaker.model import Seq2SeqTransformer
@@ -319,6 +318,8 @@ class GeneratedInstruction(Sensor):
         kwargs has Dataset and Task.
         sim's type is soundspaces.simulator.SoundSpacesSim.
         """
+        from scripts.cache_observations import to_category_id
+        self.to_category_id = to_category_id
         self._sim = sim
         self._sim.prev_k = kwargs["task"]._config["GENERATED_INSTRUCTION"]["FUTURE_STEP_NUM"]
 
@@ -441,7 +442,7 @@ class GeneratedInstruction(Sensor):
                     sim_class = self._sim._sim.__class__.__name__
                     if sim_class == 'Simulator': # video
                         semantic = observations["semantic"]
-                        semantic = to_category_id(semantic, self._sim._sim.semantic_scene)
+                        semantic = self.to_category_id(semantic, self._sim._sim.semantic_scene)
                         semantic = np.take(
                             d3_40_colors_rgb,
                             semantic,

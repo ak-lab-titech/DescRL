@@ -139,10 +139,10 @@ class MapNavEnv(habitat.RLEnv):
 
     def _episode_success(self):
         if (
-                self._env.task.is_stop_called
+                self._env.task.is_found_called
                 # and self._distance_target() < self._success_distance
                 and self._env.sim.reaching_goal
-        ): # TODO ? マルチゴールに対応させる必要ある？
+        ):
             return True
         return False
 

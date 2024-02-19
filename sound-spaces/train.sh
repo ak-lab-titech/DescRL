@@ -51,6 +51,14 @@ elif [ $ENV = "ss2-avnav" ] && [ $MODEL = "savi-2nd" ]; then
         --exp-config ss_baselines/savi/config/audionav/savi.yaml \
         --model-dir data/models/ss2/replica/$MODEL_NAME \
         CONTINUOUS True
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avnav" ]; then
+    python ss_baselines/av_nav/run.py \
+        --exp-config ss_baselines/av_nav/config/semantic_audionav/mp3d/rgbd_ddppo.yaml \
+        --model-dir data/models/ss1-savi/avnav/mp3d/$MODEL_NAME
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avwan" ]; then
+    python ss_baselines/av_wan/run.py \
+        --exp-config ss_baselines/av_wan/config/semantic_audionav/mp3d/train_with_am.yaml \
+        --model-dir data/models/ss1-savi/avwan/mp3d/$MODEL_NAME 
 elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-1st" ]; then
     python ss_baselines/savi/run.py \
         --exp-config ss_baselines/savi/config/semantic_audionav/savi_pretraining.yaml \
