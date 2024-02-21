@@ -131,6 +131,7 @@ class PPOTrainer(BaseRLTrainer):
                     use_belief_as_goal=ppo_cfg.use_belief_predictor,
                     use_label_belief=smt_cfg.use_label_belief,
                     use_location_belief=smt_cfg.use_location_belief,
+                    use_xgen_visual_encoder=smt_cfg.use_xgen_visual_encoder,
                 )
             else:
                 self.actor_critic = IPRLAudioNavSMTPolicy(

@@ -524,6 +524,8 @@ class AudioNavSMTNet(Net):
         if self.use_xgen_visual_encoder:
             rgb = observations["rgb"] / 255.0
             depth = observations["depth"]
+            if len(np.shape(depth)) == 5:
+                depth = np.squeeze(depth, axis=4)
             imgs = torch.cat([rgb, depth], axis=3)
             visual_features = self.visual_encoder(imgs)
             pass
