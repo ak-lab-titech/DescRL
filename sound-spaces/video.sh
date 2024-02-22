@@ -101,6 +101,19 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi-off-iprl-pretraining" ]; then
         RL.DDPPO.pretrained_weights data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
         DISPLAY_RESOLUTION 512 \
         RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-off-iprl-pretraining" ]; then
+    python ss_baselines/saven/iprl_pretraining/offpolicy/off_policy_eval.py \
+        --config ss_baselines/saven/iprl_pretraining/config.yaml \
+        --model-dir  data/models/saven/$MODEL_NAME \
+        --indices 0 1 2 3 4 5 6 7 8 9 \
+        --past-or-future past \
+        --dataset-type test \
+        CONTINUOUS False \
+        NUM_PROCESSES 1 \
+        RL.DDPPO.pretrained False \
+        RL.DDPPO.pretrained_weights data/models/saven/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        DISPLAY_RESOLUTION 512 \
+        RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
 fi
