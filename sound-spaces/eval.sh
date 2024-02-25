@@ -73,8 +73,8 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-2nd" ]; then
         --model-dir data/models/saven/$MODEL_NAME \
         --prev-ckpt-ind $PREV_CKPT_IND \
         EVAL.SPLIT val \
-        LOG_FILE data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/eval.log \
-        TENSORBOARD_DIR data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/tb_eval \
+        LOG_FILE data/models/saven/$MODEL_NAME/eval.log \
+        TENSORBOARD_DIR data/models/saven/$MODEL_NAME/tb_eval \
         NUM_PROCESSES 10 \
         CONTINUOUS False \
         USE_SYNC_VECENV True \
