@@ -85,7 +85,7 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avnav" ]; then
         EVAL.SPLIT test \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
         USE_SYNC_VECENV True
-elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avnav" ]; then
+elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avwan" ]; then
     python ss_baselines/av_wan/run.py \
         --run-type eval \
         --exp-config ss_baselines/av_wan/config/semantic_audionav/mp3d/train_with_am.yaml \
