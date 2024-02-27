@@ -30,6 +30,11 @@ class IPRLPretrainingLMDBDataset(Dataset):
         )
         self.episodes = dataset.episodes
         self.data_num = data_num
+        # if "iprl_pretrain_train" in lmdb_dataset_path:
+        #     if int(os.environ["RANK"]) % 2 == 0:
+        #         lmdb_dataset_path = f"{lmdb_dataset_path}_2"
+        #     else:
+        #         lmdb_dataset_path = f"{lmdb_dataset_path}"
         self.env = lmdb.open(lmdb_dataset_path, readonly=True, lock=False)
 
         config.defrost()

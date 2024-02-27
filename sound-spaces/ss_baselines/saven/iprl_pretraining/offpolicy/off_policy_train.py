@@ -4,6 +4,7 @@ import time
 import logging
 import argparse
 import contextlib
+import datetime
 
 
 import yaml
@@ -151,7 +152,7 @@ def rollout(instruction_predictor, loss_fn, inputs, targets, logger, visualize, 
         ext_memory_masks=inputs["mask"],
     )
     targets = targets.permute(1, 0)[1:, :] # (instr_len-1, batch)
-    if visualize and int(os.environ["LOCAL_RANK"]) == 0:
+    if visualize and int(os.environ["RANK"]) == 0:
         lang = R2RLang("r2r")
         _, iprl_tokens = logits.max(2)
         pred_sentence = tokens2sentences(iprl_tokens, lang)[0]
@@ -163,7 +164,7 @@ def rollout(instruction_predictor, loss_fn, inputs, targets, logger, visualize, 
 
 
 def evaluate(instruction_predictor, val_dataloader, loss_fn, logger, writer, n_update):
-    if int(os.environ["LOCAL_RANK"]) == 0:
+    if int(os.environ["RANK"]) == 0:
         logger.info(f"========== Evaluation ==========")
     instruction_predictor.eval()
     s = time.time()
@@ -173,7 +174,7 @@ def evaluate(instruction_predictor, val_dataloader, loss_fn, logger, writer, n_u
         losses.append(loss.item())
     loss = torch.from_numpy(np.array([np.mean(losses)])).to(gpu_id)
     all_reduce(loss)
-    if int(os.environ["LOCAL_RANK"]) == 0:
+    if int(os.environ["RANK"]) == 0:
         loss = loss.item() / int(os.environ["NP"])
         writer.add_scalar("eval/loss", loss, n_update)
         logger.info(f"Loss: {loss:.5f}")
@@ -253,7 +254,7 @@ def train(
     
     if multiprocessing.get_start_method() == 'fork':
         multiprocessing.set_start_method('spawn', force=True)
-    if int(os.environ["LOCAL_RANK"]) == 0:
+    if int(os.environ["RANK"]) == 0:
         logger.info("LOADING DATA...")
     
     if use_lmdb_dataset:
@@ -276,13 +277,13 @@ def train(
         train_dataset,
         num_replicas=int(os.environ["NP"]),
         shuffle=True,
-        rank=gpu_id,
+        rank=int(os.environ["RANK"]),
     )
     val_sampler = DistributedSampler(
         val_dataset,
         num_replicas=int(os.environ["NP"]),
         shuffle=False,
-        rank=gpu_id,
+        rank=int(os.environ["RANK"]),
     )
     train_dataloader = DataLoader(
         train_dataset,
@@ -301,7 +302,7 @@ def train(
         sampler=val_sampler,
     )
     n_batch = len(train_dataloader)
-    if int(os.environ["LOCAL_RANK"]) == 0:
+    if int(os.environ["RANK"]) == 0:
         logger.info(f"The number of train data: {len(train_dataset)}, batch: {n_batch}")
         logger.info("FINISH LOADING DATA!")
         logger.info("START TRAINING...")
@@ -312,7 +313,7 @@ def train(
     s = time.time()
     with (
             SummaryWriter(log_dir=tb_log_dir)
-            if int(os.environ["LOCAL_RANK"]) == 0
+            if int(os.environ["RANK"]) == 0
             else contextlib.suppress()
     ) as writer:
         n_loop = 0
@@ -338,7 +339,7 @@ def train(
                     train_loss = train_loss.item() / int(os.environ["NP"])
                     losses = []
 
-                    if int(os.environ["LOCAL_RANK"]) == 0:
+                    if int(os.environ["RANK"]) == 0:
                         
                         time_minutes =(time.time() - s) / 60
                         writer.add_scalar("train/loss", train_loss, n_update)
@@ -371,13 +372,30 @@ if __name__=="__main__":
     f = open("debug.txt", "w")
     f.write(f"START iprl pretraining!\n")
     f.close()
-    rank = int(os.environ["LOCAL_RANK"])
+    WORLD_SIZE = int(os.getenv("NP"))
+    NNODES = int(os.getenv("NNODES"))
+    NPERNODE = int(os.getenv("NPERNODE"))
+    rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
+    os.environ["NODE_RANK"]=str(rank//NPERNODE)
+    os.environ["LOCAL_RANK"]=str(rank%NPERNODE)
+    os.environ["RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(WORLD_SIZE)
+    os.environ["NNODES"] = str(NNODES)
+
+    rank = int(os.environ["RANK"])
     world_size = torch.cuda.device_count()
     n_proc = int(os.environ["NP"])
-    gpu_id = rank % world_size
+    gpu_id = rank % NPERNODE
     torch.cuda.set_device(gpu_id)
-    torch.distributed.init_process_group(backend="GLOO", init_method="env://", world_size=n_proc)
+    torch.distributed.init_process_group(
+        backend="GLOO",
+        init_method="env://",
+        world_size=n_proc,
+    )
     print(f"rank: {rank}, world_size: {world_size}, gpu_id: {gpu_id}, n_proc: {n_proc}\n")
+    print(f"rank: {os.environ['RANK']}, world_size: {os.environ['WORLD_SIZE']}, LOCAL_RANK: {os.environ['LOCAL_RANK']}")
+    print(f"torch.distributed.get_rank(): {torch.distributed.get_rank()}")
+
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help='the path to config.')
@@ -403,7 +421,7 @@ if __name__=="__main__":
     formatter = logging.Formatter("[%(levelname)s] %(asctime)s: %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    if rank == 0:
+    if int(os.environ['RANK']) == 0:
         logger.info("Start!")
     
     config = get_config(args.config, args.opts, args.model_dir, 'train', False)

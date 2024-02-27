@@ -108,10 +108,7 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-2nd" ]; then
         --model-dir data/models/saven/$MODEL_NAME \
         RL.DDPPO.pretrained_weights "data/models/saven/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
 elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-iprl-pre-offpolicy" ]; then
-    CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
-        --nnodes=1 \
-        --nproc_per_node=$NP \
-       ss_baselines/saven/iprl_pretraining/offpolicy/off_policy_train.py \
+    python ss_baselines/saven/iprl_pretraining/offpolicy/off_policy_train.py \
         --config ss_baselines/saven/iprl_pretraining/config.yaml \
         --model-dir data/models/saven/$MODEL_NAME \
         --use-lmdb True \
