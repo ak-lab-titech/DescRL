@@ -216,6 +216,10 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         self.load_state_dict(cleaned_state_dict, strict=False)
 
         if not self.iprl_use_gt_D:
+            # state_dict = torch.load(
+            #     'data/models/ss1-savi/mp3d/ss1savi-savi-iprl-ft-future-obsenc-offplicy-tf-duration/data/ckpt.191.pth',
+            #     map_location=torch.device('cpu'),
+            # )
             self.belief_predictor.load_state_dict(state_dict["belief_predictor"])
     
     @property

@@ -1,5 +1,5 @@
 import sys
-import argparse
+import time
 
 import tensorflow as tf
 import tensorflow_hub as hub
@@ -94,8 +94,8 @@ def arrange_sentence(sentence):
     return arranged_sentence
     
 
-def main(type_of_dataset, data_num):
-    indices = np.random.choice(range(data_num), 1000, replace=False)
+def main():
+    n_iters = 1000
 
     config = get_config("ss_baselines/savi/iprl_pretraining/config.yaml")
 
@@ -136,13 +136,13 @@ def main(type_of_dataset, data_num):
 
     sims = []
     losses = []
-
-    for index in indices:
-        print(f"index: {index}")
+    s = time.time()
+    for i in range(n_iters):
+        print(f"\r{i+1}/{n_iters}", end="")
         data = get_data(
-            index=index,
-            episode=episodes[index],
-            dataset_path=f"./data/lmdb_dataset/iprl_pretrain_{type_of_dataset}",
+            index=i,
+            episode=episodes[i],
+            dataset_path=f"./data/lmdb_dataset/iprl_pretrain_test",
             gen_video=False,
             model_dir=None,
         )
@@ -172,20 +172,11 @@ def main(type_of_dataset, data_num):
         # print(f"pred sentence: {pred_sentence}")
         # print(f"true sentence: {true_sentence}")
         # print(f"similarity: {sim}")
-    
+    print()
     print(f"mean similarity: {np.mean(sims)}")
     print(f"mean cross entropy loss: {np.mean(losses)}")
+    print(f"TIME: {(time.time() - s) / 60} [min]")
 
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset-type', help='')  # "train", "val", "test"
-    parser.add_argument('--data-num', help='')
-    args = parser.parse_args()
-
-    main(
-        type_of_dataset=args.dataset_type,
-        data_num=int(args.data_num),
-    )
-
-    
+    main()
