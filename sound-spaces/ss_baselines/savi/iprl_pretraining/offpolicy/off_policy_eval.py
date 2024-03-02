@@ -18,7 +18,7 @@ from habitat.datasets import make_dataset
 from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import compute_spectrogram
 from ss_baselines.savi.config.default import get_config
 from soundspaces.utils import generate_video
-from off_policy_train import setup_instruction_predictor
+from ss_baselines.savi.iprl_pretraining.offpolicy.off_policy_train import setup_instruction_predictor
 from xgenerator.common.lang import tokens2sentences, R2RLang
 
 

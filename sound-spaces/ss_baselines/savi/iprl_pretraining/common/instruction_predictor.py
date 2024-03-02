@@ -10,6 +10,7 @@ from ss_baselines.savi.models.audio_cnn import AudioCNN
 from ss_baselines.savi.models.smt_state_encoder import SMTStateEncoder
 from ss_baselines.savi.models.smt_cnn import SMTCNN
 from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
+from ss_baselines.savi.models.belief_predictor import BeliefPredictor
 
 sys.path.append("/home/0/19B30511/av-nav/myss")
 from xgenerator.common.lang import R2RLang
@@ -81,6 +82,8 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         use_belief_encoding=False,
         normalize_category_distribution=False,
         use_category_input=False,
+        belief_cfg=None,
+        batch_size=-1,
         **kwargs,
     ):
         self.device = device
@@ -141,13 +144,21 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             pretraining=kwargs["pretraining"],
             on_or_off=on_or_off,
         )
+        
+        if not iprl_use_gt_D:
+            self.belief_predictor = BeliefPredictor(
+                belief_config=belief_cfg,
+                device=self.device,
+                input_size=self.smt_state_encoder._input_size,
+                pose_indices=self.smt_state_encoder._pose_indices,
+                goal_num=1,
+                hidden_state_size=self.smt_state_encoder.hidden_state_size,
+                num_env=batch_size,
+                has_distractor_sound=False,
+            )
 
         if self._use_belief_encoder:
             self.belief_encoder = nn.Linear(self._hidden_size, self._hidden_size)
-
-        if use_pretrained:
-            assert(pretrained_path != '')
-            self.pretrained_initialization(pretrained_path)
 
         lang = R2RLang(name="r2r_train")
         self.instruction_predictor = InstructionPredictor(
@@ -168,13 +179,17 @@ class AudioNavSMTInstructionPredictor(nn.Module):
 
         self.optimizer = None
 
+        if use_pretrained:
+            assert(pretrained_path != '')
+            self.pretrained_initialization(pretrained_path)
+
         self.train()
     
     def pretrained_initialization(self, path):
         logging.info(f'AudioNavSMTNet ===> Loading pretrained model from {path}')
         state_dict = torch.load(
             path,
-            map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
+            map_location=torch.device('cpu'),
         )
         if "xgenerator" in path:
             cleaned_state_dict = {}
@@ -195,7 +210,13 @@ class AudioNavSMTInstructionPredictor(nn.Module):
                     continue
         else:
             cleaned_state_dict = state_dict['state_dict']
+            # cleaned_state_dict = {}
+            # for k, v in state_dict['state_dict'].items():
+            #     cleaned_state_dict[k[len('actor_critic.net.'):]] = v
         self.load_state_dict(cleaned_state_dict, strict=False)
+
+        if not self.iprl_use_gt_D:
+            self.belief_predictor.load_state_dict(state_dict["belief_predictor"])
     
     @property
     def memory_dim(self):
@@ -303,8 +324,14 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         x = self.get_features(observations, prev_actions)
         _, enc_memory = self.smt_state_encoder(x, None, ext_memory_masks, path_lens=observations["seq_lengths"])
 
-        category =  observations["category"] # (batch, 21)
-        location =  observations["location"] # (batch, 2)
+        if self.iprl_use_gt_D:
+            category =  observations["category"] # (batch, 21)
+            location =  observations["location"] # (batch, 2)
+        else: 
+            with torch.no_grad():
+                observations = self.update_belief(observations)
+            category = nn.functional.softmax(observations[CategoryBelief.cls_uuid], dim=1) # (batch, 21)
+            location = observations[LocationBelief.cls_uuid] # (batch, 2)
 
         if self.feedback == "teacher":
             pass
@@ -368,6 +395,27 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         )
 
         return logits
+    
+    def update_belief(self, observations):
+        seq_len, N, _, _, _ = observations["rgb"].shape
+        for i in range(seq_len):
+            observation = {
+                SpectrogramSensor.cls_uuid: observations[SpectrogramSensor.cls_uuid][i],
+                'pose': observations['pose'][i],
+                LocationBelief.cls_uuid: torch.zeros((N, 2)),
+                CategoryBelief.cls_uuid: torch.zeros((N, 21)),
+            }
+            
+            if i == 0:
+                dones = [True for _ in range(N)]
+            else:
+                dones = [False for _ in range(N)]
+            
+            self.belief_predictor.update(observation, dones)
+        
+        observations[LocationBelief.cls_uuid] = observation[LocationBelief.cls_uuid].to("cuda")
+        observations[CategoryBelief.cls_uuid] = observation[CategoryBelief.cls_uuid].to("cuda")
+        return observations
 
     def before_step(self):
         nn.utils.clip_grad_norm_(

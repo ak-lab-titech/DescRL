@@ -76,6 +76,8 @@ def setup_instruction_predictor(
         use_location_belief=belief_cfg.use_location_belief,
         normalize_category_distribution=belief_cfg.normalize_category_distribution,
         use_category_input=has_distractor_sound,
+        belief_cfg=belief_cfg,
+        batch_size=ppo_cfg.num_steps,
     )
     instruction_predictor.optimizer = torch.optim.Adam(
         instruction_predictor.parameters(),
@@ -116,8 +118,6 @@ def setup_instruction_predictor(
                 if "actor_critic.net.visual_encoder.depth_encoder." in k
             },
         )
-        if ppo_cfg.use_belief_predictor:
-            raise NotImplementedError()
 
     instruction_predictor.to(device)
         
