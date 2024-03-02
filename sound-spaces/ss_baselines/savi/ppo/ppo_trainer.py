@@ -23,6 +23,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from gym import spaces
 from tqdm import tqdm
 from numpy.linalg import norm
+import matplotlib.pyplot as plt
 
 from habitat import Config, logger
 from ss_baselines.common.utils import observations_to_image
@@ -1058,25 +1059,22 @@ class PPOTrainer(BaseRLTrainer):
                             fps=fps
                         )
 
+                        if "top_down_map" in self.config.VISUALIZATION_OPTION:
+                            top_down_map = plot_top_down_map(
+                                infos[i],
+                                dataset=self.config.TASK_CONFIG.SIMULATOR.SCENE_DATASET,
+                            )
+                            fig = plt.figure()
+                            plt.xticks([])
+                            plt.yticks([])
+                            plt.imshow(top_down_map)
+                            fig.savefig(f'./{self.config.VIDEO_DIR}/top_down_map_cnt{len(stats_episodes)}.pdf')
+
                         # observations has been reset but info has not
                         # to be consistent, do not use the last frame
                         rgb_frames[i] = []
                         audios[i] = []
 
-                    if "top_down_map" in self.config.VISUALIZATION_OPTION:
-                        if self.config.RL.PPO.use_belief_predictor:
-                            pred = episode_stats['descriptor_pred_gt'][-1]
-                        else:
-                            pred = None
-                        top_down_map = plot_top_down_map(infos[i],
-                                                         dataset=self.config.TASK_CONFIG.SIMULATOR.SCENE_DATASET,
-                                                         pred=pred)
-                        scene = current_episodes[i].scene_id.split('/')[3]
-                        sound = current_episodes[i].sound_id.split('/')[1][:-4]
-                        writer.add_image(f"{config.EVAL.SPLIT}_{scene}_{current_episodes[i].episode_id}_{sound}/"
-                                         f"{infos[i]['spl']}",
-                                         top_down_map,
-                                         dataformats='WHC')
             if not self.config.RL.PPO.use_belief_predictor:
                 descriptor_pred_gt = None
 

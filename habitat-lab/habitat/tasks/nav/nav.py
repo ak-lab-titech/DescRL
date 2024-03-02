@@ -884,8 +884,10 @@ class TopDownMap(Measure):
 
     def _draw_goals_positions(self, episode):
         if self._config.DRAW_GOAL_POSITIONS:
-
             for goal in episode.goals:
+                # self._draw_point(
+                #     goal.position, maps.MAP_TARGET_POINT_INDICATOR
+                # )
                 if self._is_on_same_floor(goal.position[1]):
                     try:
                         self._draw_point(
@@ -997,7 +999,7 @@ class TopDownMap(Measure):
             self._draw_goals_view_points(episode)
             self._draw_goals_aabb(episode)
             self._draw_goals_positions(episode)
-            # self._draw_shortest_path(episode, agent_position)
+            self._draw_shortest_path(episode, agent_position)
 
         if self._config.DRAW_SOURCE:
             self._draw_point(
