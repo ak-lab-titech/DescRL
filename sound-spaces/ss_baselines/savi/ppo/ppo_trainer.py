@@ -932,8 +932,8 @@ class PPOTrainer(BaseRLTrainer):
             observations, rewards, dones, infos = [
                 list(x) for x in zip(*outputs)
             ]
+            original_observations = copy.deepcopy(observations)
             if config.DISPLAY_RESOLUTION != model_resolution:
-                original_observations = copy.deepcopy(observations)
                 resize_observation(observations, model_resolution)
             batch = batch_obs(observations, self.device, skip_list=['view_point_goals', 'intermediate',
                                                                 'oracle_action_sensor'])
