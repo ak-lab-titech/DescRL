@@ -212,7 +212,20 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             cleaned_state_dict = state_dict['state_dict']
             # cleaned_state_dict = {}
             # for k, v in state_dict['state_dict'].items():
-            #     cleaned_state_dict[k[len('actor_critic.net.'):]] = v
+            #     if 'actor_critic.net.' in k:
+            #         cleaned_state_dict[k[len('actor_critic.net.'):]] = v
+            #     elif 'actor_critic' in k:
+            #         cleaned_state_dict[k[len('actor_critic.'):]] = v
+
+            # XPredictorだけ別に読み込む
+            # xpredictor_state_dict = torch.load(
+            #     'data/models/ss1-savi/mp3d/ss1savi-savi-iprl-pre-offpolicy-past-v3/data/ckpt.138.pth',
+            #     map_location=torch.device('cpu'),
+            # )
+            # for k, v in xpredictor_state_dict['state_dict'].items():
+            #     if "instruction_predictor" in k:
+            #         cleaned_state_dict[k] = v
+
         self.load_state_dict(cleaned_state_dict, strict=False)
 
         if not self.iprl_use_gt_D:
