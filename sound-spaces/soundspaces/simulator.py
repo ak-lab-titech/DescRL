@@ -672,6 +672,7 @@ class SoundSpacesSim(Simulator, ABC):
             audiogoal = np.zeros((2, sampling_rate))
         else:
             if self.config.USE_RENDERED_OBSERVATIONS:
+            # if True: # for video
                 binaural_rir_file = os.path.join(self.binaural_rir_dir, str(self.azimuth_angle), '{}_{}.wav'.format(
                     self._receiver_position_index, self._source_position_index))
                 try:
