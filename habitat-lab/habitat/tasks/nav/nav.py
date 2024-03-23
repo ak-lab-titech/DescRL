@@ -866,6 +866,19 @@ class TopDownMap(Measure):
             t_x - self.point_padding : t_x + self.point_padding + 1,
             t_y - self.point_padding : t_y + self.point_padding + 1,
         ] = point_type
+        # if point_type == maps.MAP_TARGET_POINT_INDICATOR:
+        #     cv2.circle(
+        #         self._top_down_map,
+        #         (t_y, t_x),
+        #         25,
+        #         point_type,
+        #         thickness=-1,
+        #     )
+        # else:
+        #     self._top_down_map[
+        #         t_x - self.point_padding : t_x + self.point_padding + 1,
+        #         t_y - self.point_padding : t_y + self.point_padding + 1,
+        #     ] = point_type
 
 
     def _draw_goals_view_points(self, episode):
