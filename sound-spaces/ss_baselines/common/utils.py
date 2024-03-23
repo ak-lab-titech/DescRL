@@ -578,8 +578,8 @@ def observations_to_image(observation: Dict, info: Dict, pred=None) -> np.ndarra
     egocentric_view = np.concatenate(egocentric_view, axis=1)
 
     # draw collision
-    if "collisions" in info and info["collisions"]["is_collision"]:
-        egocentric_view = draw_collision(egocentric_view)
+    # if "collisions" in info and info["collisions"]["is_collision"]:
+    #     egocentric_view = draw_collision(egocentric_view)
 
     frame = egocentric_view
 
