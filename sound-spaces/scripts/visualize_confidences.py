@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def calc_confidence_avg(confidences):
+def calc_confidence_avg(confidences, threshold=20):
     confidence_avg = []
     cnt = []
     for i in range(len(confidences)):
@@ -16,8 +16,11 @@ def calc_confidence_avg(confidences):
                 cnt[j] = cnt[j] + 1
     
     for i in range(len(confidence_avg)):
-        confidence_avg[i] = confidence_avg[i] / cnt[i]
-    
+        if cnt[i] < threshold:
+            confidence_avg = confidence_avg[:i-1]
+        else:
+            confidence_avg[i] = confidence_avg[i] / cnt[i]
+
     return confidence_avg
 
 
