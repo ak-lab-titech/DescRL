@@ -3,10 +3,32 @@ import gzip
 import json
 
 import numpy as np
+import torch
 
 sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
 
-from common.load_lmdb import get_all_lmdb_data
+from common.load_lmdb import get_all_lmdb_data, EOS_IDX
+
+
+def calc_confidence(logits):
+    """
+    logits: (seq_len, 1, word_num)
+    """
+    sm = torch.nn.Softmax(dim=2)
+    probs = sm(logits)
+    max_value, max_idx = torch.max(probs, dim=2) # (seq_len, 1), (seq_len, 1)
+    
+    max_value = max_value.detach().cpu().numpy().reshape(-1,) # (seq_len,)
+    max_idx = max_idx.detach().cpu().numpy().reshape(-1,)   # (seq_len,)
+    eos_idx_list = np.where(max_idx == EOS_IDX)[0]
+
+    if len(eos_idx_list) > 0:
+        eos_idx = eos_idx_list[0]
+        confidence = np.mean(max_value[:eos_idx+1])
+    else:
+        confidence = np.mean(max_value)
+    return confidence
+
 
 
 def tokens2sentences(tokens, lang):

@@ -16,6 +16,7 @@ import random
 import glob
 import copy
 import sys
+import pickle
 
 import numpy as np
 import torch
@@ -56,7 +57,7 @@ from habitat.tasks.nav.nav import IntegratedPointGoalGPSAndCompassSensor
 from soundspaces.tasks.nav import LocationBelief, CategoryBelief, SpectrogramSensor
 
 sys.path.append("/home/0/19B30511/av-nav/myss")
-from xgenerator.common.lang import tokens2sentences, R2RLang
+from xgenerator.common.lang import tokens2sentences, R2RLang, calc_confidence
 
 
 class DataParallelPassthrough(torch.nn.DataParallel):
@@ -892,6 +893,7 @@ class PPOTrainer(BaseRLTrainer):
             self.belief_predictor.eval()
         t = tqdm(total=self.config.TEST_EPISODE_COUNT)
         step_cnt = [0 for _ in range(self.config.NUM_PROCESSES)]
+        confidences = [[]]
         while (
             len(stats_episodes) < self.config.TEST_EPISODE_COUNT
             and self.envs.num_envs > 0
@@ -920,10 +922,13 @@ class PPOTrainer(BaseRLTrainer):
             
             if len(self.config.VIDEO_OPTION) > 0 and 'generated_instruction' in batch.keys():
                 _, iprl_tokens = iprl_logits.max(2) # iprl_tokens: (instr_len, batch)
+                confidence = calc_confidence(iprl_logits)
+                confidences[-1].append(confidence)
                 iprl_sentences = tokens2sentences(iprl_tokens, lang)
                 true_sentences = tokens2sentences(batch['generated_instruction'].permute(1,0).int(), lang)
                 for i in range(len(iprl_sentences)):
-                    logger.info(f"Episode {len(stats_episodes)}, Step {step_cnt[i]} Pred: {iprl_sentences[i]}")
+                    logger.info(f"Episode {len(stats_episodes)}, Step {step_cnt[i]} (confidence: {confidence})")
+                    logger.info(f"  Pred: {iprl_sentences[i]}")
                     logger.info(f"  True: {true_sentences[i]}")
 
             actions = [a[0].item() for a in actions]
@@ -972,6 +977,9 @@ class PPOTrainer(BaseRLTrainer):
             for i in range(len(dones)):
                 if dones[i]:
                     step_cnt[i] = 0
+                    with open(f"{self.config.VIDEO_DIR}/confidences.pickle", mode="wb") as f:
+                        pickle.dump(confidences, f)
+                    confidences.append([])
                 if dones[i] and self.use_direct_map:
                     predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
 
