@@ -52,7 +52,7 @@ from ss_baselines.saven.models.belief_predictor import BeliefPredictor
 from habitat.tasks.nav.nav import IntegratedPointGoalGPSAndCompassSensor
 from soundspaces.tasks.nav import LocationBelief, KSAVENCategoryBelief, SpectrogramSensor
 
-sys.path.append("/home/0/19B30511/av-nav/myss")
+sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.lang import tokens2sentences, R2RLang
 
 

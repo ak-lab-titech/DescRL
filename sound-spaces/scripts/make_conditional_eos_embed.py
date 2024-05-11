@@ -5,7 +5,7 @@ import numpy as np
 
 
 with gzip.open(
-        "/home/0/19B30511/av-nav/VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/embeddings.json.gz",
+        "/home/4/ud02274/navigation/my-VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/embeddings.json.gz",
         'rt',
         encoding='utf-8',
     ) as f:
@@ -21,7 +21,7 @@ new_embed_vec = np.random.normal(0, 1, (vec_dim, n_category)) # (output_size, in
 print(f"new_embed_vec:\n{new_embed_vec}")
 print(f"shape of new_embed_vec: {np.shape(new_embed_vec)}")
 
-new_embed_path = "/home/0/19B30511/av-nav/myss/sound-spaces/data/category_embed/savi_21_categorys.json.gz"
+new_embed_path = "/home/4/ud02274/navigation/myss/sound-spaces/data/category_embed/savi_21_categorys.json.gz"
 json_new_embed = json.dumps(new_embed_vec.tolist())
 with gzip.open(new_embed_path, "wb") as f:
     f.write(json_new_embed.encode('utf-8'))

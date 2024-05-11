@@ -56,7 +56,7 @@ RL:
       use_location_belief: False
   DDPPO:
     sync_frac: 0.6
-    distrib_backend: "GLOO"
+    distrib_backend: "NCCL" # "GLOO"
     rnn_type: "GRU"
     num_recurrent_layers: 1
     backbone: "custom_resnet18"

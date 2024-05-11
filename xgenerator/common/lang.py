@@ -5,7 +5,7 @@ import json
 import numpy as np
 import torch
 
-sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
+sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
 from common.load_lmdb import get_all_lmdb_data, EOS_IDX
 
@@ -51,7 +51,7 @@ class R2RLang:
         # self.word2count = {}
 
         with gzip.open(
-            "/home/0/19B30511/av-nav/VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/train/train-boseos.json.gz",
+            "/home/4/ud02274/navigation/my-VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/train/train-boseos.json.gz",
             "rt",
             encoding="utf-8",
         ) as f:
@@ -61,7 +61,7 @@ class R2RLang:
             self.vocab_size = data["instruction_vocab"]["num_vocab"]
 
         with gzip.open(
-            "/home/0/19B30511/av-nav/VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/embeddings_gauss.json.gz",
+            "/home/4/ud02274/navigation/my-VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/embeddings_gauss.json.gz",
             'rt',
             encoding='utf-8',
         ) as f:

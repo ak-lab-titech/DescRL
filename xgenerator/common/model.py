@@ -7,7 +7,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
-sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
+sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
 from common.utils import try_cuda
 

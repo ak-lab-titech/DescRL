@@ -9,9 +9,9 @@ import yaml
 import numpy as np
 import torch
 
-sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
-sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
-sys.path.append("/home/0/19B30511/av-nav/myss")
+sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
+sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
+sys.path.append("/home/4/ud02274/navigation/myss")
 
 from habitat.sims import make_sim
 from habitat.datasets import make_dataset
@@ -21,6 +21,13 @@ from soundspaces.tasks.semantic_audionav_task import merge_sim_episode_config
 from xgenerator.common.lang import R2RLang
 from common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from xgenerator.transformer_speaker.model import Seq2SeqTransformer
+from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import (
+    compute_spectrogram,
+    compute_pose,
+)
+from ss_baselines.savi.iprl_pretraining.offpolicy.off_policy_train import setup_instruction_predictor
+from soundspaces.utils import generate_video, visualize_spectrogram
+from xgenerator.common.lang import R2RLang, tokens2sentences
 
 
 def setup_instruction_generator(
@@ -100,6 +107,51 @@ def get_obs_seqs(sim, future_step_num):
     
     return image_seqs, action_seqs
 
+
+def get_obs_seqs_for_xpred(sim, episode):
+    image_seqs_list = []
+    audio_seqs_list = []
+    pose_seqs_list = []
+    action_seqs_list = []
+    oracle_actions = sim.get_oracle_actions_from_current_pos()
+    cnt = 0
+    # for文だと-1の時に対応できないのでwhile
+    while True:
+        
+        sim_obs = sim._get_sim_observation()
+        observations = sim._sensor_suite.get_observations(sim_obs)
+        image_shape = np.shape(observations["depth"])
+        
+        if len(image_shape) == 4:
+            depth_img = np.squeeze(observations["depth"], axis=3)
+        else:
+            depth_img = observations["depth"]
+        rgb_img = observations["rgb"] / 255.0
+            
+        image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
+        
+        audio = sim.get_current_spectrogram_observation(compute_spectrogram)
+        pose = compute_pose(episode, sim.get_agent_state(), cnt)
+
+        action = oracle_actions[cnt] # TODO ここXPredictorにするなら変えるべきか？
+        # action_onehot = np.eye(4)[action].astype(np.int8)
+
+        image_seqs_list.append([image])
+        audio_seqs_list.append([audio])
+        pose_seqs_list.append([pose])
+        action_seqs_list.append([[action]])
+
+        if action == 0:
+            break
+        sim.step(action)
+        cnt += 1
+
+    image_seqs = np.array(image_seqs_list)
+    audio_seqs = np.array(audio_seqs_list)
+    pose_seqs = np.array(pose_seqs_list)
+    action_seqs = np.array(action_seqs_list)
+    
+    return image_seqs, audio_seqs, pose_seqs, action_seqs
 
 def make_batch(image_seqs, action_seqs, input_future_step_num, future_or_past):
     batch_size = np.shape(image_seqs)[0]
@@ -182,30 +234,79 @@ def generate_instruction(
     return past_tokens
 
 
+def generate_instruction_from_xpred(
+    instruction_predictor,
+    image_seqs,
+    audio_seqs,
+    pose_seqs,
+    action_seqs,
+):
+    inputs = {
+        "rgb": torch.from_numpy(image_seqs[:, :, :, :, :3]).float().cuda(),
+        "depth": torch.from_numpy(image_seqs[:, :, :, :, 3:4]).float().cuda(),
+        "pose": torch.from_numpy(pose_seqs).cuda(),
+        "spectrogram": torch.from_numpy(audio_seqs).float().cuda(),
+        "action": torch.from_numpy(action_seqs).cuda(),
+        "category": None,
+        "location": None,
+        "mask": None,
+        "seq_lengths": torch.from_numpy(np.array([len(audio_seqs)])).cuda(),
+        "target": None,
+    }
+    logits = instruction_predictor(
+        observations=inputs,
+        prev_actions=inputs["action"],
+        masks=None,
+        ext_memory=None,
+        ext_memory_masks=inputs["mask"],
+    )
+    _, tokens = logits.max(2)
+
+    return tokens
+
+
+def make_video(image_seq, audio_seq, pose_seq, action_seq, instruction, output_dir):
+    os.makedirs(output_dir, exist_ok=True)  
+    os.makedirs(f"{output_dir}/spectrograms", exist_ok=True)
+        
+    words = tokens2sentences(instruction, R2RLang("r2r_lang"))
+        
+    f = open(f"{output_dir}/output.txt", "w")
+    f.write(f"0: found, 1: forward, 2: left, 3: right\n")
+    f.write(f"action_seq: {action_seq}\n")
+    f.write(f"pose_seq: {pose_seq}\n")
+    f.write(f"instructions: {words}\n")
+    f.close()
+
+    generate_video(torch.from_numpy(image_seq.copy()), f"{output_dir}/image_seq.mp4")
+
+    for i in range(len(audio_seq)):
+        visualize_spectrogram(audio_seq[i][0], f"{output_dir}/spectrograms/spectrogram_{i}.png")
+
+
 def main(
     config,
-    sensor_list,
     content_scenes_path,
     save_dataset_path,
     future_or_past,
 ):
     dataset = make_dataset(
-        id_dataset=config.DATASET.TYPE,
-        config=config.DATASET,
+        id_dataset=config.TASK_CONFIG.DATASET.TYPE,
+        config=config.TASK_CONFIG.DATASET,
     )
     episodes = dataset.episodes
-    sim_cfg = config.SIMULATOR
+    sim_cfg = config.TASK_CONFIG.SIMULATOR
     sim_cfg.defrost()
     sim_cfg.SCENE_DATASET = episodes[0].scene_dataset_config
-    sim_cfg.AGENT_0.SENSORS = sensor_list
+    sim_cfg.AGENT_0.SENSORS = config.SENSORS
     sim_cfg.SCENE = episodes[0].scene_id
     sim_cfg.freeze()
     sim = make_sim(
         sim_cfg.TYPE, config=sim_cfg,
     )
     instruction_predictor = setup_instruction_generator(
-        config.TASK.GENERATED_INSTRUCTION.XGENERATOR_PATH,
-        config.TASK.GENERATED_INSTRUCTION.XGENERATOR_CKPT,
+        config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.XGENERATOR_PATH,
+        config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.XGENERATOR_CKPT,
     )
 
     scene_file_names = [
@@ -214,27 +315,64 @@ def main(
     dict_dataset = {f: {'episodes': [], 'scene': f.split('/')[0]} for f in scene_file_names}
     # dict_dataset = {}
 
+    # step_num_for_FEPRL = 5 # for F-EPRL
     print(f"length of episodes: {len(episodes)}\n")
-    for episode in episodes:
+    for i, episode in enumerate(episodes):
         sim_cfg = merge_sim_episode_config(sim_cfg, episode)
         sim.reconfigure(sim_cfg)
         _ = sim.reset()
         image_seqs, action_seqs = get_obs_seqs(sim, -1)
+        # image_seqs, audio_seqs, pose_seqs, action_seqs = get_obs_seqs_for_xpred(sim, episode)
+
+        # for F-EPRL
+        # image_seqs = image_seqs[:step_num_for_FEPRL]
+        # audio_seqs = audio_seqs[:step_num_for_FEPRL]
+        # pose_seqs = pose_seqs[:step_num_for_FEPRL]
+        # action_seqs = action_seqs[:step_num_for_FEPRL]
+
+        # for XGenerator without batched (VLNCE評価用)
+        # batched_image_seqs = torch.from_numpy(image_seqs).cuda()
+        # batched_action_seqs = torch.from_numpy(action_seqs).cuda()
+
+        # for XGenerator with batched
         batched_image_seqs, batched_action_seqs, path_masks = make_batch(
             image_seqs,
             action_seqs,
-            config.TASK.GENERATED_INSTRUCTION.FUTURE_STEP_NUM,
+            config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.FUTURE_STEP_NUM,
             future_or_past,
         )
 
+        # for XGenerator
         instructions = generate_instruction(
             instruction_generator=instruction_predictor,
             image_seqs=batched_image_seqs,
             action_seqs=batched_action_seqs,
-            path_mask=path_masks,
-            max_instr_len=config.TASK.GENERATED_INSTRUCTION.MAX_INSTRUCTION_LENGTH,
+            path_mask=None,
+            # path_mask=path_masks,
+            max_instr_len=config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MAX_INSTRUCTION_LENGTH,
         )
+
+        # for XPredictor
+        # instructions = generate_instruction_from_xpred(
+        #     instruction_predictor,
+        #     image_seqs,
+        #     audio_seqs,
+        #     pose_seqs,
+        #     action_seqs,
+        # )
+
+        # make_video(
+        #     image_seq=image_seqs,
+        #     audio_seq=audio_seqs,
+        #     pose_seq=pose_seqs,
+        #     action_seq=action_seqs,
+        #     instruction=instructions,
+        #     output_dir="./hoge",
+        # )
+        # exit()
+        
         episode.info["num_action"] = np.shape(batched_image_seqs)[1] # 元々保存されているnum_actionとoracle_action lengthが異なっている時がある
+        # episode.info["num_action"] = np.shape(image_seqs)[1] # 元々保存されているnum_actionとoracle_action lengthが異なっている時がある
         dict_episode = {
             'episode_id': episode.episode_id,
             'scene_id': os.path.join(*episode.scene_id.split("/")[-2:]),
@@ -261,7 +399,10 @@ def main(
             'duration': episode.duration,
             'instructions': instructions.cpu().numpy().tolist(),
         }
+        # for train
         dict_dataset[f"{sim_cfg.SCENE.split('/')[-1].split('.')[0]}.json.gz"]['episodes'].append(dict_episode)
+
+        # for test & val
         # if f"{sim_cfg.SCENE.split('/')[-1].split('.')[0]}.json.gz" in dict_dataset.keys():
         #     dict_dataset[f"{sim_cfg.SCENE.split('/')[-1].split('.')[0]}.json.gz"]['episodes'].append(dict_episode)
         # else:
@@ -301,7 +442,7 @@ if __name__=="__main__":
     )
     os.makedirs(f"{args.save_dataset_path}/content", exist_ok=True)
 
-    main(config.TASK_CONFIG, config.SENSORS, content_scenes_path, args.save_dataset_path, args.future_or_past)
+    main(config, content_scenes_path, args.save_dataset_path, args.future_or_past)
 
 
 # simlator: 0.001476287841796875

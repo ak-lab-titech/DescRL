@@ -13,8 +13,8 @@ import pickle
 from collections import defaultdict
 import sys
 
-sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
-sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
+sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
+sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
 
 import numpy as np
 import matplotlib

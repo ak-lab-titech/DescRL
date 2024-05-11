@@ -25,11 +25,11 @@ def calc_confidence_avg(confidences, threshold=20):
 
 
 if __name__=="__main__":
-    file_path_past = "/home/0/19B30511/av-nav/myss/sound-spaces/data/models/ss1-savi/mp3d/ss1savi-savi-iprl-ft-past-obsenc-offplicy-tf-duration/video_dir/confidences.pickle"
+    file_path_past = "/home/4/ud02274/navigation/myss/sound-spaces/data/models/ss1-savi/mp3d/ss1savi-savi-iprl-ft-past-obsenc-offplicy-tf-duration/video_dir/confidences.pickle"
     with open(file_path_past, mode="rb") as f:
         confidences_past = pickle.load(f)
 
-    file_path_future = "/home/0/19B30511/av-nav/myss/sound-spaces/data/models/ss1-savi/mp3d/ss1savi-savi-iprl-ft-future-obsenc-offplicy-tf-duration/video_dir/confidences.pickle"
+    file_path_future = "/home/4/ud02274/navigation/myss/sound-spaces/data/models/ss1-savi/mp3d/ss1savi-savi-iprl-ft-future-obsenc-offplicy-tf-duration/video_dir/confidences.pickle"
     with open(file_path_future, mode="rb") as f:
         confidences_future = pickle.load(f)
 

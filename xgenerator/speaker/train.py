@@ -19,7 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.nn.parallel import DistributedDataParallel
 from torch.distributed import all_reduce
 
-sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
+sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
 from common.utils import try_cuda
 from common.lang import R2RLang
@@ -375,7 +375,7 @@ if __name__=="__main__":
     n_proc = int(os.environ["NP"])
     gpu_id = rank % world_size
     torch.cuda.set_device(gpu_id)
-    torch.distributed.init_process_group(backend="GLOO", init_method="env://", world_size=n_proc)
+    torch.distributed.init_process_group(backend="NCCL", init_method="env://", world_size=n_proc)
     print(f"rank: {rank}, world_size: {world_size}, gpu_id: {gpu_id}, n_proc: {n_proc}\n")
     
     parser = argparse.ArgumentParser()

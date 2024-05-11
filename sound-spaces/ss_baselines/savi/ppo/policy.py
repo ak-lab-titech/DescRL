@@ -27,7 +27,7 @@ from ss_baselines.savi.models.smt_cnn import SMTCNN
 from ss_baselines.savi.models.direct_map_encoder import DirectMapEncoder
 from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
 
-sys.path.append("/home/0/19B30511/av-nav/myss")
+sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.lang import R2RLang
 from xgenerator.common.model import VisualImageEncoder
 

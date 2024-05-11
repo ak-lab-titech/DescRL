@@ -1,9 +1,9 @@
 #!/bin/bash
 
 pwd
-cd ~/av-nav/myss/sound-spaces
+cd ~/navigation/myss/sound-spaces
 
-source ~/anaconda3/etc/profile.d/conda.sh
+source /gs/fs/tga-aklab/hkondo/anaconda3/etc/profile.d/conda.sh
 conda activate av-nav
 
 

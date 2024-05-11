@@ -7,7 +7,7 @@ from torch import Tensor
 import torch.nn as nn
 from torch.nn import Transformer
 
-sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
+sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
 from common.model import (
     VisualFeatureEncoder,

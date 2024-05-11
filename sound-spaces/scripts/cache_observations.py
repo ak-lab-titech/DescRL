@@ -12,9 +12,9 @@ import sys
 import magnum as mn
 import numpy as np
 
-sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
-sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
-sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
+sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
+sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
+sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
 import habitat_sim
 from habitat.core.registry import registry
@@ -28,7 +28,7 @@ from xgenerator.common.load_lmdb import d3_40_colors_rgb
 def create_sim(scene_id, sensor_suite):
     backend_cfg = habitat_sim.SimulatorConfiguration()
     backend_cfg.scene_id = scene_id
-    backend_cfg.scene_dataset_config_file = 'data/scene_datasets/mp3d/mp3d.scene_dataset_config.json'
+    backend_cfg.scene_dataset_config_file = 'data/scene_datasets/mp3d.scene_dataset_config.json'
     backend_cfg.enable_physics = False
 
     agent_cfg = habitat_sim.agent.AgentConfiguration()

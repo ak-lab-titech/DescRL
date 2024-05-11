@@ -50,7 +50,7 @@ RL:
       use_bos: False
   DDPPO:
     sync_frac: 0.6
-    distrib_backend: "GLOO" # GLOO
+    distrib_backend: "NCCL" # "GLOO"
     # choose the best pretrained SAVi based on validation curve
     pretrained_weights: "data/models/savi/data/ckpt.XXX.pth"
     pretrained: True

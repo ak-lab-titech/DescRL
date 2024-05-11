@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-sys.path.append("/home/0/19B30511/av-nav/myss")
+sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 
 
@@ -70,7 +70,7 @@ class InstructionPredictor(nn.Module):
 
         if self.belief_dim == 23:
             with gzip.open(
-                "/home/0/19B30511/av-nav/myss/sound-spaces/data/category_embed/savi_21_categorys.json.gz",
+                "/home/4/ud02274/navigation/myss/sound-spaces/data/category_embed/savi_21_categorys.json.gz",
                 'rt',
                 encoding='utf-8',
             ) as f:

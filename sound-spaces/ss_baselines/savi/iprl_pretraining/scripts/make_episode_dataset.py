@@ -9,9 +9,9 @@ from skimage.measure import block_reduce
 import lmdb
 import msgpack_numpy
 
-sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
-sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
-sys.path.append("/home/0/19B30511/av-nav/myss")
+sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
+sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
+sys.path.append("/home/4/ud02274/navigation/myss")
 
 from habitat.datasets import make_dataset
 from habitat.sims import make_sim

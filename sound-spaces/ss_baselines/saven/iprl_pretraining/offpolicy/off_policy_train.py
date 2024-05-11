@@ -18,14 +18,14 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.distributed import all_reduce
 from gym import spaces
 
-sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
-sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
+sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
+sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
 
 from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import IPRLPretrainingDataset, my_collate_fn, compute_spectrogram
 from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_lmdb_dataset import IPRLPretrainingLMDBDataset
 from ss_baselines.saven.config.default import get_config
 
-sys.path.append("/home/0/19B30511/av-nav/myss")
+sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.load_lmdb import PAD_IDX
 from xgenerator.common.lang import tokens2sentences, R2RLang
 
@@ -388,7 +388,7 @@ if __name__=="__main__":
     gpu_id = rank % NPERNODE
     torch.cuda.set_device(gpu_id)
     torch.distributed.init_process_group(
-        backend="GLOO",
+        backend="NCCL" # "GLOO",
         init_method="env://",
         world_size=n_proc,
     )

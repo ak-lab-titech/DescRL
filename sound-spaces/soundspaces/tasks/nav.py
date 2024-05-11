@@ -44,7 +44,7 @@ from soundspaces.mp3d_utils import CATEGORY_INDEX_MAPPING
 from soundspaces.utils import generate_video, convert_semantic_object_to_rgb
 from soundspaces.mp3d_utils import HouseReader
 
-sys.path.append("/home/0/19B30511/av-nav/myss")
+sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.lang import R2RLang
 from common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from xgenerator.transformer_speaker.model import Seq2SeqTransformer

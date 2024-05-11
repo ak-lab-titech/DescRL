@@ -8,7 +8,7 @@ import numpy as np
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
-sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
+sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
 PAD_IDX = 0
 BOS_IDX = 2504
@@ -260,7 +260,7 @@ def my_collate_fn(batch):
     
 
 if __name__=="__main__":
-    lmdb_dir = "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma_dagger_gtaction_us100/trajectories.lmdb"
+    lmdb_dir = "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma_dagger_gtaction_us100/trajectories.lmdb"
     s = time.time()
     # observations, actions, instructions = get_all_lmdb_data(lmdb_dir)
     print(f"start!")

@@ -9,8 +9,8 @@ from collections import OrderedDict
 from datetime import datetime
 from itertools import product
 
-sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
-sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
+sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
+sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
 
 import networkx as nx
 import numpy as np
@@ -288,7 +288,7 @@ if __name__ == '__main__':
     n_proc = int(os.environ["NP"])
     gpu_id = rank % world_size
     torch.cuda.set_device(gpu_id)
-    torch.distributed.init_process_group(backend="GLOO", init_method="env://", world_size=n_proc)
+    torch.distributed.init_process_group(backend="NCCL", init_method="env://", world_size=n_proc)
     print(f"rank: {rank}, world_size: {world_size}, gpu_id: {gpu_id}, n_proc: {n_proc}\n")
 
     print("Current working directory: {0}".format(os.getcwd()))

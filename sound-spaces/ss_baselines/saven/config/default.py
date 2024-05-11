@@ -125,7 +125,7 @@ _C.RL.PPO.BELIEF_PREDICTOR.weighting_factor = 0.5
 # -----------------------------------------------------------------------------
 _C.RL.DDPPO = CN()
 _C.RL.DDPPO.sync_frac = 0.6
-_C.RL.DDPPO.distrib_backend = "GLOO"
+_C.RL.DDPPO.distrib_backend = "NCCL" # "GLOO"
 _C.RL.DDPPO.rnn_type = "LSTM"
 _C.RL.DDPPO.num_recurrent_layers = 1
 _C.RL.DDPPO.backbone = "resnet50"

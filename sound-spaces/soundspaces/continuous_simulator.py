@@ -171,7 +171,7 @@ class ContinuousSoundSpacesSim(Simulator, ABC):
         )
         sim_config.scene_id = self.config.SCENE
         sim_config.enable_physics = False
-        # sim_config.scene_dataset_config_file = 'data/scene_datasets/mp3d/mp3d.scene_dataset_config.json'
+        # sim_config.scene_dataset_config_file = 'data/scene_datasets/mp3d.scene_dataset_config.json'
         # sim_config.scene_dataset_config_file = 'data/scene_datasets/replica/replica.scene_dataset_config.json'
         agent_config = habitat_sim.AgentConfiguration()
         overwrite_config(

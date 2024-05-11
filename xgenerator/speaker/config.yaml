@@ -7,13 +7,13 @@ model:
   bidirectional: False
 
 train:
-  train_data_path: "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma/train_trajectories.lmdb"
+  train_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/train_trajectories.lmdb"
   train_data_num: 10819
-  # train_data_path: "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma_dagger_gtaction_us100/trajectories.lmdb"
+  # train_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma_dagger_gtaction_us100/trajectories.lmdb"
   # train_data_num: 100
-  val_seen_data_path: "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma/val_seen_trajectories.lmdb"
+  val_seen_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/val_seen_trajectories.lmdb"
   val_seen_data_num: 778
-  val_unseen_data_path: "/home/0/19B30511/av-nav/VLN-CE/data/trajectories_dirs/cma/val_unseen_trajectories.lmdb"
+  val_unseen_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/val_unseen_trajectories.lmdb"
   val_unseen_data_num: 1839
   batch_size: 64
   use_image_feature: True # if False, memory error

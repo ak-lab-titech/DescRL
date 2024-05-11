@@ -120,8 +120,8 @@ def requeue_job():
 
 
 def get_ifname():
-    # return ifcfg.default_interface()["device"]
-    return "ib0"
+    return ifcfg.default_interface()["device"]
+    # return "ib0"
 
 
 def init_distrib_slurm(

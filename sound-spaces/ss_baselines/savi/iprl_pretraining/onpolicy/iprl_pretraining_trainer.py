@@ -39,7 +39,7 @@ from ss_baselines.common.utils import resize_observation
 from habitat.tasks.nav.nav import IntegratedPointGoalGPSAndCompassSensor
 from soundspaces.tasks.nav import LocationBelief, CategoryBelief, SpectrogramSensor
 
-sys.path.append("/home/0/19B30511/av-nav/myss")
+sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.load_lmdb import PAD_IDX
 from xgenerator.common.lang import tokens2sentences, R2RLang
 

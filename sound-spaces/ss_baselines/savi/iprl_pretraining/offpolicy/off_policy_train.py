@@ -17,31 +17,60 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.distributed import all_reduce
 from gym import spaces
 
-sys.path.insert(0, "/home/0/19B30511/av-nav/myss/sound-spaces")
-sys.path.append("/home/0/19B30511/av-nav/myss/habitat-lab")
+sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
+sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
 
 from ss_baselines.savi.iprl_pretraining.common.instruction_predictor import AudioNavSMTInstructionPredictor
 from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import IPRLPretrainingDataset, my_collate_fn, compute_spectrogram
 from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_lmdb_dataset import IPRLPretrainingLMDBDataset
 from ss_baselines.savi.config.default import get_config
 
-sys.path.append("/home/0/19B30511/av-nav/myss")
+sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.load_lmdb import PAD_IDX
 from xgenerator.common.lang import tokens2sentences, R2RLang
 
 
 def setup_instruction_predictor(
-    iprl_cfg,
-    ppo_cfg,
-    smt_cfg,
-    belief_cfg,
+    config,
     device,
-    observation_spaces,
-    action_spaces,
-    has_distractor_sound,
-    pretrained,
-    pretrained_weights,
 ):
+    spectrogram_shape = compute_spectrogram(np.ones((2, config.TASK_CONFIG.SIMULATOR.AUDIO.RIR_SAMPLING_RATE))).shape
+    observation_spaces = spaces.Dict({
+        "pose": spaces.Box(
+            low=np.finfo(np.float32).min,
+            high=np.finfo(np.float32).max,
+            shape=(4,),
+            dtype=np.float32,
+        ),
+        "spectrogram": spaces.Box(
+            low=np.finfo(np.float32).min,
+            high=np.finfo(np.float32).max,
+            shape=spectrogram_shape,
+            dtype=np.float32,
+        ),
+        "rgb": spaces.Box(
+            low=0,
+            high=1,
+            shape=(128, 128, 3),
+            dtype=np.float32,
+        ),
+        "depth": spaces.Box(
+            low=0,
+            high=1,
+            shape=(128, 128, 1),
+            dtype=np.float32,
+        ),   
+    })
+    action_spaces = spaces.Discrete(4)
+
+    iprl_cfg=config.RL.PPO.INSTRUCTION_PREDICTOR
+    ppo_cfg=config.RL.PPO
+    smt_cfg=config.RL.PPO.SCENE_MEMORY_TRANSFORMER
+    belief_cfg=config.RL.PPO.BELIEF_PREDICTOR
+    has_distractor_sound=config.TASK_CONFIG.SIMULATOR.AUDIO.HAS_DISTRACTOR_SOUND
+    pretrained=config.RL.DDPPO.pretrained
+    pretrained_weights=config.RL.DDPPO.pretrained_weights
+
     instruction_predictor = AudioNavSMTInstructionPredictor(
         device=device,
         observation_space=observation_spaces,
@@ -210,47 +239,10 @@ def train(
     val_interval,
 ):
     logger.info(f"device: {torch.device('cuda', gpu_id)}")
-
-    spectrogram_shape = compute_spectrogram(np.ones((2, config.TASK_CONFIG.SIMULATOR.AUDIO.RIR_SAMPLING_RATE))).shape
-    observation_space = spaces.Dict({
-        "pose": spaces.Box(
-            low=np.finfo(np.float32).min,
-            high=np.finfo(np.float32).max,
-            shape=(4,),
-            dtype=np.float32,
-        ),
-        "spectrogram": spaces.Box(
-            low=np.finfo(np.float32).min,
-            high=np.finfo(np.float32).max,
-            shape=spectrogram_shape,
-            dtype=np.float32,
-        ),
-        "rgb": spaces.Box(
-            low=0,
-            high=1,
-            shape=(128, 128, 3),
-            dtype=np.float32,
-        ),
-        "depth": spaces.Box(
-            low=0,
-            high=1,
-            shape=(128, 128, 1),
-            dtype=np.float32,
-        ),   
-    })
-    action_space = spaces.Discrete(4)
     
     instruction_predictor, loss_fn = setup_instruction_predictor(
-        iprl_cfg=config.RL.PPO.INSTRUCTION_PREDICTOR,
-        ppo_cfg=config.RL.PPO,
-        smt_cfg=config.RL.PPO.SCENE_MEMORY_TRANSFORMER,
-        belief_cfg=config.RL.PPO.BELIEF_PREDICTOR,
+        config,
         device=torch.device("cuda", gpu_id),
-        observation_spaces=observation_space,
-        action_spaces=action_space,
-        has_distractor_sound=config.TASK_CONFIG.SIMULATOR.AUDIO.HAS_DISTRACTOR_SOUND,
-        pretrained=config.RL.DDPPO.pretrained,
-        pretrained_weights=config.RL.DDPPO.pretrained_weights,
     )
     instruction_predictor.train()
     
@@ -379,7 +371,7 @@ if __name__=="__main__":
     n_proc = int(os.environ["NP"])
     gpu_id = rank % world_size
     torch.cuda.set_device(gpu_id)
-    torch.distributed.init_process_group(backend="GLOO", init_method="env://", world_size=n_proc)
+    torch.distributed.init_process_group(backend="NCCL", init_method="env://", world_size=n_proc)
     print(f"rank: {rank}, world_size: {world_size}, gpu_id: {gpu_id}, n_proc: {n_proc}\n")
     
     parser = argparse.ArgumentParser()

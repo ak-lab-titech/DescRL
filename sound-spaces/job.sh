@@ -1,6 +1,6 @@
 #!/bin/sh
 #$ -cwd
-#$ -l f_node=1
+#$ -l node_f=1
 #$ -j y
 #$ -l h_rt=00:30:00
 #$ -o output/o.$JOB_ID
@@ -10,11 +10,8 @@ CMD="multi-gpu-train"
 
 
 module load cuda
-module load gcc/8.3.0-cuda
-module load singularity
 module load nccl
 module load cudnn
-module load openmpi/3.1.4-opa10.10
 
 export NNODES=$NHOSTS
 export NPERNODE=4
@@ -31,80 +28,45 @@ echo CMD=$CMD
 if [ $CMD = "multi-gpu-train" ]; then
     mpirun -np $NP -npernode $NPERNODE \
         singularity exec --nv \
-        --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
-        --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
-        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
-        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
-        /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
+        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
+        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
+        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
         ./train.sh
 elif [ $CMD = "single-gpu-train" ]; then
     singularity exec --nv \
-        --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
-        --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
-        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
-        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
-        /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
+        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
+        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
+        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
         ./train.sh
 elif [ $CMD = "eval" ]; then
     singularity exec --nv \
-        --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
-        --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
-        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
-        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
-        /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
+        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
+        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
+        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
         ./eval.sh
 elif [ $CMD = "test" ]; then
     singularity exec --nv \
-        --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
-        --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
-        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
-        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
-        /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
+        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
+        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
+        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
         ./test.sh
 elif [ $CMD = "video" ]; then
     singularity exec --nv \
-        --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
-        --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
-        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
-        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
-        /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
+        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
+        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
+        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
         ./video.sh
 elif [ $CMD = "make_dataset" ]; then
     singularity exec --nv \
-        --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
-        --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
-        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
-        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
-        /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
+        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
+        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
+        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
         ./make_dataset.sh
 elif [ $CMD = "plot_tb_data" ]; then
     singularity exec --nv \
-        --bind /gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/:/gs/hs0/tga-aklab/datasets/mp3d/v1/tasks/ \
-        --bind /gs/hs0/tga-aklab/hkondo/av-nav/:/gs/hs0/tga-aklab/hkondo/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/vlnce/:/gs/hs0/tga-aklab/hkondo/vlnce/ \
-        --bind /gs/hs0/tga-aklab/hkondo/xgenerator:/gs/hs0/tga-aklab/hkondo/xgenerator \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/av-nav/:/gs/hs0/tga-aklab/hkondo/anaconda/av-nav/ \
-        --bind /gs/hs0/tga-aklab/hkondo/anaconda/pkgs:/gs/hs0/tga-aklab/hkondo/anaconda/pkgs \
-        --bind /gs/hs0/tga-aklab/hkondo/cache:/gs/hs0/tga-aklab/hkondo/cache \
-        /gs/hs0/tga-aklab/hkondo/nvidia_cudagl.img \
+        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
+        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
+        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
         ./plot_tb_data.sh
 else
     echo ERROR: CMD must be 'multi-gpu-train', 'single-gpu-train', 'test', 'video', 'make_dataset', or 'plot_tb_data', not $CMD.

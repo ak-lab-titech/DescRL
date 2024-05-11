@@ -5,7 +5,7 @@ import random
 import yaml
 import torch
 
-sys.path.append("/home/0/19B30511/av-nav/myss/xgenerator")
+sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
 from train import rollout
 from model import SpeakerEncoderLSTM, SpeakerDecoderLSTM
