@@ -28,6 +28,8 @@ from ss_baselines.savi.models.smt_cnn import SMTCNN
 from ss_baselines.savi.models.direct_map_encoder import DirectMapEncoder
 from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
 
+from ss_baselines.savi.models.auxiliary_module import ProgressMonitorPredictor, NextFramePredictor, NextOracleActionPredictor
+
 sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.lang import R2RLang
 from xgenerator.common.model import VisualImageEncoder
@@ -593,6 +595,10 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         normalize_category_distribution=False,
         use_category_input=False,
         use_xgen_visual_encoder=False,
+        use_instruction_predictor=True,
+        use_progress_predictor=False,
+        use_action_predictor=False,
+        use_frame_predictor=False,
         **kwargs
     ):
         super().__init__(
@@ -613,25 +619,58 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             **kwargs,
         )
         lang = R2RLang(name="r2r_train")
-        self.instruction_predictor = InstructionPredictor(
-            num_decoder_layers=iprl_num_decoder_layers,
-            vocab_emb_size=iprl_vocab_emb_size,
-            emb_size=iprl_emb_size,
-            max_instr_len=iprl_max_instr_len,
-            nhead=iprl_nhead,
-            vocab_size=lang.vocab_size,
-            glove=lang.glove_vec,
-            dim_feedforward=iprl_dim_feedforward,
-            dropout=iprl_dropout,
-            pretraining=kwargs["pretraining"],
-            use_bos=iprl_use_bos,
-        )
+
+        self.use_instruction_predictor = use_instruction_predictor
+        self.use_progress_predictor = use_progress_predictor
+        self.use_action_predictor = use_action_predictor
+        self.use_frame_predictor = use_frame_predictor
+
+        if self.use_instruction_predictor:
+            self.instruction_predictor = InstructionPredictor(
+                num_decoder_layers=iprl_num_decoder_layers,
+                vocab_emb_size=iprl_vocab_emb_size,
+                emb_size=iprl_emb_size,
+                max_instr_len=iprl_max_instr_len,
+                nhead=iprl_nhead,
+                vocab_size=lang.vocab_size,
+                glove=lang.glove_vec,
+                dim_feedforward=iprl_dim_feedforward,
+                dropout=iprl_dropout,
+                pretraining=kwargs["pretraining"],
+                use_bos=iprl_use_bos,
+            )
         self.iprl_use_gt_D = iprl_use_gt_D
         self.feedback = iprl_feedback
 
         if use_pretrained:
             assert(pretrained_path != '')
             self.pretrained_initialization(pretrained_path)
+
+        if self.use_progress_predictor:
+            self.progress_predictor = ProgressMonitorPredictor(
+                num_decoder_layers=iprl_num_decoder_layers,
+                emb_size=iprl_emb_size,
+                nhead=iprl_nhead,
+                dim_feedforward=iprl_dim_feedforward,
+                pretraining=kwargs["pretraining"],
+            )
+        if self.use_action_predictor:
+            self.action_predictor = NextOracleActionPredictor(
+                num_decoder_layers=iprl_num_decoder_layers,
+                emb_size=iprl_emb_size,
+                nhead=iprl_nhead,
+                dim_feedforward=iprl_dim_feedforward,
+                pretraining=kwargs["pretraining"],
+            )
+        if self.use_frame_predictor:
+            raise NotImplementedError("NextFramePredictor")
+            # self.frame_predictor = NextFramePredictor(
+            #     num_decoder_layers=iprl_num_decoder_layers,
+            #     emb_size=iprl_emb_size,
+            #     nhead=iprl_nhead,
+            #     dim_feedforward=iprl_dim_feedforward,
+            #     pretraining=kwargs["pretraining"],
+            # )
 
         self.train()
     
@@ -683,12 +722,38 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         else:
             raise Exception(f"feedback must be 'teacher' or 'student', not {self.feedback}")
 
-        logits = self.instruction_predictor(
-            category=category, # (batch, 21)
-            location=location, # (batch, 2)
-            target=target,
-            memory=enc_memory, # (mem_size, batch, smt_hidden)
-            memory_key_padding_mask=(1 - ext_memory_masks) > 0,
-        )
+        if self.use_instruction_predictor:
+            logits = self.instruction_predictor(
+                category=category, # (batch, 21)
+                location=location, # (batch, 2)
+                target=target,
+                memory=enc_memory, # (mem_size, batch, smt_hidden)
+                memory_key_padding_mask=(1 - ext_memory_masks) > 0,
+            )
+        else:
+            logits = None
 
-        return x_att, rnn_hidden_states, x, direct_map, logits
+        if self.use_action_predictor:
+            predicted_action = self.action_predictor(
+                memory=enc_memory,
+                target=belief.unsqueeze(0),
+                memory_key_padding_mask=(1 - ext_memory_masks) > 0,
+            )
+        else:
+            predicted_action = None
+        if self.use_progress_predictor:
+            predicted_progress = self.progress_predictor(
+                memory=enc_memory,
+                target=belief.unsqueeze(0),
+                memory_key_padding_mask=(1 - ext_memory_masks) > 0,
+            )
+        else:
+            predicted_progress = None
+        
+        aux_infos = {
+            "logits": logits,
+            "predicted_action": predicted_action,
+            "predicted_progress": predicted_progress,
+        }
+
+        return x_att, rnn_hidden_states, x, direct_map, aux_infos

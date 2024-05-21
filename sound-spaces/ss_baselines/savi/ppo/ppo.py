@@ -47,6 +47,8 @@ class PPO(nn.Module):
         self.use_iprl = use_iprl
         self.iprl_loss_coef = iprl_loss_coef
         self.iprl_loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)
+        self.predict_action_loss = torch.nn.CrossEntropyLoss()
+        self.predict_progress_loss = torch.nn.MSELoss()
 
 
         self.clip_param = clip_param
@@ -115,7 +117,7 @@ class PPO(nn.Module):
                     _,
                     _,
                     predict_direct_map,
-                    iprl_logits,
+                    aux_infos,
                 ) = self.actor_critic.evaluate_actions(
                     obs_batch,
                     recurrent_hidden_states_batch,
@@ -160,16 +162,29 @@ class PPO(nn.Module):
                     direct_map_loss = 0
                 
                 if self.use_iprl:
-                    # logits: (instr_len, batch, vocab_size)
-                    iprl_targets = obs_batch["generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
-                    iprl_loss = self.iprl_loss_fn(iprl_logits.view(-1, iprl_logits.shape[-1]), iprl_targets.reshape(-1))
-                    if int(os.environ["LOCAL_RANK"]) == 0 and e == 0 and self.update_cnt % 5 == 0:
-                        lang = R2RLang("r2r")
-                        _, iprl_tokens = iprl_logits.max(2)
-                        pred_sentence = tokens2sentences(iprl_tokens, lang)
-                        true_sentence = tokens2sentences(iprl_targets, lang)
-                        logger.info(f"Pred -1: {pred_sentence[-1]}")
-                        logger.info(f"True -1: {true_sentence[-1]}")
+                    # print(f"aux_infos: {aux_infos}")
+                    iprl_loss = 0
+                    if aux_infos["logits"] is not None:
+                        iprl_logits = aux_infos["logits"] # logits: (instr_len, batch, vocab_size)
+                        iprl_targets = obs_batch["generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
+                        iprl_loss += self.iprl_loss_fn(iprl_logits.view(-1, iprl_logits.shape[-1]), iprl_targets.reshape(-1))
+                        if int(os.environ["LOCAL_RANK"]) == 0 and e == 0 and self.update_cnt % 5 == 0:
+                            lang = R2RLang("r2r")
+                            _, iprl_tokens = iprl_logits.max(2)
+                            pred_sentence = tokens2sentences(iprl_tokens, lang)
+                            true_sentence = tokens2sentences(iprl_targets, lang)
+                            logger.info(f"Pred -1: {pred_sentence[-1]}")
+                            logger.info(f"True -1: {true_sentence[-1]}")
+
+                    if aux_infos["predicted_progress"] is not None:
+                        predicted_progress = aux_infos["predicted_progress"]
+                        gt_progress = obs_batch["progress_monitor"]
+                        iprl_loss += self.predict_progress_loss(predicted_progress.view(-1, predicted_progress.shape[-1]), gt_progress.reshape(-1))
+                    
+                    if aux_infos["predicted_action"] is not None
+                        predicted_action = aux_infos["predicted_action"]
+                        gt_action = obs_batch["next_optimal_action"]
+                        iprl_loss += self.predict_action_loss(predicted_action.view(-1, predicted_action.shape[-1]), gt_action.reshape(-1).long())
                 else:
                     iprl_loss = 0
 

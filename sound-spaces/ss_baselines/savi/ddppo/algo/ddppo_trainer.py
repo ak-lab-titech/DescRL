@@ -18,10 +18,11 @@ import torch.distributed as distrib
 import torch.nn as nn
 from torch.optim.lr_scheduler import LambdaLR
 
+from habitat.core.environments import get_env_class as habitat_get_env_class
 from habitat import Config, logger
 from ss_baselines.common.baseline_registry import baseline_registry
 from ss_baselines.common.env_utils import construct_envs
-from ss_baselines.common.environments import get_env_class
+from ss_baselines.common.environments import get_env_class as ss_get_env_class
 from ss_baselines.savi.models.rollout_storage import RolloutStorage
 from ss_baselines.common.tensorboard_utils import TensorboardWriter
 from ss_baselines.common.utils import batch_obs, linear_decay
@@ -372,14 +373,17 @@ class DDPPOTrainer(PPOTrainer):
             self.belief_predictor.update(batch, None)
 
         for sensor in rollouts.observations:
-            if sensor == "depth":
+            if sensor == "depth" and len(np.shape(batch[sensor])) == 5:
                 batch_sensor = np.squeeze(batch[sensor], axis=4)
             elif sensor == "generated_instruction":
                 batch_sensor = np.squeeze(batch[sensor], axis=1)
             elif sensor == "semantic":
                 continue
+            elif sensor == "progress_monitor":
+                batch_sensor = batch[sensor].view(2, 1)
             else:
                 batch_sensor = batch[sensor]
+            
             rollouts.observations[sensor][0].copy_(batch_sensor)
             # rollouts.observations[sensor][0].copy_(batch[sensor])
             if self.use_direct_map and self.use_gt_direct_map:

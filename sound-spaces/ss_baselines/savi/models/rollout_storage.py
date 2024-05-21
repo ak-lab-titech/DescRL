@@ -138,7 +138,7 @@ class RolloutStorage:
         dones,
     ):
         for sensor in observations:
-            if sensor == "depth":
+            if sensor == "depth" and len(np.shape(observations[sensor])) == 5:
                 self.observations[sensor][self.step + 1].copy_(
                     np.squeeze(observations[sensor], axis=4)
                 )
@@ -148,6 +148,10 @@ class RolloutStorage:
                 )
             elif sensor == "semantic":
                 continue
+            elif sensor == "progress_monitor":
+                self.observations[sensor][self.step + 1].copy_(
+                    observations[sensor].view(2, 1)
+                )
             else:
                 self.observations[sensor][self.step + 1].copy_(
                     observations[sensor]

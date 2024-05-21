@@ -307,7 +307,122 @@ class DirectMap(Sensor):
         if angle < 0:
             angle += 360
 
-        return angle 
+        return angle
+
+
+@registry.register_sensor
+class NextOptimalAction(Sensor):
+    cls_uuid: str = "next_optimal_action"
+
+    def __init__(self, *args: Any, sim: Simulator, config: Config, **kwargs: Any):
+        self._sim = sim
+        super().__init__(config=config)
+    
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "next_optimal_action"
+    
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.NULL
+    
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        return spaces.Discrete(4)
+    
+    def get_observation(self, *args: Any, observations, episode: Episode, **kwargs: Any):
+        oracle_action = self._sim.get_oracle_actions_from_current_pos()[0]
+        return oracle_action
+
+
+@registry.register_sensor
+class NextFrame(Sensor):
+    cls_uuid: str = "next_frame"
+
+    def __init__(self, *args: Any, sim: Simulator, config: Config, **kwargs: Any):
+        raise NotImplementedError()
+        # self._sim = sim
+        # super().__init__(config=config)
+
+        # self.image_height = None # TODO
+        # self.image_width = None # TODO
+    
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "next_frame"
+    
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.NULL
+    
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        return spaces.Box(
+            low=0,
+            high=np.finfo(np.float32).max,
+            shape=(self.image_height, self.image_width, 4),
+            dtype=np.float32,
+        )
+    
+    def get_observation(self, *args: Any, observations, episode: Episode, **kwargs: Any):
+        current_previous_step_collided = self._sim._previous_step_collided
+        current_is_episode_active = self._sim._is_episode_active
+        current_receiver_position_index = self._sim._receiver_position_index
+        current_rotation_angle = self._sim._rotation_angle
+        current_episode_step_count = self._sim._episode_step_count
+        current_prev_sim_obs = self._sim._prev_sim_obs
+        current_past_actions = self._sim.past_actions
+
+        # TODO actionは、oracle actionではなく、自分のactionを入力するようにするべき
+        oracle_action = self._sim.get_oracle_actions_from_current_pos()[0]
+
+        self._sim.step(oracle_action, append_k_prev=False)
+
+        sim_obs = self._sim._get_sim_observation()
+        observations = self._sim._sensor_suite.get_observations(sim_obs)
+
+        image_shape = np.shape(observations["depth"])
+        if len(image_shape) == 4:
+            depth_img = np.squeeze(observations["depth"], axis=3)
+        else:
+            depth_img = observations["depth"]
+        rgb_img = observations["rgb"] / 255.0
+
+        image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)        
+
+        self._sim._previous_step_collided = current_previous_step_collided
+        self._sim._is_episode_active = current_is_episode_active
+        self._sim._receiver_position_index = current_receiver_position_index
+        self._sim._rotation_angle = current_rotation_angle
+        self._sim._episode_step_count = current_episode_step_count
+        self._sim._prev_sim_obs = current_prev_sim_obs
+        self._sim.past_actions = current_past_actions
+        self._sim.set_agent_state(
+            position=list(self._sim.graph.nodes[self._sim._receiver_position_index]['point']),
+            rotation=quat_from_angle_axis(np.deg2rad(self._sim._rotation_angle), np.array([0, 1, 0])),
+        )
+        return image
+
+
+@registry.register_sensor
+class ProgressMonitor(Sensor):
+    cls_uuid: str = "progress_monitor"
+
+    def __init__(self, *args: Any, sim: Simulator, config: Config, **kwargs: Any):
+        self._sim = sim
+        super().__init__(config=config)
+    
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "progress_monitor"
+    
+    def _get_sensor_type(self, *args: Any, **kwargs: Any):
+        return SensorTypes.NULL
+    
+    def _get_observation_space(self, *args: Any, **kwargs: Any):
+        return spaces.Box(
+            low=0,
+            high=1.0,
+            shape=(1,),
+            dtype=np.float32,
+        )
+    
+    def get_observation(self, *args: Any, observations, episode: Episode, task: EmbodiedTask, **kwargs: Any):
+        return task.measurements.measures['normalized_distance_to_goal'].get_metric()
+
 
 @registry.register_sensor
 class GeneratedInstruction(Sensor):

@@ -164,6 +164,16 @@ _TC.TASK.GENERATED_INSTRUCTION.TYPE = "GeneratedInstruction"
 _TC.TASK.ORACLE_ACTION_GENERATED_INSTRUCTION = CN()
 _TC.TASK.ORACLE_ACTION_GENERATED_INSTRUCTION.TYPE = "OracleActionGeneratedInstruction"
 # -----------------------------------------------------------------------------
+# NEXT_OPTIMAL_ACTION
+# -----------------------------------------------------------------------------
+_TC.TASK.NEXT_OPTIMAL_ACTION = CN()
+_TC.TASK.NEXT_OPTIMAL_ACTION.TYPE = "NextOptimalAction"
+# -----------------------------------------------------------------------------
+# PROGRESS_MONITOR
+# -----------------------------------------------------------------------------
+_TC.TASK.PROGRESS_MONITOR = CN()
+_TC.TASK.PROGRESS_MONITOR.TYPE = "ProgressMonitor"
+# -----------------------------------------------------------------------------
 # soundspaces
 # -----------------------------------------------------------------------------
 _TC.SIMULATOR.GRID_SIZE = 0.5
