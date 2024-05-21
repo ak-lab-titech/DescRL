@@ -9,14 +9,14 @@ conda activate av-nav
 
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi
 MODEL="savi"   # avnav, avwan, savi, random, ksaven
-MODEL_NAME="ss1savi-savi"
-DATASET_NAME="mp3d"
+MODEL_NAME="baseline"
+SCENE_DATASET="mp3d"
 TEST_EPISODE_COUNT=1000
 CKPT_NUM="100"
 
 echo ENV=$ENV
 echo MODEL_NAME=$MODEL_NAME
-echo DATASET_NAME=$DATASET_NAME
+echo SECNE_DATASET=$SCENE_DATASET
 echo TEST_EPISODE_COUNT=$TEST_EPISODE_COUNT
 echo CKPT_NUM=$CKPT_NUM
 
@@ -25,30 +25,30 @@ if [ $ENV = "ss2-avnav" ] && [ $MODEL = "avnav" ]; then
     python ss_baselines/av_nav/run.py \
         --run-type eval \
         --exp-config ss_baselines/av_nav/config/audionav/replica/test_multi_goal/audiogoal_depth.yaml \
-        --model-dir data/models/ss2/replica/$MODEL_NAME \
+        --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
         CONTINUOUS True \
-        LOG_FILE data/models/ss2/replica/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
-        TENSORBOARD_DIR data/models/ss2/replica/$MODEL_NAME/tb_test \
-        EVAL_CKPT_PATH_DIR data/models/ss2/replica/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth
+        LOG_FILE data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
+        TENSORBOARD_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/tb_test \
+        EVAL_CKPT_PATH_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth
 elif [ $ENV = "ss2-avnav" ] && [ $MODEL = "savi" ]; then
     python ss_baselines/savi/run.py \
         --run-type eval \
         --exp-config ss_baselines/savi/config/audionav/savi.yaml \
-        --model-dir data/models/ss2/replica/$MODEL_NAME \
+        --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
         NUM_PROCESSES 1 \
         CONTINUOUS True \
         RL.DDPPO.pretrained False \
-        LOG_FILE data/models/ss2/replica/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
-        TENSORBOARD_DIR data/models/ss2/replica/$MODEL_NAME/tb_test \
-        EVAL_CKPT_PATH_DIR data/models/ss2/replica/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth
+        LOG_FILE data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
+        TENSORBOARD_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/tb_test \
+        EVAL_CKPT_PATH_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth
 elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi" ]; then
     python ss_baselines/savi/run.py \
         --run-type eval \
         --exp-config ss_baselines/savi/config/semantic_audionav/savi.yaml \
-        --model-dir data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME \
-        EVAL_CKPT_PATH_DIR data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
-        LOG_FILE data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
-        TENSORBOARD_DIR data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/test \
+        --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL-2nd/$MODEL_NAME \
+        EVAL_CKPT_PATH_DIR data/models/$ENV/$SCENE_DATASET/$MODEL-2nd/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        LOG_FILE data/models/$ENV/$SCENE_DATASET/$MODEL-2nd/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
+        TENSORBOARD_DIR data/models/$ENV/$SCENE_DATASET/$MODEL-2nd/$MODEL_NAME/test \
         NUM_PROCESSES 10 \
         CONTINUOUS False \
         EVAL.SPLIT test \
@@ -61,10 +61,10 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven" ]; then
     python ss_baselines/saven/run.py \
         --run-type eval \
         --exp-config ss_baselines/saven/config/semantic_audionav/saven.yaml \
-        --model-dir data/models/saven/$MODEL_NAME \
-        EVAL_CKPT_PATH_DIR data/models/saven/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
-        LOG_FILE data/models/saven/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
-        TENSORBOARD_DIR data/models/saven/$MODEL_NAME/test \
+        --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
+        EVAL_CKPT_PATH_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        LOG_FILE data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
+        TENSORBOARD_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/test \
         NUM_PROCESSES 10 \
         CONTINUOUS False \
         EVAL.SPLIT test \
@@ -75,11 +75,11 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avnav" ]; then
     python ss_baselines/av_nav/run.py \
         --run-type eval \
         --exp-config ss_baselines/av_nav/config/semantic_audionav/mp3d/rgbd_ddppo.yaml \
-        --model-dir data/models/ss1-savi/avnav/mp3d/$MODEL_NAME \
+        --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
         TRAINER_NAME "AVNavTrainer" \
-        EVAL_CKPT_PATH_DIR data/models/ss1-savi/avnav/mp3d/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
-        LOG_FILE data/models/ss1-savi/avnav/mp3d/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
-        TENSORBOARD_DIR data/models/ss1-savi/avnav/mp3d/$MODEL_NAME/test \
+        EVAL_CKPT_PATH_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        LOG_FILE data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
+        TENSORBOARD_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/test \
         NUM_PROCESSES 10 \
         CONTINUOUS False \
         EVAL.SPLIT test \
@@ -89,10 +89,10 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "avwan" ]; then
     python ss_baselines/av_wan/run.py \
         --run-type eval \
         --exp-config ss_baselines/av_wan/config/semantic_audionav/mp3d/train_with_am.yaml \
-        --model-dir data/models/ss1-savi/avwan/mp3d/$MODEL_NAME \
-        EVAL_CKPT_PATH_DIR data/models/ss1-savi/avwan/mp3d/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
-        LOG_FILE data/models/ss1-savi/avwan/mp3d/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
-        TENSORBOARD_DIR data/models/ss1-savi/avwan/mp3d/$MODEL_NAME/test \
+        --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
+        EVAL_CKPT_PATH_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        LOG_FILE data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
+        TENSORBOARD_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/test \
         NUM_PROCESSES 10 \
         CONTINUOUS False \
         EVAL.SPLIT test \

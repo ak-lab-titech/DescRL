@@ -1,13 +1,15 @@
 #!/bin/bash
 
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi
-SECNE_DATASET="mp3d"
+SCENE_DATASET="mp3d"
 MODEL="savi-2nd"
-MODEL_NAME="ss1savi-savi-iprl"
+MODEL_NAME="baseline"
 # PRETRAINED_MODEL_NAME="ss1savi-savi-1st-v2"
 # CKPT_NUM="115"
-PRETRAINED_MODEL_NAME="ss1savi-savi-1st-duraion"
-CKPT_NUM="55"
+# PRETRAINED_MODEL_NAME="ss1savi-savi-1st-duraion"
+# CKPT_NUM="55"
+PRETRAINED_MODEL_NAME="baseline"
+CKPT_NUM="200"
 # PRETRAINED_MODEL_NAME="ss1savi-ksaven-1st-duration"
 # CKPT_NUM="54"
 

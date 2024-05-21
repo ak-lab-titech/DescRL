@@ -12,6 +12,7 @@ CMD="multi-gpu-train"
 module load cuda
 module load nccl
 module load cudnn
+module load openmpi/5.0.2-intel
 
 export NNODES=$NHOSTS
 export NPERNODE=4
@@ -27,47 +28,19 @@ echo CMD=$CMD
 
 if [ $CMD = "multi-gpu-train" ]; then
     mpirun -np $NP -npernode $NPERNODE \
-        singularity exec --nv \
-        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
-        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
-        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
         ./train.sh
 elif [ $CMD = "single-gpu-train" ]; then
-    singularity exec --nv \
-        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
-        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
-        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
-        ./train.sh
+    ./train.sh
 elif [ $CMD = "eval" ]; then
-    singularity exec --nv \
-        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
-        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
-        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
-        ./eval.sh
+    ./eval.sh
 elif [ $CMD = "test" ]; then
-    singularity exec --nv \
-        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
-        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
-        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
-        ./test.sh
+    ./test.sh
 elif [ $CMD = "video" ]; then
-    singularity exec --nv \
-        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
-        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
-        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
-        ./video.sh
+    ./video.sh
 elif [ $CMD = "make_dataset" ]; then
-    singularity exec --nv \
-        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
-        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
-        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
-        ./make_dataset.sh
+    ./make_dataset.sh
 elif [ $CMD = "plot_tb_data" ]; then
-    singularity exec --nv \
-        --bind /gs/fs/tga-aklab:/gs/fs/tga-aklab \
-        --bind /gs/bs/tga-aklab:/gs/bs/tga-aklab \
-        /gs/fs/tga-aklab/hkondo/docker_imgs/ubuntu_latest.sif \
-        ./plot_tb_data.sh
+    ./plot_tb_data.sh
 else
     echo ERROR: CMD must be 'multi-gpu-train', 'single-gpu-train', 'test', 'video', 'make_dataset', or 'plot_tb_data', not $CMD.
 fi
