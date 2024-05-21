@@ -42,7 +42,7 @@ def setup_instruction_generator(
     # max_instr_len = config["GENERATED_INSTRUCTION"]["MAX_INSTRUCTION_LENGTH"]
     # future_step_num = config["GENERATED_INSTRUCTION"]["FUTURE_STEP_NUM"]
 
-    with open(f"../{xgenerator_path}/config.yaml", "r") as yml:
+    with open(f"{xgenerator_path}/config.yaml", "r") as yml:
         xgenerator_config = yaml.safe_load(yml)
 
     instruction_generator = Seq2SeqTransformer(
@@ -60,7 +60,7 @@ def setup_instruction_generator(
     )
     instruction_generator.load_state_dict(
         torch.load(
-            f"../{xgenerator_path}/data/{ckpt_num}/seq2seq.pth",
+            f"{xgenerator_path}/data/{ckpt_num}/seq2seq.pth",
             map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
             )
     )

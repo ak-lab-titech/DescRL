@@ -17,6 +17,7 @@ import numpy as np
 import torch.nn as nn
 from torchsummary import summary
 
+from habitat.tasks.nav.object_nav_task import ObjectGoalSensor
 from soundspaces.tasks.nav import PoseSensor, SpectrogramSensor, LocationBelief, CategoryBelief, Category
 from ss_baselines.common.utils import CategoricalNet
 from ss_baselines.av_nav.models.rnn_state_encoder import RNNStateEncoder
@@ -377,12 +378,17 @@ class AudioNavSMTNet(Net):
         self.goal_num = goal_num
         self.use_xgen_visual_encoder = use_xgen_visual_encoder
 
-        assert SpectrogramSensor.cls_uuid in observation_space.spaces
-        self.goal_encoder = AudioCNN(observation_space, 128, SpectrogramSensor.cls_uuid)
-        audio_feature_dims = 128
+        self.use_audio = SpectrogramSensor.cls_uuid in observation_space.spaces
+        # assert SpectrogramSensor.cls_uuid in observation_space.spaces
+        if self.use_audio:
+            self.goal_encoder = AudioCNN(observation_space, 128, SpectrogramSensor.cls_uuid)
+            audio_feature_dims = 128
+        else:
+            audio_feature_dims = 0
 
         if self.use_xgen_visual_encoder:
             self.visual_encoder = VisualImageEncoder((128, 128, 4), 512-4)
+            # self.visual_encoder = VisualImageEncoder((480, 640, 4), 512-4)
         else:
             self.visual_encoder = SMTCNN(observation_space)
         
@@ -472,6 +478,12 @@ class AudioNavSMTNet(Net):
         else:
             belief = None
 
+        if ObjectGoalSensor.cls_uuid in observations.keys():
+            belief = torch.zeros((x.shape[0], self._hidden_size), device=x.device)
+            objectgoal = observations[ObjectGoalSensor.cls_uuid]
+            objectgoal = torch.nn.functional.one_hot(objectgoal.to(torch.int64).view(-1), num_classes=21)
+            belief[:,:21] = objectgoal
+
         x_att, enc_memory = self.smt_state_encoder(x, ext_memory, ext_memory_masks, need_enc_memory=True, goal=belief)
         if self._use_residual_connection:
             x_att = torch.cat([x_att, x], 1)
@@ -503,7 +515,8 @@ class AudioNavSMTNet(Net):
         """Freeze goal, visual and fusion encoders. Pose encoder is not frozen."""
         logging.info(f'AudioNavSMTNet ===> Freezing goal, visual, fusion encoders!')
         params_to_freeze = []
-        params_to_freeze.append(self.goal_encoder.parameters())
+        if self.use_audio:
+            params_to_freeze.append(self.goal_encoder.parameters())
         params_to_freeze.append(self.visual_encoder.parameters())
         if self.direct_map_size is not None:
             params_to_freeze.append(self.direct_map_encoder.parameters())
@@ -514,7 +527,8 @@ class AudioNavSMTNet(Net):
 
     def set_eval_encoders(self):
         """Sets the goal, visual and fusion encoders to eval mode."""
-        self.goal_encoder.eval()
+        if self.use_audio:
+            self.goal_encoder.eval()
         self.visual_encoder.eval()
         if self.direct_map_size is not None:
             self.direct_map_encoder.eval()
@@ -535,7 +549,8 @@ class AudioNavSMTNet(Net):
             visual_features = self.visual_encoder(observations)
         x.append(visual_features)
         x.append(self.action_encoder(self._get_one_hot(prev_actions)))
-        x.append(self.goal_encoder(observations))
+        if self.use_audio:
+            x.append(self.goal_encoder(observations))
         if self.direct_map_size is not None:
             direct_map = self.direct_map_encoder(prev_direct_map, x[2], None, self._get_one_hot(prev_actions))
             x.append(direct_map)

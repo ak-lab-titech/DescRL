@@ -335,7 +335,10 @@ class SoundSpacesSim(Simulator, ABC):
     @property
     def current_scene_name(self):
         # config.SCENE (_current_scene) looks like 'data/scene_datasets/replica/office_1/habitat/mesh_semantic.ply'
-        return self._current_scene.split('/')[3]
+        if "habitat-lab" in self._current_scene: # ss1-objnav using SMT
+            return self._current_scene.split('/')[4]
+        else:
+            return self._current_scene.split('/')[3]
 
     @property
     def current_scene_observation_file(self):
@@ -428,7 +431,11 @@ class SoundSpacesSim(Simulator, ABC):
 
         # set agent positions
         self._receiver_position_index = self._position_to_index(self.config.AGENT_0.START_POSITION)
-        self._source_position_index = self._position_to_index(self.config.AGENT_0.GOAL_POSITION)
+
+        if hasattr(self.config.AGENT_0, 'GOAL_POSITION'):
+            self._source_position_index = self._position_to_index(self.config.AGENT_0.GOAL_POSITION)
+        else: # ss1-objnav using SMT
+            self._source_position_index = self._position_to_index(self.config.AGENT_0.START_POSITION)
         # the agent rotates about +Y starting from -Z counterclockwise,
         # so rotation angle 90 means the agent rotate about +Y 90 degrees
         self._rotation_angle = int(np.around(np.rad2deg(quat_to_angle_axis(quat_from_coeffs(
@@ -763,17 +770,38 @@ class SoundSpacesSim(Simulator, ABC):
             spectrogram = audiogoal2spectrogram(audiogoal)
 
         return spectrogram
+    
+    def safe_shortest_path_length(self, G, source, target, weight=None):
+        try:
+            # パスの長さを計算
+            return nx.shortest_path_length(G, source, target, weight=weight)
+        except nx.NetworkXNoPath:
+            # パスが存在しない場合は無限大を返す
+            return np.inf
 
     def geodesic_distance(self, position_a, position_bs, episode=None):
-        distances = []
+        min_gd = np.inf
         for position_b in position_bs:
             index_a = self._position_to_index(position_a)
             index_b = self._position_to_index(position_b)
             assert index_a is not None and index_b is not None
-            path_length = nx.shortest_path_length(self.graph, index_a, index_b) * self.config.GRID_SIZE
-            distances.append(path_length)
+            path_length = self.safe_shortest_path_length(self.graph, index_a, index_b) * self.config.GRID_SIZE
+            if path_length < min_gd:
+                min_gd = path_length
+                self._source_position_index = index_b
 
-        return min(distances)
+        if min_gd == np.inf:
+            # print(f"No Path to Goal!")
+            min_gd = 1000
+            self._source_position_index = None
+
+        return min_gd
+    
+    def gd_from_start_to_current_position(self):
+        start_index = self._position_to_index(self.config.AGENT_0.START_POSITION)
+        current_position_index = self._receiver_position_index
+        gd = self.safe_shortest_path_length(self.graph, start_index, current_position_index) * self.config.GRID_SIZE
+        return gd
 
     def get_straight_shortest_path_points(self, position_a, position_b):
         index_a = self._position_to_index(position_a)
@@ -789,6 +817,10 @@ class SoundSpacesSim(Simulator, ABC):
     def compute_oracle_actions(self):
         start_node = self._receiver_position_index
         end_node = self._source_position_index
+
+        if end_node is None:
+            return None
+
         shortest_path = nx.shortest_path(self.graph, source=start_node, target=end_node)
         assert shortest_path[0] == start_node and shortest_path[-1] == end_node
         logging.debug(shortest_path)

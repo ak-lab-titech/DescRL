@@ -1,0 +1,89 @@
+ENVIRONMENT:
+  MAX_EPISODE_STEPS: 500
+
+SIMULATOR:
+  TYPE: SoundSpacesSim
+  USE_RENDERED_OBSERVATIONS: True
+  TURN_ANGLE: 90
+  TILT_ANGLE: 90
+  ACTION_SPACE_CONFIG: "v1"
+  AGENT_0:
+    SENSORS: ['RGB_SENSOR', 'DEPTH_SENSOR', 'SEMANTIC_SENSOR']
+    HEIGHT: 0.88
+    RADIUS: 0.18
+  HABITAT_SIM_V0:
+    GPU_DEVICE_ID: 0
+  RGB_SENSOR:
+    WIDTH: 128
+    HEIGHT: 128
+  DEPTH_SENSOR:
+    WIDTH: 128
+    HEIGHT: 128
+  SEMANTIC_SENSOR:
+    WIDTH: 128
+    HEIGHT: 128
+
+  STEP_TIME: 1
+  GRID_SIZE: 1
+  CONTINUOUS_VIEW_CHANGE: False
+  VIEW_CHANGE_FPS: 10
+  SCENE_OBSERVATION_DIR: 'sound-spaces/data/scene_observations'
+
+  DIRECT_MAP_SIZE: null # null means no SDM.
+  DIRECT_MAP_DISTANCE: "geodesic"
+  SHORTEST_PATH_DIRECTION: False
+  USE_GT_DIRECT_MAP: False
+  DROPOUT_RATE: 0.2
+  NOISE_COEF: 0.0
+  DM_USE_VISUAL: False
+  DISTANCE_TRANS_METHOD: "1d"
+  CLIPPING: True
+  DM_USE_GRU: False
+  DM_CGO: False
+  USE_CONV1D: True
+
+  SCENE_DATASET: "mp3d"
+  AUDIO:
+    RIR_SAMPLING_RATE: 16000
+    HEARD_TEST: False
+    NUM: 1
+    SCENE: ""
+    EVERLASTING: True
+    BINAURAL_RIR_DIR: "sound-spaces/data/binaural_rirs"
+    SOURCE_SOUND_DIR: "sound-spaces/data/sounds/1s_all"
+    METADATA_DIR: "sound-spaces/data/metadata"
+    POINTS_FILE: 'points.txt'
+    GRAPH_FILE: 'graph.pkl'
+    HAS_DISTRACTOR_SOUND: False
+    IR_TIME: 1.0
+    DISTRACTOR_SOUND_DIR: 'sound-spaces/data/sounds/1s_all_distractor'
+  
+TASK:
+  TYPE: ObjectNav-v1
+  POSSIBLE_ACTIONS: ["FOUND", "MOVE_FORWARD", "TURN_LEFT", "TURN_RIGHT"]
+
+  SENSORS: ['OBJECTGOAL_SENSOR', 'COMPASS_SENSOR', 'GPS_SENSOR', 'POINTGOAL_WITH_GPS_COMPASS_SENSOR', 'POSE_SENSOR', "GENERATED_INSTRUCTION"]
+  GOAL_SENSOR_UUID: objectgoal
+  POINTGOAL_WITH_GPS_COMPASS_SENSOR:
+    GOAL_FORMAT: "CARTESIAN"
+    DIMENSIONALITY: 2
+  GENERATED_INSTRUCTION:
+    XGENERATOR_PATH: "xgenerator/data/models/tf-speaker-semantic-24h"
+    XGENERATOR_CKPT: 1000
+    MAX_INSTRUCTION_LENGTH: 40
+    FUTURE_STEP_NUM: 20 # -1なら最後まで。ただしpastでは-1は未実装
+    MODEL_RESOLUTION: 128
+    FUTURE_OR_PAST: "past" # future or past
+
+  MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL', 'SOFT_SPL']
+
+  DISTANCE_TO_GOAL:
+    DISTANCE_TO: POINT
+  SUCCESS:
+    SUCCESS_DISTANCE: 1.0
+
+DATASET:
+  TYPE: ObjectNav-v1
+  SPLIT: train
+  DATA_PATH: "habitat-lab/data/datasets/objectnav_ss1/mp3d/v1/{split}/{split}.json.gz"
+  SCENES_DIR: "habitat-lab/data/scene_datasets/"

@@ -638,9 +638,12 @@ class SPL(Measure):
 
         self._previous_position = self._sim.get_agent_state().position
         self._agent_episode_distance = 0.0
-        self._start_end_episode_distance = task.measurements.measures[
-            DistanceToGoal.cls_uuid
-        ].get_metric()
+        self._start_end_episode_distance = max(
+            task.measurements.measures[
+                DistanceToGoal.cls_uuid
+            ].get_metric(),
+            1e-5
+        )
         self.update_metric(  # type:ignore
             episode=episode, task=task, *args, **kwargs
         )
@@ -759,9 +762,12 @@ class SoftSPL(SPL):
 
         self._previous_position = self._sim.get_agent_state().position
         self._agent_episode_distance = 0.0
-        self._start_end_episode_distance = task.measurements.measures[
-            DistanceToGoal.cls_uuid
-        ].get_metric()
+        self._start_end_episode_distance = max(
+            task.measurements.measures[
+                DistanceToGoal.cls_uuid
+            ].get_metric(),
+            1e-5
+        )
         self.update_metric(episode=episode, task=task, *args, **kwargs)  # type: ignore
 
     def update_metric(self, episode, task, *args: Any, **kwargs: Any):

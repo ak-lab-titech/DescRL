@@ -297,9 +297,16 @@ class DDPPOTrainer(PPOTrainer):
         else:
             self.device = torch.device("cpu")
 
-        self.envs = construct_envs(
-            self.config, get_env_class(self.config.ENV_NAME)
-        )
+        if self.config.ENV_NAME == "AudioNavRLEnv":
+            self.envs = construct_envs(
+                self.config, ss_get_env_class(self.config.ENV_NAME)
+            )
+        elif self.config.ENV_NAME == "NavRLEnv":    
+            self.envs = construct_envs(
+                self.config, habitat_get_env_class(self.config.ENV_NAME)
+            )
+        else:
+            raise Exception(f"self.config.ENV_NAME: {self.config.ENV_NAME}")
 
         ppo_cfg = self.config.RL.PPO
         if (

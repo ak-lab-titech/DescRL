@@ -335,7 +335,7 @@ class GeneratedInstruction(Sensor):
         f.write(f"self.future_or_past: {self.future_or_past}\n")
         f.close()
 
-        with open(f"../{xgenerator_path}/config.yaml", "r") as yml:
+        with open(f"{xgenerator_path}/config.yaml", "r") as yml:
             xgenerator_config = yaml.safe_load(yml)
 
         super().__init__(config=config)
@@ -355,7 +355,7 @@ class GeneratedInstruction(Sensor):
         )
         self.instruction_generator.load_state_dict(
             torch.load(
-                f"../{xgenerator_path}/data/{ckpt_num}/seq2seq.pth",
+                f"{xgenerator_path}/data/{ckpt_num}/seq2seq.pth",
                 map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
             )
         )
@@ -383,6 +383,8 @@ class GeneratedInstruction(Sensor):
             return self.previous_instruction
         else:
             image_seqs, action_seqs = self.get_obs_seqs()
+            if image_seqs is None and action_seqs is None:
+                return torch.from_numpy(np.array([PAD_IDX for _ in range(self.max_instr_len)])).cuda()
             generated_instruction = self.generate_instruction(image_seqs, action_seqs, batch_size)
             self.previous_instruction = generated_instruction
             return generated_instruction
@@ -400,6 +402,9 @@ class GeneratedInstruction(Sensor):
         action_seqs_list = []
         if self.future_or_past == "future":
             oracle_actions = self._sim.get_oracle_actions_from_current_pos()
+            assert oracle_actions is not None, "oracle_action is None. Maybe you are trying ss1-objnav?":
+            # TODO ss1-objnavはゴール地点がgridとして存在しないことがある
+            # return None, None
         elif self.future_or_past == "past":
             self._sim._previous_step_collided = self._sim.k_prev_previous_step_collided[0]
             self._sim._is_episode_active = True
@@ -631,6 +636,7 @@ class NormalizedDistanceToGoal(Measure):
         self._config = config
 
         super().__init__()
+        self._metric = 1.0
 
     def _get_uuid(self, *args: Any, **kwargs: Any):
         return "normalized_distance_to_goal"
@@ -640,8 +646,8 @@ class NormalizedDistanceToGoal(Measure):
         self._start_end_episode_distance = task.measurements.measures[
             DistanceToGoal.cls_uuid
         ].get_metric()
-
-        self._metric = None
+        
+        self._metric = 1.0
 
     def update_metric(
         self, *args: Any, episode, action, task: EmbodiedTask, **kwargs: Any

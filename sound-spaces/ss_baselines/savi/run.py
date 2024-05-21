@@ -24,8 +24,9 @@ warnings.filterwarnings('ignore', category=UserWarning)
 import tensorflow as tf
 import torch
 
-from ss_baselines.common.baseline_registry import baseline_registry
-from ss_baselines.savi.config.default import get_config
+from ss_baselines.common.baseline_registry import baseline_registry 
+from ss_baselines.savi.config.default import get_config as ss_get_config
+from habitat_baselines.config.default import get_config as habitat_get_config
 from ss_baselines.savi.ppo.policy import AudioNavSMTNet
 
 
@@ -100,7 +101,13 @@ def main():
         args.opts += ['EVAL_CKPT_PATH_DIR', best_ckpt_path]
 
     # run exp
-    config = get_config(args.exp_config, args.opts, args.model_dir, args.run_type, args.overwrite)
+    if "ss_baselines" in args.exp_config:
+        config = ss_get_config(args.exp_config, args.opts, args.model_dir, args.run_type, args.overwrite)
+    elif "habitat_baselines" in args.exp_config:
+        config = habitat_get_config(args.exp_config, args.opts, args.model_dir)
+    else:
+        raise Exception(f"args.exp_config: {args.exp_config}")
+    
     trainer_init = baseline_registry.get_trainer(config.TRAINER_NAME)
     assert trainer_init is not None, f"{config.TRAINER_NAME} is not supported"
     trainer = trainer_init(config)

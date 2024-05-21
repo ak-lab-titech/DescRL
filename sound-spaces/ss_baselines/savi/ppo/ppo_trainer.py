@@ -977,9 +977,10 @@ class PPOTrainer(BaseRLTrainer):
             for i in range(len(dones)):
                 if dones[i]:
                     step_cnt[i] = 0
-                    with open(f"{self.config.VIDEO_DIR}/confidences.pickle", mode="wb") as f:
-                        pickle.dump(confidences, f)
-                    confidences.append([])
+                    if len(self.config.VIDEO_OPTION) > 0:
+                        with open(f"{self.config.VIDEO_DIR}/confidences.pickle", mode="wb") as f:
+                            pickle.dump(confidences, f)
+                        confidences.append([])
                 if dones[i] and self.use_direct_map:
                     predict_direct_map[i].copy_(torch.zeros(self.direct_map_size))
 
@@ -1026,6 +1027,7 @@ class PPOTrainer(BaseRLTrainer):
                     episode_stats['euclidean_distance'] = norm(np.array(current_episodes[i].goals[0].position) -
                                                                np.array(current_episodes[i].start_position))
                     episode_stats['audio_duration'] = int(current_episodes[i].duration)
+                    # episode_stats['audio_duration'] = 500 # TODO
                     # episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
                     logging.info(episode_stats)
                     if self.config.RL.PPO.use_belief_predictor:

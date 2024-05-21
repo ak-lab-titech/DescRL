@@ -4,6 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import warnings
 from typing import List, Optional, Union
 
@@ -225,10 +226,19 @@ _C.PROFILING.NUM_STEPS_TO_CAPTURE = -1
 
 _C.register_renamed_key
 
+# objenav using smt
+_C.DEBUG = False
+_C.USE_SYNC_VECENV = False
+_C.USE_VECENV = True
+_C.USE_LAST_CKPT = False
+_C.SEED = 0
+_C.DISPLAY_RESOLUTION = 128
+
 
 def get_config(
     config_paths: Optional[Union[List[str], str]] = None,
     opts: Optional[list] = None,
+    model_dir: Optional[str] = None,
 ) -> CN:
     r"""Create a unified config with default values overwritten by values from
     :ref:`config_paths` and overwritten by options from :ref:`opts`.
@@ -257,6 +267,18 @@ def get_config(
                 config.BASE_TASK_CONFIG_PATH = v
 
     config.TASK_CONFIG = get_task_config(config.BASE_TASK_CONFIG_PATH)
+    config.TASK_CONFIG.defrost()
+    config.TASK_CONFIG.SIMULATOR.USE_SYNC_VECENV = config.USE_SYNC_VECENV
+    config.TASK_CONFIG.freeze()
+
+    assert model_dir is not None, "Should specify model_dir."
+
+    config.MODEL_DIR = model_dir
+    config.TENSORBOARD_DIR = os.path.join(config.MODEL_DIR, 'tb')
+    config.CHECKPOINT_FOLDER = os.path.join(config.MODEL_DIR, 'data')
+    config.VIDEO_DIR = os.path.join(config.MODEL_DIR, 'video_dir')
+    config.LOG_FILE = os.path.join(config.MODEL_DIR, 'train.log')
+    config.EVAL_CKPT_PATH_DIR = os.path.join(config.MODEL_DIR, 'data')
 
     # In case the config specifies overrides for the TASK_CONFIG, we
     # remerge the files here

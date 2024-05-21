@@ -143,6 +143,8 @@ class VisualImageEncoder(nn.Module):
             last_layer_size = 12544
         elif image_shape[0] == 128 and image_shape[1] == 128:
             last_layer_size = 2304
+        elif image_shape[0] == 480 and image_shape[1] ==  640:
+            last_layer_size = 68096
         else:
             raise Exception(
                 f"image shape mast be (256, 256) or (128, 128), not ({image_shape[0]}, {image_shape[1]})"

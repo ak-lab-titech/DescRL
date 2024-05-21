@@ -792,6 +792,7 @@ _C.SIMULATOR.FISHEYE_SEMANTIC_SENSOR.TYPE = "HabitatSimFisheyeSemanticSensor"
 # AGENT
 # -----------------------------------------------------------------------------
 _C.SIMULATOR.AGENT_0 = CN()
+_C.SIMULATOR.AGENT_0.SOUND_ID = None
 _C.SIMULATOR.AGENT_0.HEIGHT = 1.5
 _C.SIMULATOR.AGENT_0.RADIUS = 0.1
 _C.SIMULATOR.AGENT_0.SENSORS = ["RGB_SENSOR"]
@@ -894,6 +895,11 @@ _C.GYM.FIX_INFO_DICT = True
 _C.register_deprecated_key("TASK.SUCCESS_DISTANCE")
 # -----------------------------------------------------------------------------
 
+# objnav using SMT
+_C.TASK.POSE_SENSOR = CN()
+_C.TASK.POSE_SENSOR.TYPE = "PoseSensor"
+_C.TASK.GENERATED_INSTRUCTION = CN()
+_C.TASK.GENERATED_INSTRUCTION.TYPE = "GeneratedInstruction"
 
 def get_config(
     config_paths: Optional[Union[List[str], str]] = None,
