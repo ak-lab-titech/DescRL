@@ -37,9 +37,9 @@ elif [ $CMD = "test" ]; then
     ./test.sh
 elif [ $CMD = "video" ]; then
     ./video.sh
-elif [ $CMD = "make_dataset" ]; then
+elif [ $CMD = "make-dataset" ]; then
     ./make_dataset.sh
-elif [ $CMD = "plot_tb_data" ]; then
+elif [ $CMD = "plot-tb-data" ]; then
     ./plot_tb_data.sh
 else
     echo ERROR: CMD must be 'multi-gpu-train', 'single-gpu-train', 'test', 'video', 'make_dataset', or 'plot_tb_data', not $CMD.

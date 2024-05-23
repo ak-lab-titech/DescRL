@@ -55,14 +55,17 @@ def get_obs_seq(num_step, sim, episode):
         
         audio = sim.get_current_spectrogram_observation(compute_spectrogram)
         pose = compute_pose(episode, sim.get_agent_state(), i)
-        action = oracle_actions[i]
+        if i == 0:
+            save_action = 0
+        else:
+            save_action = oracle_actions[i-1]
 
         image_seq_list.append([image])
         audio_seq_list.append([audio])
         pose_seq_list.append([pose])
-        action_seq_list.append([action])
+        action_seq_list.append([save_action])
 
-        sim.step(action)
+        sim.step(oracle_actions[i])
 
     image_seq = np.array(image_seq_list)
     audio_seq = np.array(audio_seq_list)
@@ -78,6 +81,7 @@ def make_episode_data(sim_cfg, sim, episode):
     _ = sim.reset()
     
     num_step = np.random.randint(1, episode.info["num_action"])
+    # num_step = episode.info["num_action"] - 1
     category = get_category(episode)
     location = compute_pointgoal_with_gps_compass(sim.get_agent_state(), episode)
     image_seq, audio_seq, pose_seq, action_seq = get_obs_seq(num_step, sim, episode)

@@ -181,7 +181,7 @@ class PPO(nn.Module):
                         gt_progress = obs_batch["progress_monitor"]
                         iprl_loss += self.predict_progress_loss(predicted_progress.view(-1, predicted_progress.shape[-1]), gt_progress.reshape(-1))
                     
-                    if aux_infos["predicted_action"] is not None
+                    if aux_infos["predicted_action"] is not None:
                         predicted_action = aux_infos["predicted_action"]
                         gt_action = obs_batch["next_optimal_action"]
                         iprl_loss += self.predict_action_loss(predicted_action.view(-1, predicted_action.shape[-1]), gt_action.reshape(-1).long())

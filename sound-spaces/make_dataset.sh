@@ -1,7 +1,7 @@
 #!/bin/bash
 
 CMD="offpolicy_episode_dataset"
-DATASET_NAME="iprl_pretrain"
+DATASET_NAME="train"
 START_INDEX=0
 FUTURE_OR_PAST="future"
 
@@ -29,12 +29,12 @@ elif [ $CMD = "generate_instruction" ]; then
 elif [ $CMD = "offpolicy_episode_dataset" ]; then
     python ss_baselines/savi/iprl_pretraining/scripts/make_episode_dataset.py \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
-        --save-dataset-path ./data/lmdb_dataset/$DATASET_NAME \
+        --save-dataset-path ./data/lmdb_dataset/iprl_pretrain/$DATASET_NAME \
         --start-index $START_INDEX
 elif [ $CMD = "sub_episode_dataset" ]; then
     python ss_baselines/savi/iprl_pretraining/scripts/make_sub_episode_dataset.py \
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
-        --source-dataset-path ./data/lmdb_dataset/iprl_pretrain_train \
+        --source-dataset-path ./data/lmdb_dataset/iprl_pretrain/train \
         --source-data-num 502103 \
         --data-num 10000
 else

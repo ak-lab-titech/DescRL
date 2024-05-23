@@ -517,7 +517,7 @@ class GeneratedInstruction(Sensor):
         action_seqs_list = []
         if self.future_or_past == "future":
             oracle_actions = self._sim.get_oracle_actions_from_current_pos()
-            assert oracle_actions is not None, "oracle_action is None. Maybe you are trying ss1-objnav?":
+            assert oracle_actions is not None, "oracle_action is None. Maybe you are trying ss1-objnav?"
             # TODO ss1-objnavはゴール地点がgridとして存在しないことがある
             # return None, None
         elif self.future_or_past == "past":

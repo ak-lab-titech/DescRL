@@ -133,17 +133,20 @@ def get_obs_seqs_for_xpred(sim, episode):
         audio = sim.get_current_spectrogram_observation(compute_spectrogram)
         pose = compute_pose(episode, sim.get_agent_state(), cnt)
 
-        action = oracle_actions[cnt] # TODO ここXPredictorにするなら変えるべきか？
+        if cnt == 0:
+            save_pathaction = 0
+        else:
+            save_action = oracle_actions[cnt-1]
         # action_onehot = np.eye(4)[action].astype(np.int8)
 
         image_seqs_list.append([image])
         audio_seqs_list.append([audio])
         pose_seqs_list.append([pose])
-        action_seqs_list.append([[action]])
+        action_seqs_list.append([[save_action]])
 
         if action == 0:
             break
-        sim.step(action)
+        sim.step(oracle_actions[cnt])
         cnt += 1
 
     image_seqs = np.array(image_seqs_list)
@@ -312,7 +315,10 @@ def main(
     scene_file_names = [
         f for f in os.listdir(content_scenes_path) if os.path.isfile(os.path.join(content_scenes_path, f))
     ]
+    # for train
     dict_dataset = {f: {'episodes': [], 'scene': f.split('/')[0]} for f in scene_file_names}
+
+    # for val & test
     # dict_dataset = {}
 
     # step_num_for_FEPRL = 5 # for F-EPRL
