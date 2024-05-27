@@ -35,6 +35,8 @@ elif [ $CMD = "single-gpu-train" ]; then
     ./train.sh
 elif [ $CMD = "eval" ]; then
     ./eval.sh
+elif [ $CMD = "test" ]; then
+    ./test.sh
 else
     echo ERROR: CMD=$CMD.
 fi

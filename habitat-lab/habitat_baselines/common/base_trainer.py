@@ -128,6 +128,7 @@ class BaseTrainer:
                         checkpoint_path=current_ckpt,
                         writer=writer,
                         checkpoint_index=prev_ckpt_ind,
+                        dump_config=False,
                     )
 
     def _eval_checkpoint(

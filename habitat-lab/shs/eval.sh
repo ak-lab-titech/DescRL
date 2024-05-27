@@ -1,9 +1,9 @@
 #!/bin/bash
 
-ENV="ss1-objnav"
+ENV="habitat-objnav"
 SCENE_DATASET="mp3d"
-MODEL="smt"
-MODEL_NAME="baseline-ss1-FEPRL"
+MODEL="rnn"
+MODEL_NAME="baseline"
 PREV_CKPT_IND=-1
 TEST_EPISODE_COUNT=100
 
@@ -16,7 +16,7 @@ echo MODEL_NAME=$MODEL_NAME
 source /gs/fs/tga-aklab/hkondo/anaconda3/etc/profile.d/conda.sh
 conda activate av-nav
 
-if [ $ENV = "ss1-objnav" ] && [ $MODEL = "smt" ]; then
+if [ $ENV = "ss1-objnav" ] && [ $MODEL = "smt" ] && [ $SCENE_DATASET = "mp3d" ]; then
     cd ~/navigation/myss
     python ./sound-spaces/ss_baselines/savi/run.py \
         --exp-config ./habitat-lab/habitat_baselines/config/objectnav/ddppo_smt.yaml \
@@ -31,8 +31,19 @@ if [ $ENV = "ss1-objnav" ] && [ $MODEL = "smt" ]; then
         RL.DDPPO.pretrained False \
         RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
         RL.PPO.INSTRUCTION_PREDICTOR.feedback "student"
+elif [ $ENV = "habitat-objnav" ] && [ $MODEL = "rnn" ] && [ $SCENE_DATASET = "mp3d" ]; then
+    cd ~/navigation/myss/habitat-lab
+    python habitat_baselines/run.py \
+        --run-type eval \
+        --exp-config ./habitat_baselines/config/objectnav/ddppo_objectnav.yaml \
+        --model-dir ./data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
+        LOG_FILE ./data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/eval.log \
+        TENSORBOARD_DIR ./data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/tb_eval \
+        EVAL.SPLIT val \
+        TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
+        TRAINER_NAME ppo \
+        NUM_ENVIRONMENTS 11 \
+        NUM_PROCESSES 11
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL.
 fi
-
-

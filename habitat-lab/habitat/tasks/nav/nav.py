@@ -795,6 +795,37 @@ class SoftSPL(SPL):
 
 
 @registry.register_measure
+class NA(Measure):
+    r""" Number of actions
+
+    ref: On Evaluation of Embodied Agents - Anderson et. al
+    https://arxiv.org/pdf/1807.06757.pdf
+    """
+
+    def __init__(
+        self, *args: Any, sim: Simulator, config: Config, **kwargs: Any
+    ):
+        self._agent_num_action = None
+        self._sim = sim
+        self._config = config
+
+        super().__init__()
+
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "na"
+
+    def reset_metric(self, *args: Any, episode, **kwargs: Any):
+        self._agent_num_action = 0
+        self._metric = None
+
+    def update_metric(
+        self, *args: Any, episode, action, task: EmbodiedTask, **kwargs: Any
+    ):
+        self._agent_num_action += 1
+        self._metric = self._agent_num_action
+
+
+@registry.register_measure
 class Collisions(Measure):
     def __init__(self, sim, config, *args: Any, **kwargs: Any):
         self._sim = sim

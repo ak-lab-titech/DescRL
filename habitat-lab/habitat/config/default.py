@@ -900,6 +900,8 @@ _C.TASK.POSE_SENSOR = CN()
 _C.TASK.POSE_SENSOR.TYPE = "PoseSensor"
 _C.TASK.GENERATED_INSTRUCTION = CN()
 _C.TASK.GENERATED_INSTRUCTION.TYPE = "GeneratedInstruction"
+_C.TASK.NUM_ACTION = CN()
+_C.TASK.NUM_ACTION.TYPE = "NA"
 
 def get_config(
     config_paths: Optional[Union[List[str], str]] = None,

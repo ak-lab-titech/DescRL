@@ -94,7 +94,7 @@ class PPOTrainer(BaseRLTrainer):
 
         # Distributed if the world size would be
         # greater than 1
-        self._is_distributed = get_distrib_size()[2] > 1
+        self._is_distributed = self.config.TRAINER_NAME == "ddppo" and get_distrib_size()[2] > 1
         self._obs_batching_cache = ObservationBatchingCache()
 
         self.using_velocity_ctrl = (
@@ -887,6 +887,7 @@ class PPOTrainer(BaseRLTrainer):
         checkpoint_path: str,
         writer: TensorboardWriter,
         checkpoint_index: int = 0,
+        dump_config: bool = True,
     ) -> None:
         r"""Evaluates a single checkpoint.
 
@@ -929,7 +930,7 @@ class PPOTrainer(BaseRLTrainer):
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("COLLISIONS")
             config.freeze()
 
-        if config.VERBOSE:
+        if config.VERBOSE and dump_config:
             logger.info(f"env config: {config}")
 
         self._init_envs(config)
@@ -1149,6 +1150,7 @@ class PPOTrainer(BaseRLTrainer):
                 / num_episodes
             )
 
+        logger.info(f"num_episodes: {num_episodes}")
         for k, v in aggregated_stats.items():
             logger.info(f"Average episode {k}: {v:.4f}")
 
