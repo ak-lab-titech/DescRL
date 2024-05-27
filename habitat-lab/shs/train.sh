@@ -1,8 +1,8 @@
 #!/bin/bash
 
-ENV="ss1-objnav"
+ENV="habitat-objnav"
 SCENE_DATASET="mp3d"
-MODEL="smt"
+MODEL="rnn"
 MODEL_NAME="baseline"
 
 echo ENV=$ENV
@@ -20,6 +20,12 @@ if [ $ENV = "ss1-objnav" ] && [ $MODEL = "smt" ] && [ $SCENE_DATASET = "mp3d" ];
     python ./sound-spaces/ss_baselines/savi/run.py \
         --exp-config ./habitat-lab/habitat_baselines/config/objectnav/ddppo_smt.yaml \
         --model-dir ./sound-spaces/data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME
+elif [ $ENV = "habitat-objnav" ] && [ $MODEL = "rnn" ] && [ $SCENE_DATASET = "mp3d" ]; then
+    cd ~/navigation/myss/habitat-lab
+    python habitat_baselines/run.py \
+        --run-type train \
+        --exp-config ./habitat_baselines/config/objectnav/ddppo_objectnav.yaml \
+        --model-dir ./data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL, SCENE_DATASET=$SCENE_DATASET.
 fi

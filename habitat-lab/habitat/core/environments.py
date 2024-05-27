@@ -77,7 +77,8 @@ class RearrangeRLEnv(habitat.RLEnv):
 @habitat.registry.register_env(name="NavRLEnv")
 class NavRLEnv(habitat.RLEnv):
     def __init__(self, config: Config, dataset: Optional[Dataset] = None):
-        super().__init__(config.TASK_CONFIG, dataset)
+        # super().__init__(config.TASK_CONFIG, dataset) # for ss1-objnav
+        super().__init__(config, dataset)
         self._reward_measure_name = self.config.TASK.REWARD_MEASURE
         self._success_measure_name = self.config.TASK.SUCCESS_MEASURE
 

@@ -41,7 +41,7 @@ _C.NUM_PROCESSES = -1  # depricated
 _C.SENSORS = ["RGB_SENSOR", "DEPTH_SENSOR"]
 _C.CHECKPOINT_FOLDER = "data/checkpoints"
 _C.NUM_UPDATES = 10000
-_C.NUM_CHECKPOINTS = 10
+_C.NUM_CHECKPOINTS = -1
 # Number of model updates between checkpoints
 _C.CHECKPOINT_INTERVAL = -1
 _C.TOTAL_NUM_STEPS = -1.0

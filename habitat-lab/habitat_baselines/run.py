@@ -6,6 +6,13 @@
 
 import argparse
 import random
+import os
+import warnings
+
+os.environ['MAGNUM_LOG'] = "quiet"
+os.environ['HABITAT_SIM_LOG'] = "quiet"
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=UserWarning)
 
 import numpy as np
 import torch
@@ -28,6 +35,12 @@ def main():
         type=str,
         required=True,
         help="path to config yaml containing info about experiment",
+    )
+    parser.add_argument(
+        "--model-dir",
+        type=str,
+        required=True,
+        help="path to the model's directory",
     )
     parser.add_argument(
         "opts",
@@ -62,7 +75,7 @@ def execute_exp(config: Config, run_type: str) -> None:
         trainer.eval()
 
 
-def run_exp(exp_config: str, run_type: str, opts=None) -> None:
+def run_exp(exp_config: str, run_type: str, model_dir: str, opts=None) -> None:
     r"""Runs experiment given mode and config
 
     Args:
@@ -73,9 +86,12 @@ def run_exp(exp_config: str, run_type: str, opts=None) -> None:
     Returns:
         None.
     """
-    config = get_config(exp_config, opts)
+    config = get_config(exp_config, opts, model_dir)
     execute_exp(config, run_type)
 
 
 if __name__ == "__main__":
+    f = open("debug.txt", "w")
+    f.write(f"habitat_baselines/run.py!\n")
+    f.close()
     main()

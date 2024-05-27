@@ -211,6 +211,18 @@ def get_ifname() -> str:
 
 
 def get_distrib_size() -> Tuple[int, int, int]:
+    WORLD_SIZE = int(os.getenv("NP"))
+    NNODES = int(os.getenv("NNODES"))
+    NPERNODE = int(os.getenv("NPERNODE"))
+
+    rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
+    os.environ["NODE_RANK"]=str(rank//NPERNODE)
+    os.environ["LOCAL_RANK"]=str(rank%NPERNODE)
+    os.environ["RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(WORLD_SIZE)
+    os.environ["NNODES"] = str(NNODES)
+
+
     # Check to see if we should parse from torch.distributed.launch
     if os.environ.get("LOCAL_RANK", None) is not None:
         local_rank = int(os.environ["LOCAL_RANK"])
@@ -261,6 +273,7 @@ def init_distrib_slurm(
         )
     main_addr = os.environ.get("MAIN_ADDR", DEFAULT_MAIN_ADDR)
 
+    # world_size = 1
     tcp_store = distrib.TCPStore(  # type: ignore
         main_addr, main_port, world_size, world_rank == 0
     )

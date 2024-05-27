@@ -45,7 +45,7 @@ _C.ENVIRONMENT.ITERATOR_OPTIONS.STEP_REPETITION_RANGE = 0.2
 _C.TASK = CN()
 _C.TASK.REWARD_MEASURE = "distance_to_goal"
 _C.TASK.SUCCESS_MEASURE = "spl"
-_C.TASK.SUCCESS_REWARD = 2.5
+_C.TASK.SUCCESS_REWARD = 10.0 # 2.5
 _C.TASK.SLACK_REWARD = -0.01
 _C.TASK.END_ON_SUCCESS = False
 # -----------------------------------------------------------------------------
@@ -792,7 +792,7 @@ _C.SIMULATOR.FISHEYE_SEMANTIC_SENSOR.TYPE = "HabitatSimFisheyeSemanticSensor"
 # AGENT
 # -----------------------------------------------------------------------------
 _C.SIMULATOR.AGENT_0 = CN()
-_C.SIMULATOR.AGENT_0.SOUND_ID = None
+# _C.SIMULATOR.AGENT_0.SOUND_ID = None
 _C.SIMULATOR.AGENT_0.HEIGHT = 1.5
 _C.SIMULATOR.AGENT_0.RADIUS = 0.1
 _C.SIMULATOR.AGENT_0.SENSORS = ["RGB_SENSOR"]

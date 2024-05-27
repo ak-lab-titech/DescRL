@@ -4,17 +4,14 @@ ENV_NAME: "NavRLEnv"
 SIMULATOR_GPU_ID: 0
 TORCH_GPU_ID: 0
 VIDEO_OPTION: []
-TENSORBOARD_DIR: "tb"
-VIDEO_DIR: "video_dir"
 TEST_EPISODE_COUNT: -1
-EVAL_CKPT_PATH_DIR: "data/new_checkpoints"
-NUM_ENVIRONMENTS: 4
-CHECKPOINT_FOLDER: "data/new_checkpoints"
+NUM_ENVIRONMENTS: 20
+NUM_PROCESSES: 20
 TRAINER_NAME: "ddppo"
 SENSORS: ["DEPTH_SENSOR", "RGB_SENSOR"]
 NUM_UPDATES: 270000
 LOG_INTERVAL: 10
-NUM_CHECKPOINTS: 100
+CHECKPOINT_INTERVAL: 100
 # Force PyTorch to be single threaded as
 # this improves performance considerably
 FORCE_TORCH_SINGLE_THREADED: True
@@ -23,9 +20,6 @@ EVAL:
   SPLIT: "val"
 
 RL:
-  SUCCESS_REWARD: 2.5
-  SLACK_REWARD: -1e-3
-
   POLICY:
     name: "PointNavResNetPolicy"
 

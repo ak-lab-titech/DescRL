@@ -2,8 +2,8 @@
 #$ -cwd
 #$ -l node_f=1
 #$ -j y
-#$ -l h_rt=31:00:00
-#$ -o habitat-lab/output/o.$JOB_ID
+#$ -l h_rt=24:00:00
+#$ -o output/o.$JOB_ID
 
 
 CMD="multi-gpu-train"
