@@ -595,6 +595,34 @@ def observations_to_image(observation: Dict, info: Dict, pred=None) -> np.ndarra
             agent_rotation=info["top_down_map"]["agent_angle"],
             agent_radius_px=top_down_map.shape[0] // 16,
         )
+        if "objectgoal"in observation.keys():
+            objectgoal_label2idx = {
+                'chair': 0,
+                'table': 1,
+                'picture': 2,
+                'cabinet': 3,
+                'cushion': 4,
+                'sofa': 5,
+                'bed': 6,
+                'chest_of_drawers': 7,
+                'plant': 8,
+                'sink': 9,
+                'toilet': 10,
+                'stool': 11,
+                'towel': 12,
+                'tv_monitor': 13,
+                'shower': 14,
+                'bathtub': 15,
+                'counter': 16,
+                'fireplace': 17,
+                'gym_equipment': 18,
+                'seating': 19,
+                'clothes': 20
+            }
+            objectgoal_idx2label = {v: k for k, v in objectgoal_label2idx.items()}
+            objectgoal_label = objectgoal_idx2label[observation["objectgoal"][0]]
+            top_down_map = add_category_text(objectgoal_label, top_down_map, observation_size, (255, 0, 0))
+        
         if pred is not None:
             # prediction
             top_down_map = add_vector(

@@ -118,7 +118,8 @@ class BaseRLTrainer(BaseTrainer):
                     self._eval_checkpoint(
                         checkpoint_path=current_ckpt,
                         writer=writer,
-                        checkpoint_index=prev_ckpt_ind
+                        checkpoint_index=prev_ckpt_ind,
+                        dump_config=False,
                     )
 
     def _setup_eval_config(self, checkpoint_config: Config) -> Config:

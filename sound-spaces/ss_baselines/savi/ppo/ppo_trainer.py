@@ -733,7 +733,8 @@ class PPOTrainer(BaseRLTrainer):
         self,
         checkpoint_path: str,
         writer: TensorboardWriter,
-        checkpoint_index: int = 0
+        checkpoint_index: int = 0,
+        dump_config: bool = True,
     ) -> Dict:
         r"""Evaluates a single checkpoint.
 
@@ -781,7 +782,8 @@ class PPOTrainer(BaseRLTrainer):
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
             config.freeze()
 
-        logger.info(f"env config: {config}")
+        if dump_config:
+            logger.info(f"env config: {config}")
         self.envs = construct_envs(
             config, get_env_class(config.ENV_NAME)
         )
@@ -990,7 +992,13 @@ class PPOTrainer(BaseRLTrainer):
                         pred = descriptor_pred_gt[i][-1]
                     else:
                         pred = None
-                    if config.TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE and 'intermediate' in observations[i]:
+                    if (
+                        hasattr(config.TASK_CONFIG.SIMULATOR, "CONTINUOUS_VIEW_CHANG")
+                     ) and (
+                        config.TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANG
+                     ) and (
+                        'intermediate' in observations[i]
+                     ):
                         for observation in original_observations[i]['intermediate']:
                             frame = observations_to_image(observation, infos[i], pred=pred)
                             rgb_frames[i].append(frame)
@@ -1001,7 +1009,9 @@ class PPOTrainer(BaseRLTrainer):
                                                            self.config.DISPLAY_RESOLUTION, 3))
                     frame = observations_to_image(original_observations[i], infos[i], pred=pred)
                     rgb_frames[i].append(frame)
-                    audios[i].append(original_observations[i]['audiogoal'])
+
+                    if "audiogoal" in original_observations[i].keys():
+                        audios[i].append(original_observations[i]['audiogoal'])
 
             rewards = torch.tensor(
                 rewards, dtype=torch.float, device=self.device
@@ -1026,8 +1036,10 @@ class PPOTrainer(BaseRLTrainer):
                     episode_stats['geodesic_distance'] = current_episodes[i].info['geodesic_distance']
                     episode_stats['euclidean_distance'] = norm(np.array(current_episodes[i].goals[0].position) -
                                                                np.array(current_episodes[i].start_position))
-                    episode_stats['audio_duration'] = int(current_episodes[i].duration)
-                    # episode_stats['audio_duration'] = 500 # TODO
+                    if "habitat-lab" in checkpoint_path:
+                        episode_stats['audio_duration'] = 500
+                    else:
+                        episode_stats['audio_duration'] = int(current_episodes[i].duration)
                     # episode_stats['gt_na'] = int(current_episodes[i].info['num_action'])
                     logging.info(episode_stats)
                     if self.config.RL.PPO.use_belief_predictor:
@@ -1046,8 +1058,14 @@ class PPOTrainer(BaseRLTrainer):
                     t.update()
 
                     if len(self.config.VIDEO_OPTION) > 0:
-                        fps = self.config.TASK_CONFIG.SIMULATOR.VIEW_CHANGE_FPS \
-                                    if self.config.TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE else 1
+                        if (
+                            hasattr(self.config.TASK_CONFIG.SIMULATOR, "CONTINUOUS_VIEW_CHANGE")
+                        ) and (
+                            self.config.TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE
+                        ):
+                            fps = self.config.TASK_CONFIG.SIMULATOR.VIEW_CHANGE_FPS
+                        else:
+                            fps = 1
                         if 'sound' in current_episodes[i].info:
                             sound = current_episodes[i].info['sound']
                         else:
@@ -1065,7 +1083,7 @@ class PPOTrainer(BaseRLTrainer):
                             metric_name='spl',
                             metric_value=infos[i]['spl'],
                             tb_writer=writer,
-                            audios=audios[i][:-1],
+                            audios=audios[i][:-1] if audios[i] != [] else None,
                             fps=fps
                         )
 

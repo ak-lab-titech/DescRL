@@ -25,8 +25,9 @@ import tensorflow as tf
 import torch
 
 from ss_baselines.common.baseline_registry import baseline_registry 
-from ss_baselines.savi.config.default import get_config as ss_get_config
+# habitat_baselinesの方のget_configを後に呼ぶと、ddppoを指定した時のtrainerがhabitat-labのPPOTrainerになる
 from habitat_baselines.config.default import get_config as habitat_get_config
+from ss_baselines.savi.config.default import get_config as ss_get_config
 from ss_baselines.savi.ppo.policy import AudioNavSMTNet
 
 

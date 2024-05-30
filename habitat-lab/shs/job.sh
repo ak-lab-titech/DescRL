@@ -37,6 +37,8 @@ elif [ $CMD = "eval" ]; then
     ./eval.sh
 elif [ $CMD = "test" ]; then
     ./test.sh
+elif [ $CMD = "video" ]; then
+    ./video.sh
 else
     echo ERROR: CMD=$CMD.
 fi

@@ -656,7 +656,7 @@ class PPOTrainer(BaseRLTrainer):
         deltas["count"] = max(deltas["count"], 1.0)
 
         writer.add_scalar(
-            "reward",
+            "Metrics/reward",
             deltas["reward"] / deltas["count"],
             self.num_steps_done,
         )
@@ -670,12 +670,12 @@ class PPOTrainer(BaseRLTrainer):
         }
 
         for k, v in metrics.items():
-            writer.add_scalar(f"metrics/{k}", v, self.num_steps_done)
+            writer.add_scalar(f"Metrics/{k}", v, self.num_steps_done)
         for k, v in losses.items():
-            writer.add_scalar(f"losses/{k}", v, self.num_steps_done)
+            writer.add_scalar(f"Policy/{k}", v, self.num_steps_done)
 
         fps = self.num_steps_done / ((time.time() - self.t_start) + prev_time)
-        writer.add_scalar("metrics/fps", fps, self.num_steps_done)
+        writer.add_scalar("Metrics/fps", fps, self.num_steps_done)
 
         # log stats
         if self.num_updates_done % self.config.LOG_INTERVAL == 0:
@@ -1159,11 +1159,11 @@ class PPOTrainer(BaseRLTrainer):
             step_id = ckpt_dict["extra_state"]["step"]
 
         writer.add_scalar(
-            "eval_reward/average_reward", aggregated_stats["reward"], step_id
+            "val/reward", aggregated_stats["reward"], checkpoint_index
         )
 
         metrics = {k: v for k, v in aggregated_stats.items() if k != "reward"}
         for k, v in metrics.items():
-            writer.add_scalar(f"eval_metrics/{k}", v, step_id)
+            writer.add_scalar(f"val/{k}", v, checkpoint_index)
 
         self.envs.close()
