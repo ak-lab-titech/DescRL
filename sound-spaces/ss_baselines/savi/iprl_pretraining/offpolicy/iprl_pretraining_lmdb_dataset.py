@@ -121,7 +121,7 @@ if __name__=="__main__":
     dataset = IPRLPretrainingLMDBDataset(
         config.TASK_CONFIG,
         f"{type_of_dataset}_w_instruction" if future_or_past == "future" else f"{type_of_dataset}_w_{future_or_past}_instruction",
-        f"./data/lmdb_dataset/iprl_pretrain_{type_of_dataset}",
+        f"./data/lmdb_dataset/iprl_pretrain/{type_of_dataset}",
         100,
     )
     for i in range(len(dataset)):
