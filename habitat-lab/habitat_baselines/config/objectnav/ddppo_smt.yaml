@@ -84,5 +84,5 @@ RL:
     backbone: "custom_resnet18"
     # choose the best pretrained SAVi based on validation curve
     pretrained_weights: "data/models/savi/data/ckpt.XXX.pth"
-    pretrained: True
+    pretrained: False
     reset_critic: False

@@ -716,7 +716,12 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             location = belief[:, 21:21+2*self.goal_num]
         
         if self.feedback == "teacher":
-            target = observations["generated_instruction"] # (batch, instr_len)
+            if "generated_instruction" in observations.keys():
+                target = observations["generated_instruction"] # (batch, instr_len)
+            elif "habitat_sim_generated_instruction" in observations.keys():
+                target = observations["habitat_sim_generated_instruction"] # (batch, instr_len)
+            else:
+                raise Exception(f"feedback type is teacher, but there is no generated instruction.")
         elif self.feedback == "student":
             target = None
         else:

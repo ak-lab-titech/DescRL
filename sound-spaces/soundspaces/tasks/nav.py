@@ -446,6 +446,9 @@ class GeneratedInstruction(Sensor):
         self.max_instr_len = kwargs["task"]._config["GENERATED_INSTRUCTION"]["MAX_INSTRUCTION_LENGTH"]
         self.future_step_num = kwargs["task"]._config["GENERATED_INSTRUCTION"]["FUTURE_STEP_NUM"]
         self.future_or_past = kwargs["task"]._config["GENERATED_INSTRUCTION"]["FUTURE_OR_PAST"]
+        if self.future_or_past == "past":
+            self._sim.prev_k = kwargs["task"]._config["GENERATED_INSTRUCTION"]["FUTURE_STEP_NUM"]
+        
         f = open("debug.txt", "a")
         f.write(f"self.future_or_past: {self.future_or_past}\n")
         f.close()
@@ -669,6 +672,76 @@ class GeneratedInstruction(Sensor):
             axis=-1,
         )
         return observation
+
+
+@registry.register_sensor
+class HabitatSimGeneratedInstruction(GeneratedInstruction):
+    """
+    Generated instruction for Habitat Simualtor.
+    """
+    cls_uuid: str = "habitat_sim_generated_instruction"
+
+    def __init__(self, *args: Any, sim: Simulator, config: Config, **kwargs: Any) -> None:
+        super().__init__(sim=sim, config=config, **kwargs)
+    
+    def _get_uuid(self, *args: Any, **kwargs: Any):
+        return "habitat_sim_generated_instruction"
+    
+    def get_observation(self, *args: Any, observations, episode: Episode, **kwargs: Any):
+        batch_size = 1 # this must be 1
+        assert batch_size == 1, "batch_size must be 1 in GeneratedInstruction"
+
+        goal_poss = [goal.position for goal in episode.goals]
+
+        if self._sim.previous_step_collided:
+            return self.previous_instruction
+        else:
+            if self.future_or_past == "future":
+                raise NotImplementedError("self.future_or_past == 'future'")
+                # image_seqs, action_seqs = self.get_future_obs_seqs(goal_poss)
+            elif self.future_or_past == "past":
+                image_seqs, action_seqs = self.get_past_obs_seqs()
+            else:
+                raise Exception(f"future_or_past: {self.future_or_past}")
+
+            generated_instruction = self.generate_instruction(image_seqs, action_seqs, batch_size)
+            self.previous_instruction = generated_instruction
+            return generated_instruction
+    
+    def get_past_obs_seqs(self):
+        image_seqs = np.array(self._sim.k_prev_images)
+        if len(self._sim.k_prev_actions) == 0:
+            action_seqs = np.eye(4)[0].astype(np.int8).reshape(1, 1, 4)
+        if len(self._sim.k_prev_actions) < self._sim.prev_k:
+            action_seqs = np.array(list(self._sim.k_prev_actions) + [[np.eye(4)[0].astype(np.int8)]])
+        else:
+            action_seqs = np.array(list(self._sim.k_prev_actions)[1:] + [[np.eye(4)[0].astype(np.int8)]])
+
+        image_seqs = torch.from_numpy(image_seqs)
+        action_seqs = torch.from_numpy(action_seqs)
+        if torch.cuda.is_available():
+            image_seqs = image_seqs.cuda()
+            action_seqs = action_seqs.cuda()
+        
+        return image_seqs, action_seqs
+    
+    def get_future_obs_seqs(self, goal_poss):
+        raise NotImplementedError()
+        # TODO for F-EPRL
+        # current_prev_sim_obs = self._sim._prev_sim_obs
+        # current_agent_state = self._sim.get_agent_state()
+        # current_num_total_frames = self._sim._num_total_frames
+        # current_past_actions = self._sim.past_actions
+
+        # print(f"current_agent_state: {current_agent_state}")
+        # print(f"current_num_total_frames: {current_num_total_frames}")
+        # print(f"current_past_actions: {current_past_actions}")
+
+        # image_seqs_list = []
+        # action_seqs_list = []
+        
+        # goal_radius = 1.0 # TODO
+        # oracle_actions = self._sim.get_oracle_actions_from_current_pos(goal_radius, goal_poss)
 
 
 @registry.register_sensor

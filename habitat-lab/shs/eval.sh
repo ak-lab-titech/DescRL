@@ -54,7 +54,6 @@ elif [ $ENV = "habitat-objnav" ] && [ $MODEL = "smt" ] && [ $SCENE_DATASET = "mp
         LOG_FILE ./habitat-lab/data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/eval.log \
         TENSORBOARD_DIR ./habitat-lab/data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/tb_eval \
         EVAL.SPLIT val \
-        USE_SYNC_VECENV True \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
         NUM_ENVIRONMENTS 11 \
         NUM_PROCESSES 11 \

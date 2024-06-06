@@ -16,13 +16,19 @@ from typing import (
     Union,
     cast,
 )
+import sys
+from collections import deque
+import time
 
 import numpy as np
 from gym import spaces
 from gym.spaces.box import Box
+import cv2
 
 if TYPE_CHECKING:
     from torch import Tensor
+
+sys.path.append("/home/4/ud02274/navigation/myss")
 
 import habitat_sim
 from habitat.core.dataset import Episode
@@ -41,6 +47,8 @@ from habitat.core.simulator import (
     VisualObservation,
 )
 from habitat.core.spaces import Space
+from habitat.sims.habitat_simulator.actions import HabitatSimActions
+from xgenerator.common.load_lmdb import d3_40_colors_rgb
 
 
 def overwrite_config(
@@ -286,6 +294,9 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         )
         self._prev_sim_obs: Optional[Observations] = None
 
+        self.past_actions = list()
+        self.prev_k = -1
+
     def create_sim_config(
         self, _sensor_suite: SensorSuite
     ) -> habitat_sim.Configuration:
@@ -393,13 +404,60 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             semantic_obs = obs["semantic"]
             semantic_obs = self._to_category_id(semantic_obs)
             obs["semantic"] = np.array(semantic_obs)
+        
+        if self.prev_k != -1:
+            self.k_prev_images.append(self.get_image_for_xgen(obs))
 
         return obs
+    
+    def get_image_for_xgen(self, obs):
+        rgb_img = obs["rgb"] / 255.0
+
+        if len(np.shape(obs["depth"])) == 4:
+            depth_img = np.squeeze(obs["depth"], axis=3)
+        else:
+            depth_img = obs["depth"]
+
+        if "semantic" in obs.keys():
+            semantic = obs["semantic"]
+            semantic = self._to_category_id(semantic)
+            semantic = np.take(
+                d3_40_colors_rgb,
+                semantic,
+                axis=0,
+            ).astype(np.uint8)
+            semantic = np.squeeze(semantic, axis=2)
+            semantic_img = semantic / 255.0
+            image = np.concatenate([rgb_img, depth_img, semantic_img], 2).astype(np.float32)
+        else:
+            image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
+        
+        xgen_resolution = 128 # TODO from config
+        image = cv2.resize(
+            image,
+            (xgen_resolution, xgen_resolution),
+        )
+        return [image]
 
     def _to_category_id(self, obs):
         scene = self.semantic_scene
         instance_id_to_label_id = {int(obj.id.split("_")[-1]): obj.category.index() for obj in scene.objects}
-        mapping = np.array([instance_id_to_label_id[i] for i in range(len(instance_id_to_label_id)) ])
+
+        if len(instance_id_to_label_id) < np.max(obs):
+            # f = open("debug.txt", "a")
+            # f.write(f"----------------------- VIO --------------------\n")
+            # f.write(f"current_scene: {self._current_scene.split('/')[-2]}\n")
+            # f.write(f"len(instance_id_to_label_id): {len(instance_id_to_label_id)}, np.max(obs): {np.max(obs)}\n")
+            # f.write(f"vio_rate: {np.sum(obs > len(instance_id_to_label_id))/(np.shape(obs)[0]*np.shape(obs)[1])}\n")
+            # f.write(f"vio_ids: {np.unique(obs[obs>len(instance_id_to_label_id)])}\n")
+            # f.write(f"------------------------------------------------\n")
+            # f.close()
+
+            for vio_id in range(len(instance_id_to_label_id), np.max(obs)+1):
+                instance_id_to_label_id[vio_id] = 0
+        
+        mapping = np.array([instance_id_to_label_id[i] for i in range(len(instance_id_to_label_id))])
+
         semantic_obs = np.take(mapping, obs)
 
         semantic_obs[semantic_obs>=40] = 0
@@ -407,6 +465,10 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         return semantic_obs
 
     def step(self, action: Union[str, np.ndarray, int]) -> Observations:
+        self.past_actions.append(action)
+        if self.prev_k != -1:
+            self.k_prev_actions.append([np.eye(4)[action].astype(np.int8)])
+        
         sim_obs = super().step(action)
         self._prev_sim_obs = sim_obs
         observations = self._sensor_suite.get_observations(sim_obs)
@@ -416,6 +478,10 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             semantic_obs = observations["semantic"]
             semantic_obs = self._to_category_id(semantic_obs)
             observations["semantic"] = np.array(semantic_obs)
+        
+        if self.prev_k != -1:
+            self.k_prev_images.append(self.get_image_for_xgen(observations))
+
         return observations
 
     def render(self, mode: str = "rgb") -> Any:
@@ -442,6 +508,10 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
     def reconfigure(
         self, habitat_config: Config, should_close_on_new_scene: bool = True
     ) -> None:
+        if self.prev_k != -1:
+            self.k_prev_actions = deque(maxlen=self.prev_k)
+            self.k_prev_images = deque(maxlen=self.prev_k)
+        
         # TODO(maksymets): Switch to Habitat-Sim more efficient caching
         is_same_scene = habitat_config.SCENE == self._current_scene
         self.habitat_config = habitat_config
@@ -453,6 +523,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             super().reconfigure(self.sim_config)
 
         self._update_agents_state()
+        self.past_actions = []
 
     def geodesic_distance(
         self,
@@ -481,6 +552,21 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             episode._shortest_path_cache = path
 
         return path.geodesic_distance
+    
+    def get_oracle_actions_from_current_pos(self, goal_radius, goal_poss):
+        raise NotImplementedError("get_oracle_actions_from_current_pos")
+        # TODO for F-EPRL
+        # follower = self.make_greedy_follower(
+        #     0,
+        #     goal_radius,
+        #     stop_key=HabitatSimActions.FOUND,
+        #     forward_key=HabitatSimActions.MOVE_FORWARD,
+        #     left_key=HabitatSimActions.TURN_LEFT,
+        #     right_key=HabitatSimActions.TURN_RIGHT,
+        # )
+        # for goal_pos in goal_poss:
+        #     oracle_actions = follower.find_path(goal_pos=goal_pos)
+        # return oracle_actions
 
     def action_space_shortest_path(
         self,

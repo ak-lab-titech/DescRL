@@ -922,12 +922,19 @@ class PPOTrainer(BaseRLTrainer):
                 
                 prev_actions.copy_(actions)
             
-            if len(self.config.VIDEO_OPTION) > 0 and 'generated_instruction' in batch.keys():
+            if (
+                len(self.config.VIDEO_OPTION) > 0
+            ) and (
+                'generated_instruction' in batch.keys() or 'habitat_sim_generated_instruction' in batch.keys()
+            ):
                 _, iprl_tokens = iprl_logits.max(2) # iprl_tokens: (instr_len, batch)
                 confidence = calc_confidence(iprl_logits)
                 confidences[-1].append(confidence)
                 iprl_sentences = tokens2sentences(iprl_tokens, lang)
-                true_sentences = tokens2sentences(batch['generated_instruction'].permute(1,0).int(), lang)
+                if 'generated_instruction' in batch.keys():
+                    true_sentences = tokens2sentences(batch['generated_instruction'].permute(1,0).int(), lang)
+                else:
+                    true_sentences = tokens2sentences(batch['habitat_sim_generated_instruction'].permute(1,0).int(), lang)
                 for i in range(len(iprl_sentences)):
                     logger.info(f"Episode {len(stats_episodes)}, Step {step_cnt[i]} (confidence: {confidence})")
                     logger.info(f"  Pred: {iprl_sentences[i]}")

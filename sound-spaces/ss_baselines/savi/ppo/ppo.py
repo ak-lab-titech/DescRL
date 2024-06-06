@@ -166,7 +166,12 @@ class PPO(nn.Module):
                     iprl_loss = 0
                     if aux_infos["logits"] is not None:
                         iprl_logits = aux_infos["logits"] # logits: (instr_len, batch, vocab_size)
-                        iprl_targets = obs_batch["generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
+                        if "generated_instruction" in obs_batch.keys():
+                            iprl_targets = obs_batch["generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
+                        elif "habitat_sim_generated_instruction" in obs_batch.keys():
+                            iprl_targets = obs_batch["habitat_sim_generated_instruction"].permute(1, 0)[1:, :].long() # (instr_len, batch)
+                        else:
+                            raise Exception("use_iprl is True, but there is no generated instruction.")
                         iprl_loss += self.iprl_loss_fn(iprl_logits.view(-1, iprl_logits.shape[-1]), iprl_targets.reshape(-1))
                         if int(os.environ["LOCAL_RANK"]) == 0 and e == 0 and self.update_cnt % 5 == 0:
                             lang = R2RLang("r2r")
