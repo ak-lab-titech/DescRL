@@ -9,7 +9,7 @@ NUM_ENVIRONMENTS: 10
 SENSORS: ["DEPTH_SENSOR", "RGB_SENSOR", "SEMANTIC_SENSOR"]
 NUM_UPDATES: 20000
 LOG_INTERVAL: 10
-CHECKPOINT_INTERVAL: 100
+CHECKPOINT_INTERVAL: 50
 # VIDEO_OPTION: ["disk"] # video
 VIDEO_OPTION: []
 VISUALIZATION_OPTION: []
@@ -54,7 +54,7 @@ RL:
       use_pretrained: False
       pretrained_path: ''
       use_xgen_visual_encoder: True
-      freeze_encoders: True
+      freeze_encoders: False
       pretraining: False
       use_belief_encoding: False
     BELIEF_PREDICTOR:

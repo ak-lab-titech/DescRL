@@ -14,7 +14,7 @@ CKPT_NUM="200"
 # CKPT_NUM="54"
 
 # for off-policy iprl pre-training
-LOG_INTERVAL=1
+LOG_INTERVAL=10
 SAVE_INTERVAL=100
 VAL_INTERVAL=100
 

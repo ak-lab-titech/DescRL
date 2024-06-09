@@ -28,8 +28,8 @@ RL:
       activation: 'relu'
       use_pretrained: False
       pretrained_path: ''
-      use_xgen_visual_encoder: False
-      freeze_encoders: True
+      use_xgen_visual_encoder: True
+      freeze_encoders: False
       pretraining: False
     BELIEF_PREDICTOR:
       online_training: False # IPRLPretrainでは学習しない。IPRLではなくこれのおかげで精度が向上してしまうかもしれないので
@@ -53,5 +53,5 @@ RL:
     distrib_backend: "NCCL" # "GLOO"
     # choose the best pretrained SAVi based on validation curve
     pretrained_weights: "data/models/savi/data/ckpt.XXX.pth"
-    pretrained: True
+    pretrained: False
     reset_critic: False
