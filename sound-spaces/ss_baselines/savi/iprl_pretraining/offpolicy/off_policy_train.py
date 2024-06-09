@@ -253,15 +253,22 @@ def train(
     
     if use_lmdb_dataset:
         train_split = config.TASK_CONFIG.DATASET.SPLIT
-        train_dataset = IPRLPretrainingLMDBDataset(
-            config.TASK_CONFIG, train_split, "./data/lmdb_dataset/iprl_pretrain_train", 502103,
-        )
+        if train_split == "train_w_instruction" or train_split == "train_w_past_instruction":
+            train_dataset = IPRLPretrainingLMDBDataset(
+                config.TASK_CONFIG, train_split, "./data/lmdb_dataset/iprl_pretrain/train", 502103,
+            )
+        elif train_split == "train_cr_0.2_w_past_instruction":
+            train_dataset = IPRLPretrainingLMDBDataset(
+                config.TASK_CONFIG, train_split, "./data/lmdb_dataset/iprl_pretrain/train-last-step-cr02", 100000,
+            )
+        else:
+            raise Exception(f"train_split: {train_split}")
         if "past" in train_split:
             val_split = "val_w_past_instruction"
         else:
             val_split = "val_w_instruction"
         val_dataset = IPRLPretrainingLMDBDataset(
-            config.TASK_CONFIG, val_split, "./data/lmdb_dataset/iprl_pretrain_val", 500,
+            config.TASK_CONFIG, val_split, "./data/lmdb_dataset/iprl_pretrain/val", 500,
         )
     else:
         # train_dataset = IPRLPretrainingDataset(config.TASK_CONFIG, config.SENSORS)
