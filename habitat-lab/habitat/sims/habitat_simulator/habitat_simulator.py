@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 sys.path.append("/home/4/ud02274/navigation/myss")
 
 import habitat_sim
+from habitat.core.logging import logger
 from habitat.core.dataset import Episode
 from habitat.core.registry import registry
 from habitat.core.simulator import (
@@ -407,6 +408,14 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         
         if self.prev_k != -1:
             self.k_prev_images.append(self.get_image_for_xgen(obs))
+        
+        if np.any(np.isnan(obs["rgb"])):
+            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in rgb: {np.sum(np.isnan(obs['rgb']))} / {np.shape(obs['rgb'])[0] * np.shape(obs['rgb'])[1]}")
+            obs['rgb'] = np.nan_to_num(obs['rgb'], nan=0.0)
+        
+        if np.any(np.isnan(obs["depth"])):
+            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in depth: {np.sum(np.isnan(obs['depth']))} / {np.shape(obs['depth'])[0] * np.shape(obs['depth'])[1]}")
+            obs['depth'] = np.nan_to_num(obs['depth'], nan=0.0)
 
         return obs
     
@@ -444,14 +453,7 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         instance_id_to_label_id = {int(obj.id.split("_")[-1]): obj.category.index() for obj in scene.objects}
 
         if len(instance_id_to_label_id) < np.max(obs):
-            # f = open("debug.txt", "a")
-            # f.write(f"----------------------- VIO --------------------\n")
-            # f.write(f"current_scene: {self._current_scene.split('/')[-2]}\n")
-            # f.write(f"len(instance_id_to_label_id): {len(instance_id_to_label_id)}, np.max(obs): {np.max(obs)}\n")
-            # f.write(f"vio_rate: {np.sum(obs > len(instance_id_to_label_id))/(np.shape(obs)[0]*np.shape(obs)[1])}\n")
-            # f.write(f"vio_ids: {np.unique(obs[obs>len(instance_id_to_label_id)])}\n")
-            # f.write(f"------------------------------------------------\n")
-            # f.close()
+            # logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: vio_rate: {np.sum(obs > len(instance_id_to_label_id))/(np.shape(obs)[0]*np.shape(obs)[1])}, vio_ids: {np.unique(obs[obs>len(instance_id_to_label_id)])}")
 
             for vio_id in range(len(instance_id_to_label_id), np.max(obs)+1):
                 instance_id_to_label_id[vio_id] = 0
@@ -481,6 +483,13 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
         
         if self.prev_k != -1:
             self.k_prev_images.append(self.get_image_for_xgen(observations))
+        
+        if np.any(np.isnan(observations["rgb"])):
+            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in rgb: {np.sum(np.isnan(observations['rgb']))} / {np.shape(observations['rgb'])[0] * np.shape(observations['rgb'])[1]}")
+            observations['rgb'] = np.nan_to_num(observations['rgb'], nan=0.0)
+        if np.any(np.isnan(observations["depth"])):
+            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in depth: {np.sum(np.isnan(observations['depth']))} / {np.shape(observations['depth'])[0] * np.shape(observations['depth'])[1]}")
+            observations['depth'] = np.nan_to_num(observations['depth'], nan=0.0)
 
         return observations
 
