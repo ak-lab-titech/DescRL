@@ -28,7 +28,15 @@ from ss_baselines.savi.models.smt_cnn import SMTCNN
 from ss_baselines.savi.models.direct_map_encoder import DirectMapEncoder
 from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
 
-from ss_baselines.savi.models.auxiliary_module import ProgressMonitorPredictor, NextFramePredictor, NextOracleActionPredictor
+from ss_baselines.savi.models.auxiliary_module import (
+    ProgressMonitorPredictor,
+    NextOracleActionPredictor,
+    NextFramePredictor,
+    NextSpectrogramPredictor,
+    SemanticPredictor,
+    AudioLocationPredictor,
+    AudioCategoryPredictor,
+)
 
 sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.lang import R2RLang
@@ -111,7 +119,7 @@ class Policy(nn.Module):
         if self.use_iprl:
             features, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits = self.net(
                 observations, rnn_hidden_states, prev_direct_map, prev_actions,
-                masks, ext_memory, ext_memory_masks, True,
+                masks, ext_memory, ext_memory_masks, True, action,
             )
         else:
             features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
@@ -544,7 +552,6 @@ class AudioNavSMTNet(Net):
                 depth = np.squeeze(depth, axis=4)
             imgs = torch.cat([rgb, depth], axis=3)
             visual_features = self.visual_encoder(imgs)
-            pass
         else:
             rgb = observations["rgb"]
             depth = observations["depth"]
@@ -585,6 +592,14 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         iprl_use_gt_D,
         iprl_feedback,
         iprl_use_bos,
+        use_instruction_predictor,
+        use_progress_predictor,
+        use_action_predictor,
+        use_next_frame_predictor,
+        use_next_spectrogram_predictor,
+        use_semantic_predictor,
+        use_audio_location_predictor,
+        use_audio_category_predictor,
         hidden_size=128,
         use_pretrained=False,
         pretrained_path='',
@@ -595,10 +610,6 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         normalize_category_distribution=False,
         use_category_input=False,
         use_xgen_visual_encoder=False,
-        use_instruction_predictor=True,
-        use_progress_predictor=False,
-        use_action_predictor=False,
-        use_frame_predictor=False,
         **kwargs
     ):
         super().__init__(
@@ -623,7 +634,11 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         self.use_instruction_predictor = use_instruction_predictor
         self.use_progress_predictor = use_progress_predictor
         self.use_action_predictor = use_action_predictor
-        self.use_frame_predictor = use_frame_predictor
+        self.use_next_frame_predictor = use_next_frame_predictor
+        self.use_next_spectrogram_predictor = use_next_spectrogram_predictor
+        self.use_semantic_predictor = use_semantic_predictor
+        self.use_audio_location_predictor = use_audio_location_predictor
+        self.use_audio_category_predictor = use_audio_category_predictor
 
         if self.use_instruction_predictor:
             self.instruction_predictor = InstructionPredictor(
@@ -639,13 +654,6 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
                 pretraining=kwargs["pretraining"],
                 use_bos=iprl_use_bos,
             )
-        self.iprl_use_gt_D = iprl_use_gt_D
-        self.feedback = iprl_feedback
-
-        if use_pretrained:
-            assert(pretrained_path != '')
-            self.pretrained_initialization(pretrained_path)
-
         if self.use_progress_predictor:
             self.progress_predictor = ProgressMonitorPredictor(
                 num_decoder_layers=iprl_num_decoder_layers,
@@ -662,15 +670,48 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
                 dim_feedforward=iprl_dim_feedforward,
                 pretraining=kwargs["pretraining"],
             )
-        if self.use_frame_predictor:
-            raise NotImplementedError("NextFramePredictor")
-            # self.frame_predictor = NextFramePredictor(
-            #     num_decoder_layers=iprl_num_decoder_layers,
-            #     emb_size=iprl_emb_size,
-            #     nhead=iprl_nhead,
-            #     dim_feedforward=iprl_dim_feedforward,
-            #     pretraining=kwargs["pretraining"],
-            # )
+        if self.use_next_frame_predictor:
+            self.next_frame_predictor = NextFramePredictor(
+                num_decoder_layers=iprl_num_decoder_layers,
+                emb_size=iprl_emb_size,
+                nhead=iprl_nhead,
+                dim_feedforward=iprl_dim_feedforward,
+                pretraining=kwargs["pretraining"],
+            )
+        if self.use_next_spectrogram_predictor:
+            self.next_spectrogram_predictor = NextSpectrogramPredictor(
+                num_decoder_layers=iprl_num_decoder_layers,
+                emb_size=iprl_emb_size,
+                nhead=iprl_nhead,
+                dim_feedforward=iprl_dim_feedforward,
+                pretraining=kwargs["pretraining"],
+            )
+        if self.use_semantic_predictor:
+            raise NotImplementedError()
+        if self.use_audio_location_predictor:
+            self.audio_location_predictor = AudioLocationPredictor(
+                num_decoder_layers=iprl_num_decoder_layers,
+                emb_size=iprl_emb_size,
+                nhead=iprl_nhead,
+                dim_feedforward=iprl_dim_feedforward,
+                pretraining=kwargs["pretraining"],
+            )
+        if self.use_audio_category_predictor:
+            self.audio_category_predictor = AudioCategoryPredictor(
+                num_decoder_layers=iprl_num_decoder_layers,
+                emb_size=iprl_emb_size,
+                nhead=iprl_nhead,
+                dim_feedforward=iprl_dim_feedforward,
+                pretraining=kwargs["pretraining"],
+            )
+        
+        if use_pretrained:
+            assert(pretrained_path != '')
+            self.pretrained_initialization(pretrained_path)
+        self.iprl_use_gt_D = iprl_use_gt_D
+        self.feedback = iprl_feedback
+
+
 
         self.train()
     
@@ -698,10 +739,26 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
                 else:
                     continue
         else:
-            cleaned_state_dict = state_dict['state_dict']
+            cleaned_state_dict = {}
+            for k, v in state_dict["state_dict"].items():
+                if "actor_critic.net." in k:
+                    k = k[len("actor_critic.net."):]
+                cleaned_state_dict[k] = v
+        
         self.load_state_dict(cleaned_state_dict, strict=False)
     
-    def forward(self, observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, need_logits=False):
+    def forward(
+        self,
+        observations,
+        rnn_hidden_states,
+        prev_direct_map,
+        prev_actions,
+        masks,
+        ext_memory,
+        ext_memory_masks,
+        need_logits=False,
+        actions=None,
+    ):
         x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
             observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, True,
         )
@@ -714,20 +771,20 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         else:
             category = nn.functional.softmax(belief[:, :21], dim=1)
             location = belief[:, 21:21+2*self.goal_num]
-        
-        if self.feedback == "teacher":
-            if "generated_instruction" in observations.keys():
-                target = observations["generated_instruction"] # (batch, instr_len)
-            elif "habitat_sim_generated_instruction" in observations.keys():
-                target = observations["habitat_sim_generated_instruction"] # (batch, instr_len)
-            else:
-                raise Exception(f"feedback type is teacher, but there is no generated instruction.")
-        elif self.feedback == "student":
-            target = None
-        else:
-            raise Exception(f"feedback must be 'teacher' or 'student', not {self.feedback}")
 
         if self.use_instruction_predictor:
+            if self.feedback == "teacher":
+                if "generated_instruction" in observations.keys():
+                    target = observations["generated_instruction"] # (batch, instr_len)
+                elif "habitat_sim_generated_instruction" in observations.keys():
+                    target = observations["habitat_sim_generated_instruction"] # (batch, instr_len)
+                else:
+                    raise Exception(f"feedback type is teacher, but there is no generated instruction.")
+            elif self.feedback == "student":
+                target = None
+            else:
+                raise Exception(f"feedback must be 'teacher' or 'student', not {self.feedback}")
+            
             logits = self.instruction_predictor(
                 category=category, # (batch, 21)
                 location=location, # (batch, 2)
@@ -746,6 +803,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             )
         else:
             predicted_action = None
+        
         if self.use_progress_predictor:
             predicted_progress = self.progress_predictor(
                 memory=enc_memory,
@@ -755,10 +813,57 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         else:
             predicted_progress = None
         
+        if self.use_next_frame_predictor:
+            predicted_next_frame = self.next_frame_predictor(
+                memory=enc_memory,
+                action=self._get_one_hot(actions).unsqueeze(0),
+                memory_key_padding_mask=(1 - ext_memory_masks) > 0,
+            )
+        else:
+            predicted_next_frame = None
+        
+        if self.use_next_spectrogram_predictor:
+            predicted_next_spectrogram = self.next_spectrogram_predictor(
+                memory=enc_memory,
+                action=self._get_one_hot(actions).unsqueeze(0),
+                memory_key_padding_mask=(1 - ext_memory_masks) > 0,
+            )
+        else:
+            predicted_next_spectrogram = None
+        
+
+        if self.use_semantic_predictor:
+            raise NotImplementedError()
+        else:
+            predicted_semantic = None
+
+        if self.use_audio_location_predictor:
+            predicted_audio_location = self.audio_location_predictor(
+                memory=enc_memory,
+                target=belief.unsqueeze(0),
+                memory_key_padding_mask=(1 - ext_memory_masks) > 0,
+            )
+        else:
+            predicted_audio_location = None
+        
+        if self.use_audio_category_predictor:
+            predicted_audio_category = self.audio_category_predictor(
+                memory=enc_memory,
+                target=belief.unsqueeze(0),
+                memory_key_padding_mask=(1 - ext_memory_masks) > 0,
+            )
+        else:
+            predicted_audio_category = None
+        
         aux_infos = {
             "logits": logits,
             "predicted_action": predicted_action,
             "predicted_progress": predicted_progress,
+            "predicted_next_frame": predicted_next_frame,
+            "predicted_next_spectrogram": predicted_next_spectrogram,
+            "predicted_semantic": predicted_semantic,
+            "predicted_audio_location": predicted_audio_location,
+            "predicted_audio_category": predicted_audio_category,
         }
 
         return x_att, rnn_hidden_states, x, direct_map, aux_infos

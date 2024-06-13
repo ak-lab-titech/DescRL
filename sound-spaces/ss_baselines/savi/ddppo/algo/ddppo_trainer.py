@@ -163,6 +163,14 @@ class DDPPOTrainer(PPOTrainer):
                     normalize_category_distribution=belief_cfg.normalize_category_distribution,
                     use_category_input=has_distractor_sound,
                     use_xgen_visual_encoder=smt_cfg.use_xgen_visual_encoder,
+                    use_instruction_predictor=iprl_cfg.use_instruction_predictor,
+                    use_progress_predictor=iprl_cfg.use_progress_predictor,
+                    use_action_predictor=iprl_cfg.use_next_action_predictor,
+                    use_next_frame_predictor=iprl_cfg.use_next_frame_predictor,
+                    use_next_spectrogram_predictor=iprl_cfg.use_next_spectrogram_predictor,
+                    use_semantic_predictor=iprl_cfg.use_semantic_predictor,
+                    use_audio_location_predictor=iprl_cfg.use_audio_location_predictor,
+                    use_audio_category_predictor=iprl_cfg.use_audio_category_predictor,
                 )
 
             if smt_cfg.freeze_encoders:

@@ -68,7 +68,7 @@
 ### config等の変更方法
 
 #### IPRLの使用
-1. `myss/sound-spaces/ss_baselines/savi/config/semantic_audionav/savi_pretraining.yaml`(savi-1st)または同ディレクトリの`savi.yaml`(savi-2nd)の`RL.PPO.INSTRUCTION_PREDICTOR.use_iprl`をTrueにする
+1. `myss/sound-spaces/ss_baselines/savi/config/semantic_audionav/savi_pretraining.yaml`(savi-1st)または同ディレクトリの`savi.yaml`(savi-2nd)の`RL.PPO.INSTRUCTION_PREDICTOR.use_iprl`をTrueにする。また、`use_instruction_predictor`もTrueにする必要がある。
 2. `RL.PPO.INSTRUCTION_PREDICTOR`内を必要に応じて変更
 3. `myss/sound-spaces/configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml`の`TASK.SENSORS`に`'GENERATED_INSTRUCTION'`を追加
 4. `TASK.GENERATED_INSTRUCTION`を必要に応じて変更。

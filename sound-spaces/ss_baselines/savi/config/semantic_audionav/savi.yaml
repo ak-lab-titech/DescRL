@@ -66,6 +66,14 @@ RL:
       iprl_use_gt_D: False
       feedback: "teacher" # teacher or student
       use_bos: False
+      use_instruction_predictor: True
+      use_next_action_predictor: False
+      use_progress_predictor: False
+      use_next_frame_predictor: False
+      use_next_spectrogram_predictor: False
+      use_semantic_predictor: False
+      use_audio_location_predictor: False
+      use_audio_category_predictor: False
   DDPPO:
     sync_frac: 0.6
     distrib_backend: "NCCL" # "GLOO"
