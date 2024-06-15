@@ -397,8 +397,8 @@ class AudioNavSMTNet(Net):
             audio_feature_dims = 0
 
         if self.use_xgen_visual_encoder:
-            self.visual_encoder = VisualImageEncoder((128, 128, 4), 512-4)
-            # self.visual_encoder = VisualImageEncoder((480, 640, 4), 512-4)
+            h, w, _ = observation_space["rgb"].shape
+            self.visual_encoder = VisualImageEncoder((h, w, 4), 512-4)
         else:
             self.visual_encoder = SMTCNN(observation_space)
         
