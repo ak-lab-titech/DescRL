@@ -141,10 +141,16 @@ class VisualImageEncoder(nn.Module):
         channel_size = image_shape[2]
         if image_shape[0] == 256 and image_shape[1] == 256:
             last_layer_size = 12544
+            kernel_sizes = [(8, 8), (4, 4), (3, 3)]
+            strides = [(4, 4), (2, 2), (2, 2)]
         elif image_shape[0] == 128 and image_shape[1] == 128:
             last_layer_size = 2304
+            kernel_sizes = [(8, 8), (4, 4), (3, 3)]
+            strides = [(4, 4), (2, 2), (2, 2)]
         elif image_shape[0] == 480 and image_shape[1] ==  640:
-            last_layer_size = 68096
+            last_layer_size = 3072
+            kernel_sizes = [(8, 8), (8, 8), (8, 8)]
+            strides = [(4, 4), (4, 4), (4, 4)]
         else:
             raise Exception(
                 f"image shape mast be (256, 256) or (128, 128), not ({image_shape[0]}, {image_shape[1]})"
@@ -153,22 +159,22 @@ class VisualImageEncoder(nn.Module):
             nn.Conv2d(
                 in_channels=channel_size,
                 out_channels=32,
-                kernel_size=(8, 8),
-                stride=(4, 4),
+                kernel_size=kernel_sizes[0],
+                stride=strides[0],
             ),
             nn.ReLU(True), # [batch, 32, 63, 63]
             nn.Conv2d(
                 in_channels=32,
                 out_channels=64,
-                kernel_size=(4, 4),
-                stride=(2, 2),
+                kernel_size=kernel_sizes[1],
+                stride=strides[1],
             ),
             nn.ReLU(True), # [batch, 64, 30, 30]
             nn.Conv2d(
                 in_channels=64,
                 out_channels=64,
-                kernel_size=(3, 3),
-                stride=(2, 2),
+                kernel_size=kernel_sizes[2],
+                stride=strides[2],
             ), # [batch, 64, 14, 14]
             Flatten(), # [batch, 12544]
             nn.Linear(last_layer_size, output_size), # [batch, output_size]
