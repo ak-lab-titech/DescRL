@@ -31,6 +31,11 @@ elif [ $ENV = "habitat-objnav" ] && [ $MODEL = "smt" ] && [ $SCENE_DATASET = "mp
     python ./sound-spaces/ss_baselines/savi/run.py \
         --exp-config ./habitat-lab/habitat_baselines/config/objectnav/ddppo_smt.yaml \
         --model-dir ./habitat-lab/data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME
+elif [ $ENV = "habitat-objnav" ] && [ $MODEL = "smt-pretraining" ] && [ $SCENE_DATASET = "mp3d" ]; then
+    cd ~/navigation/myss
+    python ./sound-spaces/ss_baselines/savi/run.py \
+        --exp-config ./habitat-lab/habitat_baselines/config/objectnav/ddppo_smt_pretraining.yaml \
+        --model-dir ./habitat-lab/data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL, SCENE_DATASET=$SCENE_DATASET.
 fi
