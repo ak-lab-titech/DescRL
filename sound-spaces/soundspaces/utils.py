@@ -66,22 +66,26 @@ def generate_video(image_seq: torch.Tensor, output_file: str, frame_rate: int=5)
     """
     if image_seq.shape[4] == 7:
         frame_size = (image_seq.shape[2]*3, image_seq.shape[3])
-    else:
+    elif image_seq.shape[4] == 4:
         frame_size = (image_seq.shape[2]*2, image_seq.shape[3])
+    else:
+        frame_size = (image_seq.shape[2], image_seq.shape[3])
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(output_file, fourcc, frame_rate, frame_size)
 
     for i in range(len(image_seq)):
         rgb = image_seq[i, 0, :, :, :3].to('cpu').detach().numpy().copy() * 255
-        depth = image_seq[i, 0, :, :, 3].to('cpu').detach().numpy().copy()
-        depth = np.uint8(cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX))
-        depth = np.array(cv2.applyColorMap(depth, cv2.COLORMAP_JET))
-        if image_seq.shape[4] == 7:
-            semantic = image_seq[i, 0, :, :, 4:].to('cpu').detach().numpy().copy() * 255
-            frame = np.concatenate([rgb, depth, semantic], axis=1)
+        if image_seq.shape[4] > 3:
+            depth = image_seq[i, 0, :, :, 3].to('cpu').detach().numpy().copy()
+            depth = np.uint8(cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX))
+            depth = np.array(cv2.applyColorMap(depth, cv2.COLORMAP_JET))
+            if image_seq.shape[4] == 7:
+                semantic = image_seq[i, 0, :, :, 4:].to('cpu').detach().numpy().copy() * 255
+                frame = np.concatenate([rgb, depth, semantic], axis=1)
+            else:
+                frame = np.concatenate([rgb, depth], axis=1)
         else:
-            frame = np.concatenate([rgb, depth], axis=1)
-        
+            frame = rgb
         frame = np.clip(frame, 0, 255).astype(np.uint8)
         out.write(frame)
 
