@@ -150,7 +150,7 @@ class RolloutStorage:
                 continue
             elif sensor == "progress_monitor":
                 self.observations[sensor][self.step + 1].copy_(
-                    observations[sensor].view(2, 1)
+                    observations[sensor].view(-1, 1)
                 )
             else:
                 self.observations[sensor][self.step + 1].copy_(

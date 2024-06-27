@@ -388,7 +388,7 @@ class DDPPOTrainer(PPOTrainer):
             elif sensor == "semantic":
                 continue
             elif sensor == "progress_monitor":
-                batch_sensor = batch[sensor].view(2, 1)
+                batch_sensor = batch[sensor].view(-1, 1)
             else:
                 batch_sensor = batch[sensor]
             
