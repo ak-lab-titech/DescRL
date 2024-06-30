@@ -134,7 +134,7 @@ class R2RDataset(Dataset):
         self.skip_frame_per = skip_frame_per
         self.max_instruction_length = max_instruction_length
         
-        env = lmdb.open(self.data_path, readonly=True, lock=False)
+        env = lmdb.open(self.data_path, readonly=True, lock=False, map_size=int(5*1.1e12))
         self.image_seqs = []
         self.semantic_seqs = []
         self.action_seqs = []
