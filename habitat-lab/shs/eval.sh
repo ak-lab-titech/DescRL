@@ -39,7 +39,7 @@ elif [ $ENV = "habitat-objnav" ] && [ $MODEL = "rnn" ] && [ $SCENE_DATASET = "mp
         --model-dir ./data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
         LOG_FILE ./data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/eval.log \
         TENSORBOARD_DIR ./data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/tb_eval \
-        EVAL.SPLIT val \
+        EVAL.SPLIT my_val \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
         TRAINER_NAME ppo \
         NUM_ENVIRONMENTS 11 \
@@ -53,10 +53,10 @@ elif [ $ENV = "habitat-objnav" ] && [ $MODEL = "smt" ] && [ $SCENE_DATASET = "mp
         --prev-ckpt-ind $PREV_CKPT_IND \
         LOG_FILE ./habitat-lab/data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/eval.log \
         TENSORBOARD_DIR ./habitat-lab/data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/tb_eval \
-        EVAL.SPLIT val \
+        EVAL.SPLIT my_val \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
-        NUM_ENVIRONMENTS 11 \
-        NUM_PROCESSES 11 \
+        NUM_ENVIRONMENTS 4 \
+        NUM_PROCESSES 4 \
         DISPLAY_RESOLUTION 640 \
         RL.DDPPO.pretrained False \
         RL.PPO.INSTRUCTION_PREDICTOR.iprl_use_gt_D False \
