@@ -405,17 +405,21 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             semantic_obs = obs["semantic"]
             semantic_obs = self._to_category_id(semantic_obs)
             obs["semantic"] = np.array(semantic_obs)
+
+            if np.any(np.isnan(obs["semantic"])) or np.any(np.isinf(obs["semantic"])):
+                logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in semantic: {np.sum(np.isnan(obs['semantic']))} / {np.prod(np.shape(obs['semantic']))}")
+                obs['semantic'] = np.nan_to_num(obs['semantic'], nan=0)
+
+        if np.any(np.isnan(obs["rgb"])) or np.any(np.isinf(obs["rgb"])):
+            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in rgb: {np.sum(np.isnan(obs['rgb']))} / {np.prod(np.shape(obs['rgb']))}")
+            obs['rgb'] = np.nan_to_num(obs['rgb'], nan=0.0)
+        
+        if np.any(np.isnan(obs["depth"])) or np.any(np.isinf(obs["depth"])):
+            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in depth: {np.sum(np.isnan(obs['depth']))} / {np.prod(np.shape(obs['depth']))}")
+            obs['depth'] = np.nan_to_num(obs['depth'], nan=0.0)
         
         if self.prev_k != -1:
             self.k_prev_images.append(self.get_image_for_xgen(obs))
-        
-        if np.any(np.isnan(obs["rgb"])):
-            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in rgb: {np.sum(np.isnan(obs['rgb']))} / {np.shape(obs['rgb'])[0] * np.shape(obs['rgb'])[1]}")
-            obs['rgb'] = np.nan_to_num(obs['rgb'], nan=0.0)
-        
-        if np.any(np.isnan(obs["depth"])):
-            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in depth: {np.sum(np.isnan(obs['depth']))} / {np.shape(obs['depth'])[0] * np.shape(obs['depth'])[1]}")
-            obs['depth'] = np.nan_to_num(obs['depth'], nan=0.0)
 
         return obs
     
@@ -480,16 +484,21 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
             semantic_obs = observations["semantic"]
             semantic_obs = self._to_category_id(semantic_obs)
             observations["semantic"] = np.array(semantic_obs)
+
+            if np.any(np.isnan(observations["semantic"])) or np.any(np.isinf(observations["semantic"])):
+                logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in semantic: {np.sum(np.isnan(observations['semantic']))} / {np.prod(np.shape(observations['semantic']))}")
+                observations['semantic'] = np.nan_to_num(observations['semantic'], nan=0)
+
+        if np.any(np.isnan(observations["rgb"])) or np.any(np.isinf(observations["rgb"])):
+            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in rgb: {np.sum(np.isnan(observations['rgb']))} / {np.prod(np.shape(observations['rgb']))}")
+            observations['rgb'] = np.nan_to_num(observations['rgb'], nan=0.0)
+
+        if np.any(np.isnan(observations["depth"])) or np.any(np.isinf(observations["depth"])):
+            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in depth: {np.sum(np.isnan(observations['depth']))} / {np.prod(np.shape(observations['depth']))}")
+            observations['depth'] = np.nan_to_num(observations['depth'], nan=0.0)
         
         if self.prev_k != -1:
             self.k_prev_images.append(self.get_image_for_xgen(observations))
-        
-        if np.any(np.isnan(observations["rgb"])):
-            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in rgb: {np.sum(np.isnan(observations['rgb']))} / {np.shape(observations['rgb'])[0] * np.shape(observations['rgb'])[1]}")
-            observations['rgb'] = np.nan_to_num(observations['rgb'], nan=0.0)
-        if np.any(np.isnan(observations["depth"])):
-            logger.info(f"current_scene: {self._current_scene.split('/')[-2]}: nan in depth: {np.sum(np.isnan(observations['depth']))} / {np.shape(observations['depth'])[0] * np.shape(observations['depth'])[1]}")
-            observations['depth'] = np.nan_to_num(observations['depth'], nan=0.0)
 
         return observations
 
