@@ -1,17 +1,15 @@
 #!/bin/sh
 #$ -cwd
-#$ -l f_node=1
+#$ -l node_f=1
 #$ -j y
 #$ -l h_rt=24:00:00
 #$ -o output/o.$JOB_ID
 
 
 module load cuda
-module load gcc/8.3.0-cuda
-module load singularity
 module load nccl
 module load cudnn
-module load openmpi/3.1.4-opa10.10
+module load openmpi/5.0.2-intel
 
 
 CMD="train"
@@ -24,9 +22,9 @@ EVAL_CKPT_NUM=70
 EVAL_SEED=0
 
 
-cd ~/av-nav/myss/xgenerator
+cd ~/navigation/myss/xgenerator
 pwd
-source ~/anaconda3/etc/profile.d/conda.sh
+source /gs/fs/tga-aklab/hkondo/anaconda3/etc/profile.d/conda.sh
 conda activate av-nav
 echo CMD=$CMD
 echo MODEL=$MODEL
