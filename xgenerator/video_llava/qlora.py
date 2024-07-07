@@ -153,7 +153,7 @@ def main(config, logger):
         )
         for k, v in inputs.items():
             inputs[k] = v.cuda()
-        out = model.generate(max_new_tokens=80, **inputs)
+        out = model.generate(max_new_tokens=40, **inputs)
         pred_instr = PROCESSOR.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         logger.info(f"-------")
         logger.info(f"True: {gt_instr}")
