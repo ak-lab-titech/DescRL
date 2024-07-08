@@ -2,7 +2,7 @@ train:
   data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/train_size512_trajectories_10496.lmdb"
   data_num: 10000 # Maybe it should be under 10,000, or error occurs.
   num_epochs: 2
-  accum_iter: 8
+  accum_iter: 32
   max_instruction_length: 40
   batch_size: 1
   learning_rate: 0.00001
