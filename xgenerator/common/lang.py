@@ -31,10 +31,12 @@ def calc_confidence(logits):
 
 
 
-def tokens2sentences(tokens, lang):
+def tokens2sentences(tokens, lang=None):
     """
     tokens' shape must be (sentence_len, batch).
     """
+    if lang is None:
+        lang = R2RLang("r2r")
     sentences = ["" for _ in range(len(tokens[0]))]
     for token in tokens:
         token = token.to('cpu').detach().numpy().copy()
@@ -42,6 +44,34 @@ def tokens2sentences(tokens, lang):
             word = lang.index2word[token[i]]
             sentences[i] = sentences[i] + word + " "
     return sentences
+
+
+def sentence2token(sentence: str):
+    """
+    sentence: str
+    token: list
+    """
+    lang = R2RLang("r2r")
+    sentence = sentence.split(" ")
+    if sentence[-1] == "":
+        sentence = sentence[:-1]
+    token = []
+    for word in sentence:
+        word = word.lower()
+        if word == "":
+            continue
+        elif word[-1] == ".":
+            if word[:-1] in lang.word2index.keys():
+                token.append(lang.word2index[word[:-1]])
+            else:
+                token.append(lang.word2index["<unk>"])
+            token.append(lang.word2index["."])
+        else:
+            if word in lang.word2index.keys():
+                token.append(lang.word2index[word])
+            else:
+                token.append(lang.word2index["<unk>"])
+    return token
 
 
 class R2RLang:

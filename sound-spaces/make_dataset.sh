@@ -1,9 +1,14 @@
 #!/bin/bash
 
-CMD="offpolicy_episode_dataset"
+CMD="vlnce_test_dataset"
 DATASET_NAME="train"
 START_INDEX=0
 FUTURE_OR_PAST="future"
+
+# vlnce_test_dataset
+INSTRUCTION_PREDICTOR_TYPE="video-llava"
+ENVIRONMENT_TYPE="vlnce"
+DATASET_NAME="val_unseen"
 
 
 pwd
@@ -16,6 +21,9 @@ echo CMD=$CMD
 echo DATASET_NAME=$DATASET_NAME
 echo START_INDEX=$START_INDEX
 echo FUTURE_OR_PAST=$FUTURE_OR_PAST
+echo INSTRUCTION_PREDICTOR_TYPE=$INSTRUCTION_PREDICTOR_TYPE
+echo ENVIRONMENT_TYPE=$ENVIRONMENT_TYPE
+echo DATASET_NAME=$DATASET_NAME
 
 
 if [ $CMD = "replica_dataset" ]; then
@@ -37,6 +45,13 @@ elif [ $CMD = "sub_episode_dataset" ]; then
         --source-dataset-path ./data/lmdb_dataset/iprl_pretrain/train \
         --source-data-num 502103 \
         --data-num 10000
+elif [ $CMD = "vlnce_test_dataset" ]; then
+    cd ~/navigation/myss
+    python ./sound-spaces/scripts/make_vlnce_test_dataset.py \
+        --config ./sound-spaces/scripts/configs/make_vlnce_test_dataset.yaml \
+        --save-dataset-path ../my-VLN-CE/data/datasets/$CMD/$INSTRUCTION_PREDICTOR_TYPE/$ENVIRONMENT_TYPE/$DATASET_NAME \
+        --instruction-predictor-type $INSTRUCTION_PREDICTOR_TYPE \
+        --environment-type $ENVIRONMENT_TYPE
 else
     echo ERROR: CMD=$CMD
 fi

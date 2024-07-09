@@ -6,7 +6,7 @@ from tqdm import trange
 import msgpack_numpy
 
 from xgenerator.common.lang import tokens2sentences, R2RLang
-from xgenerator.common.load_lmdb import EOS_IDX, BOS_IDX, PAD_IDX
+from xgenerator.common.load_lmdb import EOS_IDX, BOS_IDX, PAD_IDX, d3_40_colors_rgb
 
 
 class HFR2RDataset(Dataset):
@@ -20,7 +20,7 @@ class HFR2RDataset(Dataset):
         max_instruction_length: int,
         prompt: str=None, # TODO
         n_slice: int=None,
-        need_action: bool = False,
+        need_action_and_depth_semantic: bool = False,
     ):
         self.data_path = data_path      
         self.data_num = data_num
@@ -33,36 +33,30 @@ class HFR2RDataset(Dataset):
         self.action_seqs = []
         self.instructions = []
 
-        self.need_action = need_action
+        self.need_action_and_depth_semantic = need_action_and_depth_semantic
 
         txn = env.begin()
         for index in trange(self.data_num):
             value = txn.get(str(index).encode('latin-1'))
             value = msgpack_numpy.unpackb(value, object_hook=msgpack_numpy.decode)
             observation_seq = dict(value[0])
-
-            image_seq = np.array(observation_seq["rgb"]).astype(np.uint8)
-            image_seq = torch.from_numpy(image_seq) # (l, h, w, c)
+            
+            if self.need_action_and_depth_semantic:
+                semantic = np.take(
+                    d3_40_colors_rgb,
+                    observation_seq["semantic"],
+                    axis=0,
+                ).astype(np.uint8) / 255.0
+                rgb = np.array(observation_seq["rgb"] / 255.0).astype(np.float32)
+                depth = np.array(observation_seq["depth"])
+                semantic = np.squeeze(semantic, axis=3)
+                image_seq = np.concatenate([rgb, depth, semantic], axis=3).astype(np.float32)
+                image_seq = torch.from_numpy(image_seq)
+            else:
+                image_seq = np.array(observation_seq["rgb"]).astype(np.uint8)
+                image_seq = torch.from_numpy(image_seq) # (l, h, w, c)
+            
             action_seq = torch.from_numpy(np.eye(4)[np.array(value[2])].astype(np.int8))
-
-            # print(np.shape())
-
-            # semantic_img = np.take(
-            #     d3_40_colors_rgb,
-            #     observation_seq["semantic"],
-            #     axis=0,
-            # ).astype(np.uint8) / 255.0
-            # rgb = np.array(observation_seq["rgb"] / 255.0).astype(np.float32)
-            # depth = np.array(observation_seq["depth"])
-            # print(f"semantic: {np.shape(semantic)}, rgb: {np.shape(rgb)}, depth: {np.shape(depth)}")
-
-            # semantic = np.squeeze(semantic, axis=2)
-
-            # mage_seq = np.concatenate([
-            #         np.array(observation_seq["rgb"] / 255.0).astype(np.float32),
-            #         np.array(observation_seq["depth"][::self.skip_frame_per]).astype(np.float32),
-            #         np.array(observation_seq["semantic"] )
-            #     ], 3).astype(np.float32)
 
             if n_slice is not None:
                 n_frame = len(image_seq)
@@ -72,7 +66,6 @@ class HFR2RDataset(Dataset):
 
             self.image_seqs.append(image_seq)
             self.action_seqs.append(action_seq)
-
 
             token = np.array(observation_seq["instruction"][0])
             token = token[token != PAD_IDX]
@@ -87,7 +80,7 @@ class HFR2RDataset(Dataset):
         return self.data_num
     
     def __getitem__(self, index):
-        if self.need_action:
+        if self.need_action_and_depth_semantic:
             return self.image_seqs[index], self.action_seqs[index], self.instructions[index]
         else:
             return self.image_seqs[index], self.instructions[index]

@@ -573,17 +573,25 @@ class HabitatSim(habitat_sim.Simulator, Simulator):
     
     def get_oracle_actions_from_current_pos(self, goal_radius, goal_poss):
         raise NotImplementedError("get_oracle_actions_from_current_pos")
-        # TODO for F-EPRL
+        # TODO for F-EPRL & habitat-objnav VLN-SR, VLN-SPL
         # follower = self.make_greedy_follower(
-        #     0,
+        #     0, # agent's id.
         #     goal_radius,
         #     stop_key=HabitatSimActions.FOUND,
         #     forward_key=HabitatSimActions.MOVE_FORWARD,
         #     left_key=HabitatSimActions.TURN_LEFT,
         #     right_key=HabitatSimActions.TURN_RIGHT,
         # )
+        # oracle_actions_list = []
         # for goal_pos in goal_poss:
         #     oracle_actions = follower.find_path(goal_pos=goal_pos)
+        #     # try:
+        #     #     oracle_actions = follower.find_path(goal_pos=goal_pos)
+        #     # except:
+        #     #     print(f"Maybe the path does not exist.")
+        #     #     oracle_actions = []
+        #     oracle_actions_list.append((oracle_actions, len(oracle_actions)))
+        # print(f"OA list", oracle_actions_list)
         # return oracle_actions
 
     def action_space_shortest_path(

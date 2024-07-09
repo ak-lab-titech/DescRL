@@ -117,9 +117,6 @@ def setup_instruction_predictor(
 
     if smt_cfg.freeze_encoders:
         instruction_predictor.freeze_encoders()
-    
-    if ppo_cfg.use_belief_predictor:
-        raise NotImplementedError()
 
     if pretrained:
         # load weights for both actor critic and the encoder
@@ -129,7 +126,7 @@ def setup_instruction_predictor(
                 k[len("actor_critic."):]: v
                 for k, v in pretrained_state["state_dict"].items()
                 if "actor_critic.net.visual_encoder" not in k and
-                   "actor_critic.net.smt_state_encoder" not in k
+                    "actor_critic.net.smt_state_encoder" not in k
             },
             strict=False
         )
