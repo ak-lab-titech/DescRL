@@ -1,8 +1,8 @@
 #!/bin/bash
 
 
-MODEL="video_llava"
-MODEL_NAME="qlora-test"
+MODEL="video_llama2"
+MODEL_NAME="finetune_videollama2_vllava_qlora-test" # video_llama2の時はfinetune_videollama2_vllava_qloraを入れないとかも？
 TRAIN_NP=4
 
 export NP=$TRAIN_NP
@@ -19,7 +19,7 @@ if [ $MODEL = "transformer_speaker" ] || [ $MODEL = "speaker" ]; then
         $MODEL/train.py \
         --config-path $MODEL/config.yaml \
         --model-name $MODEL_NAME
-elif [ $MODEL = "video_llava" ] || [ $MODEL = "video_blip" ] ; then
+elif [ $MODEL = "video_llama2" ] || [ $MODEL = "video_llava" ] || [ $MODEL = "video_blip" ] ; then
     python $MODEL/qlora.py \
         --model-name $MODEL_NAME
 else

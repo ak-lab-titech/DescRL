@@ -18,7 +18,6 @@ class HFR2RDataset(Dataset):
         data_path: str,
         data_num: int,
         max_instruction_length: int,
-        prompt: str=None, # TODO
         n_slice: int=None,
         need_action_and_depth_semantic: bool = False,
     ):

@@ -16,6 +16,19 @@ def try_cuda(pytorch_obj):
         return pytorch_obj
 
 
+def set_seed(seed=42):
+    """
+    Set the random seed for reproducible results.
+
+    :param seed: An integer value to be used as the random seed.
+    """
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # for multi-GPU setups
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
 class MyLogger(logging.Logger):
     def __init__(self, name: str, level: str, filename: str):
         """A logger for logging experiments.
