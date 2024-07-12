@@ -16,6 +16,7 @@ sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
 sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
 sys.path.append("/home/4/ud02274/navigation/myss")
 sys.path.append("/home/4/ud02274/navigation/my-VLN-CE")
+sys.path.append("/home/4/ud02274/navigation/VideoLLaMA2")
 
 from habitat.sims import make_sim
 from habitat.datasets import make_dataset
@@ -38,6 +39,11 @@ from xgenerator.common.hugging_face_utils import HFR2RDataset
 from xgenerator.video_llava.qlora import video_llava_collate_fn
 import vlnce_baselines
 from peft import PeftModel
+from videollama2.mm_utils import get_model_name_from_path
+from videollama2.model.builder import load_pretrained_model
+from videollama2.train import process_video
+from videollama2.constants import MMODAL_TOKEN_INDEX
+from videollama2.mm_utils import tokenizer_MMODAL_token
 
 
 
@@ -324,11 +330,12 @@ def main(
                 need_action_and_depth_semantic=True,
             )
         else:
+            num_frames = config.NUM_FRAMES
             hf_r2r_dataset = HFR2RDataset(
                 data_path="/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/val_unseen_size512_trajectories.lmdb",
                 data_num=len(episodes),
                 max_instruction_length=80,
-                n_slice=8,
+                n_slice=num_frames,
             )
         # hf_r2r_dataloader = torch.utils.data.DataLoader(
         #     hf_r2r_dataset,
@@ -381,6 +388,13 @@ def main(
         )
         if trained_model is not None:
             instruction_predictor = PeftModel.from_pretrained(instruction_predictor, trained_model)
+    elif instruction_predictor_type == "video-llama2":
+        model_path = config.MODEL_PATH
+        tokenizer, instruction_predictor, processor, _ = load_pretrained_model(
+            model_path,
+            None,
+            get_model_name_from_path(model_path),
+        )
     else:
         raise Exception(f"instruction_predictor_type: {instruction_predictor_type}")
     
@@ -399,7 +413,7 @@ def main(
 
         if environment_type == "vlnce":
             if instruction_predictor_type == "video-llava":
-                video, target = hf_r2r_dataset[epi_id2lmdb_id[i]]
+                video, _ = hf_r2r_dataset[epi_id2lmdb_id[i]]
 
                 inputs = processor(
                     videos=video,
@@ -408,10 +422,42 @@ def main(
                 )
                 for k, v in inputs.items():
                     inputs[k] = v.to("cuda")
-
-                instructions = instruction_predictor.generate(max_new_tokens=40, **inputs)
+                with torch.inference_mode():
+                    instructions = instruction_predictor.generate(max_new_tokens=40, **inputs)
                 instructions = processor.batch_decode(instructions, skip_special_tokens=True, clean_up_tokenization_spaces=True)
                 instructions = torch.tensor([sentence2token(instructions[0][50:])], dtype=torch.int32).view(-1, 1) # (instr_len, 1)
+            elif instruction_predictor_type == "video-llama2":
+                video, _ = hf_r2r_dataset[epi_id2lmdb_id[i]]
+                prompt = "[INST] <<SYS>>\n" \
+                        "A chat between a curious user and an artificial intelligence assistant." \
+                        "The assistant gives helpful, detailed, and polite answers to the user's questions." \
+                        "\n<</SYS>>\n\n <video>\nWhat is the camera wearer doing? [/INST]"
+                input_ids = tokenizer_MMODAL_token(
+                    prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
+                ).unsqueeze(0).to(device="cuda")
+                tensor = process_video(
+                    video.numpy().copy(),
+                    processor,
+                    "pad",
+                    num_frames,
+                ).to(
+                    dtype=torch.float16,
+                    device='cuda',
+                    non_blocking=True,
+                )
+                with torch.inference_mode():
+                    output_ids = instruction_predictor.generate(
+                        input_ids,
+                        images_or_videos=[tensor],
+                        modal_list=['video'],
+                        do_sample=True,
+                        temperature=0.2,
+                        # max_new_tokens=1024,
+                        max_new_tokens=40,
+                        use_cache=True,
+                    )
+                instructions = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0]
+                instructions = torch.tensor([sentence2token(instructions)], dtype=torch.int32).view(-1, 1) # (instr_len, 1)
             else:
                 image_seqs, action_seqs, target = hf_r2r_dataset[epi_id2lmdb_id[i]]
                 image_seqs = image_seqs.unsqueeze(1) # (l, 1, h, w, c), max:1, min:0

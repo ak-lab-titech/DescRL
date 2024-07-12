@@ -7,10 +7,17 @@
 # ENV_NAME: "NavRLEnv"
 
 # vlnce xgen
-BASE_TASK_CONFIG_PATH: "./sound-spaces/configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml"
-ORIGINAL_MODEL: "LanguageBind/Video-LLaVA-7B-hf"
-TRAINED_MODEL: "./xgenerator/data/models/video_llava/qlora-v3/models" # null
+# BASE_TASK_CONFIG_PATH: "./sound-spaces/configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml"
 
+# vlnce video-llava
+# ORIGINAL_MODEL: "LanguageBind/Video-LLaVA-7B-hf"
+# TRAINED_MODEL: "./xgenerator/data/models/video_llava/qlora-v3/models" # null
+
+# vlnce video-llama2
+BASE_TASK_CONFIG_PATH: "./sound-spaces/configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml"
+MODEL_PATH: "./xgenerator/data/models/video_llama2/finetune_videollama2_vllava_qlora_epoch1_frame16" # "DAMO-NLP-SG/VideoLLaMA2-7B-16F-Base"
+
+NUM_FRAMES: 16
 
 # universal
 TRAINER_NAME: "ddppo"

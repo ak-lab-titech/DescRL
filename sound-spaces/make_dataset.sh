@@ -6,7 +6,7 @@ START_INDEX=0
 FUTURE_OR_PAST="future"
 
 # vlnce_test_dataset
-INSTRUCTION_PREDICTOR_TYPE="video-llava"
+INSTRUCTION_PREDICTOR_TYPE="video-llama2"
 ENVIRONMENT_TYPE="vlnce"
 DATASET_NAME="val_unseen"
 
