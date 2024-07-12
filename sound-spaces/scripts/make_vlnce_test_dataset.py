@@ -219,6 +219,7 @@ def generate_instruction(
             next_tokens[ended] = PAD_IDX
             ended[next_tokens == EOS_IDX] = True
             past_tokens = torch.cat([past_tokens, next_tokens], dim=0)
+    past_tokens = past_tokens[past_tokens != 0.0][1:-1].view(-1, 1) # EOS, BOS, PADを外す
     return past_tokens
 
 
