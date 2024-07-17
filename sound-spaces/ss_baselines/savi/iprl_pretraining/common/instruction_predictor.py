@@ -13,7 +13,7 @@ from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
 from ss_baselines.savi.models.belief_predictor import BeliefPredictor
 
 sys.path.append("/home/4/ud02274/navigation/myss")
-from xgenerator.common.lang import R2RLang
+from xgenerator.common.lang import R2RLang, VideoLLaMA2Lang
 from xgenerator.common.model import VisualImageEncoder
 
 
@@ -84,6 +84,8 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         use_category_input=False,
         belief_cfg=None,
         batch_size=-1,
+        visual_encoder_output_size=512-4,
+        tokenizer_type="r2r",
         **kwargs,
     ):
         self.device = device
@@ -109,7 +111,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         audio_feature_dims = 128
 
         if self.use_xgen_visual_encoder:
-            self.visual_encoder = VisualImageEncoder((128, 128, 4), 512-4)
+            self.visual_encoder = VisualImageEncoder((128, 128, 4), visual_encoder_output_size)
         else:
             self.visual_encoder = SMTCNN(observation_space)
 
@@ -160,10 +162,15 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         if self._use_belief_encoder:
             self.belief_encoder = nn.Linear(self._hidden_size, self._hidden_size)
 
-        lang = R2RLang(name="r2r_train")
+        if tokenizer_type == "r2r":
+            lang = R2RLang()
+        elif tokenizer_type == "video_llama2":
+            lang = VideoLLaMA2Lang()
+        else:
+            raise Exception(f"tokenizer_type: {tokenizer_type}")
         self.instruction_predictor = InstructionPredictor(
             num_decoder_layers=iprl_num_decoder_layers,
-            vocab_emb_size=iprl_vocab_emb_size,
+            vocab_emb_size=lang.word_embed_size,
             emb_size=iprl_emb_size,
             max_instr_len=iprl_max_instr_len,
             nhead=iprl_nhead,
@@ -269,7 +276,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         self.goal_encoder.eval()
         self.visual_encoder.eval()
 
-    def get_features(self, observations, prev_actions):
+    def get_features(self, observations, prev_actions, return_visual_features=False):
         x = []
         
         if self.use_xgen_visual_encoder:
@@ -282,10 +289,10 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             imgs = imgs.view(L*N, H, W, C)
             visual_features = self.visual_encoder(imgs)
             visual_features = visual_features.view(L, N, -1)
-            x.append(visual_features)
         else:
             observations["rgb"] = observations["rgb"] * 255
-            x.append(self.visual_encoder(observations, self.on_or_off))
+            visual_features = self.visual_encoder(observations, self.on_or_off)
+        x.append(visual_features)
 
         if self.on_or_off == "off":
             L, N, _ = prev_actions.size()
@@ -311,7 +318,10 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         # f.write(f"x: {x.size()}\n")
         # f.close()
 
-        return x
+        if return_visual_features:
+            return x, visual_features
+        else:
+            return x
     
     def _get_one_hot(self, actions):
         if actions.shape[1] == self._action_size:
@@ -322,7 +332,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             actions_oh.scatter_(1, actions.long(), 1)
             return actions_oh
 
-    def forward(self, observations, prev_actions, masks, ext_memory, ext_memory_masks):
+    def forward(self, observations, prev_actions, masks, ext_memory, ext_memory_masks, return_visual_features=False):
         # f = open("debug.txt", "a")
         # f.write(f"--------- FORWARD --------\n")
         # for k, v in observations.items():
@@ -333,12 +343,16 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         if self.on_or_off == "on":
             return self.on_forward(observations, prev_actions, masks, ext_memory, ext_memory_masks)
         elif self.on_or_off == "off":
-            return self.off_forward(observations, prev_actions, ext_memory_masks, observations["target"])
+            return self.off_forward(observations, prev_actions, ext_memory_masks, observations["target"], return_visual_features)
         else:
             raise Exception(f"on_or_off: {self.on_or_off}")
 
-    def off_forward(self, observations, prev_actions, ext_memory_masks, targets):
-        x = self.get_features(observations, prev_actions)
+    def off_forward(self, observations, prev_actions, ext_memory_masks, targets, return_visual_features):
+        if return_visual_features:
+            x, visual_features = self.get_features(observations, prev_actions, return_visual_features)
+        else:
+            x = self.get_features(observations, prev_actions, return_visual_features)
+            
         _, enc_memory = self.smt_state_encoder(x, None, ext_memory_masks, path_lens=observations["seq_lengths"])
 
         if self.iprl_use_gt_D:
@@ -364,7 +378,10 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             memory_key_padding_mask=ext_memory_masks,
             convert_mask=False,
         )
-        return logits
+        if return_visual_features:
+            return logits, visual_features
+        else:
+            return logits
 
     def on_forward(self, observations, prev_actions, masks, ext_memory, ext_memory_masks):
         x = self.get_features(observations, prev_actions)

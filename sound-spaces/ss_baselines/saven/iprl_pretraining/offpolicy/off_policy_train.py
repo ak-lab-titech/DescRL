@@ -21,7 +21,7 @@ from gym import spaces
 sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
 sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
 
-from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import IPRLPretrainingDataset, my_collate_fn, compute_spectrogram
+from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import IPRLPretrainingDataset, CollateFn, compute_spectrogram
 from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_lmdb_dataset import IPRLPretrainingLMDBDataset
 from ss_baselines.saven.config.default import get_config
 
@@ -273,6 +273,10 @@ def train(
         # train_dataset = IPRLPretrainingDataset(config.TASK_CONFIG, config.SENSORS)
         raise NotImplementedError("use_lmdb_dataset must be True.") # val_datasetに対応させてないので
 
+    my_collate_fn = CollateFn(
+        use_foundation_model=config.FOUNDATION_MODEL.model_type == "video_llama2",
+        max_instr_len=config.FOUNDATION_MODEL.max_instr_len,
+    )
     train_sampler = DistributedSampler(
         train_dataset,
         num_replicas=int(os.environ["NP"]),

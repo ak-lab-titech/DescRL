@@ -1,9 +1,12 @@
 import sys
 import gzip
 import json
+from typing import Dict, Tuple
 
 import numpy as np
 import torch
+from videollama2.model.builder import load_pretrained_model
+from videollama2.mm_utils import get_model_name_from_path
 
 sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
@@ -61,10 +64,11 @@ def sentence2token(sentence: str):
         if word == "":
             continue
         elif word[-1] == ".":
-            if word[:-1] in lang.word2index.keys():
-                token.append(lang.word2index[word[:-1]])
-            else:
-                token.append(lang.word2index["<unk>"])
+            if len(word) > 1:
+                if word[:-1] in lang.word2index.keys():
+                    token.append(lang.word2index[word[:-1]])
+                else:
+                    token.append(lang.word2index["<unk>"])
             token.append(lang.word2index["."])
         else:
             if word in lang.word2index.keys():
@@ -75,7 +79,7 @@ def sentence2token(sentence: str):
 
 
 class R2RLang:
-    def __init__(self, name: str):
+    def __init__(self, name: str = "r2r"):
         self.name = name
         # self.word2index = {}
         # self.word2count = {}
@@ -96,3 +100,22 @@ class R2RLang:
             encoding='utf-8',
         ) as f:
             self.glove_vec = np.array(json.load(f))
+        
+        self.word_embed_size = self.glove_vec.shape[1]
+
+
+VIDEO_LLAMA2_TOKENIZER, VIDEO_LLAMA2_MODEL, _, _ = load_pretrained_model(
+    "DAMO-NLP-SG/VideoLLaMA2-7B-16F-Base",
+    None,
+    get_model_name_from_path("DAMO-NLP-SG/VideoLLaMA2-7B-16F-Base"),
+)
+VIDEO_LLAMA2_VOCAB = VIDEO_LLAMA2_TOKENIZER.get_vocab()
+class VideoLLaMA2Lang:
+    def __init__(self, name: str = "videollama2"):
+        self.name = name
+
+        self.word2index = VIDEO_LLAMA2_VOCAB
+        self.index2word = {v: k for k, v in self.word2index.items()}
+        self.vocab_size = 32000
+        self.glove_vec = VIDEO_LLAMA2_MODEL.get_input_embeddings().weight.cpu().detach().numpy().copy()
+        self.word_embed_size = self.glove_vec.shape[1]

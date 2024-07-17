@@ -173,49 +173,90 @@ def compute_pointgoal_with_gps_compass(agent_state, episode):
     return point_goal
 
 
-def my_collate_fn(batch):
-    batch_size = len(batch)
-    max_path_length = 0
-    for x, _ in batch:
-        if max_path_length < len(x["action_seq"]):
-            max_path_length = len(x["action_seq"])
+class CollateFn:
+    def __init__(self, use_foundation_model, max_instr_len):
+        self.use_foundation_model = use_foundation_model
+        self.max_instr_length = max_instr_len
     
-    image_shape = np.shape(batch[0][0]["image_seq"][0][0])
-    audio_shape = np.shape(batch[0][0]["audio_seq"][0][0])
-    
-    batched_image_seqs = np.zeros((max_path_length, batch_size) + image_shape, np.float32)
-    batched_audio_seqs = np.zeros((max_path_length, batch_size) + audio_shape, np.float32)
-    batched_pose_seqs = np.zeros((max_path_length, batch_size, 4), np.float32)
-    batched_action_seqs = np.zeros((max_path_length, batch_size, 1), np.float32)
-    batched_category = np.zeros((batch_size, 21), np.float32)
-    batched_location = np.zeros((batch_size, 2), np.float32)
-    path_masks = np.full((batch_size, max_path_length), True)
-    seq_lengths = []
-    targets = []
-    
-    for i, (x, y) in enumerate(batch):
-        seq_len = len(x["action_seq"])
-        path_masks[i, :seq_len] = False
-        batched_image_seqs[:seq_len, i] = x["image_seq"][:, 0]
-        batched_audio_seqs[:seq_len, i] = x["audio_seq"][:, 0]
-        batched_pose_seqs[:seq_len, i] = x["pose_seq"][:, 0]
-        batched_action_seqs[:seq_len, i] = x["action_seq"]
-        batched_category[i] = x["category"]
-        batched_location[i] = x["location"]
-        seq_lengths.append(seq_len)
-        targets.append(y)
-    
-    inputs = {
-        "rgb": torch.from_numpy(batched_image_seqs[:, :, :, :, :3]).cuda(),
-        "depth": torch.from_numpy(batched_image_seqs[:, :, :, :, 3:4]).cuda(),
-        "pose": torch.from_numpy(batched_pose_seqs).cuda(),
-        "spectrogram": torch.from_numpy(batched_audio_seqs).cuda(),
-        "action": torch.from_numpy(batched_action_seqs).cuda(),
-        "category": torch.from_numpy(batched_category).cuda(),
-        "location": torch.from_numpy(batched_location).cuda(),
-        "mask": torch.from_numpy(path_masks).cuda(),
-        "seq_lengths": torch.from_numpy(np.array(seq_lengths)).cuda(),
-    }
-    targets = torch.from_numpy(np.array(targets)).cuda()
+    def __call__(self, batch):
 
-    return inputs, targets
+        batch_size = len(batch)
+        max_path_length = 0
+        if self.use_foundation_model:
+            for x, _, _ in batch:
+                if max_path_length < len(x["action_seq"]):
+                    max_path_length = len(x["action_seq"])
+        else:
+            for x, _ in batch:
+                if max_path_length < len(x["action_seq"]):
+                    max_path_length = len(x["action_seq"])
+
+        image_shape = np.shape(batch[0][0]["image_seq"][0][0])
+        audio_shape = np.shape(batch[0][0]["audio_seq"][0][0])
+
+        batched_image_seqs = np.zeros((max_path_length, batch_size) + image_shape, np.float32)
+        batched_audio_seqs = np.zeros((max_path_length, batch_size) + audio_shape, np.float32)
+        batched_pose_seqs = np.zeros((max_path_length, batch_size, 4), np.float32)
+        batched_action_seqs = np.zeros((max_path_length, batch_size, 1), np.float32)
+        batched_category = np.zeros((batch_size, 21), np.float32)
+        batched_location = np.zeros((batch_size, 2), np.float32)
+        path_masks = np.full((batch_size, max_path_length), True)
+        seq_lengths = []
+
+        if self.use_foundation_model:
+            vocab_size = len(batch[0][2][0])
+            feature_dim = len(batch[0][1][0])
+            logits_mask = np.full((batch_size, self.max_instr_length), True)
+            batched_logits = np.zeros((self.max_instr_length, batch_size, vocab_size), np.float32)
+            batched_visual_features = np.zeros((max_path_length, batch_size, feature_dim), np.float32)
+            for i, (x, visual_feature, logit) in enumerate(batch):
+                seq_len = len(x["action_seq"])
+                path_masks[i, :seq_len] = False
+                batched_image_seqs[:seq_len, i] = x["image_seq"][:, 0]
+                batched_audio_seqs[:seq_len, i] = x["audio_seq"][:, 0]
+                batched_pose_seqs[:seq_len, i] = x["pose_seq"][:, 0]
+                batched_action_seqs[:seq_len, i] = x["action_seq"]
+                batched_category[i] = x["category"]
+                batched_location[i] = x["location"]
+                seq_lengths.append(seq_len)
+
+                logits_len = len(logit)
+                logits_mask[i, :logits_len] = False
+                batched_logits[:logits_len, i] = logit.cpu().numpy()
+                batched_visual_features[:seq_len, i] = visual_feature.cpu().numpy()
+        else:
+            targets = []
+            for i, (x, y) in enumerate(batch):
+                seq_len = len(x["action_seq"])
+                path_masks[i, :seq_len] = False
+                batched_image_seqs[:seq_len, i] = x["image_seq"][:, 0]
+                batched_audio_seqs[:seq_len, i] = x["audio_seq"][:, 0]
+                batched_pose_seqs[:seq_len, i] = x["pose_seq"][:, 0]
+                batched_action_seqs[:seq_len, i] = x["action_seq"]
+                batched_category[i] = x["category"]
+                batched_location[i] = x["location"]
+                seq_lengths.append(seq_len)
+                targets.append(y)
+
+        inputs = {
+            "rgb": torch.from_numpy(batched_image_seqs[:, :, :, :, :3]).cuda(),
+            "depth": torch.from_numpy(batched_image_seqs[:, :, :, :, 3:4]).cuda(),
+            "pose": torch.from_numpy(batched_pose_seqs).cuda(),
+            "spectrogram": torch.from_numpy(batched_audio_seqs).cuda(),
+            "action": torch.from_numpy(batched_action_seqs).cuda(),
+            "category": torch.from_numpy(batched_category).cuda(),
+            "location": torch.from_numpy(batched_location).cuda(),
+            "mask": torch.from_numpy(path_masks).cuda(),
+            "seq_lengths": torch.from_numpy(np.array(seq_lengths)).cuda(),
+        }
+
+        if self.use_foundation_model:
+            targets = {
+                "visual_features": torch.from_numpy(batched_visual_features).cuda(),
+                "logits": torch.from_numpy(batched_logits).cuda(),
+                "logits_mask": torch.from_numpy(logits_mask).cuda(),
+            }
+        else:
+            targets = torch.from_numpy(np.array(targets)).cuda()
+
+        return inputs, targets

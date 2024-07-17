@@ -69,12 +69,22 @@ class InstructionPredictor(nn.Module):
             self.word_vocab_emb.weight.requires_grad = False
 
         if self.belief_dim == 23:
-            with gzip.open(
-                "/home/4/ud02274/navigation/myss/sound-spaces/data/category_embed/savi_21_categorys.json.gz",
-                'rt',
-                encoding='utf-8',
-            ) as f:
-                category_emb_vec = np.array(json.load(f))
+            if vocab_emb_size == 50:
+                with gzip.open(
+                    "/home/4/ud02274/navigation/myss/sound-spaces/data/category_embed/savi_21_categorys.json.gz",
+                    'rt',
+                    encoding='utf-8',
+                ) as f:
+                    category_emb_vec = np.array(json.load(f))
+            elif vocab_emb_size == 4096:
+                with gzip.open(
+                    "/home/4/ud02274/navigation/myss/sound-spaces/data/category_embed/savi_21_categorys_4094.json.gz",
+                    'rt',
+                    encoding='utf-8',
+                ) as f:
+                    category_emb_vec = np.array(json.load(f))
+            else:
+                raise NotImplementedError(f"vocab_emb_size: {vocab_emb_size}")
             self.category_emb = nn.Linear(self.belief_dim-2, vocab_emb_size-2)
             self.category_emb.weight.data[...] = torch.from_numpy(category_emb_vec)
             self.category_emb.weight.requires_grad = False

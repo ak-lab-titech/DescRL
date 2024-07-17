@@ -9,6 +9,16 @@ CHECKPOINT_INTERVAL: 50
 VIDEO_OPTION: []
 
 
+FOUNDATION_MODEL:
+  model_type: "video_llama2" # null
+  model_path: "../xgenerator/data/models/video_llama2/finetune_videollama2_vllava_qlora_epoch1_frame16" # null
+  visual_feature_coef: 10.0
+  logits_coef: 1.0
+  visual_encoder_output_size: 1024
+  max_instr_len: 40
+TOKENIZER_TYPE: "video_llama2" # "r2r"
+
+
 RL:
   PPO: # IPRLPretrainではPPO自体は用いていない
     lr: 2.5e-5 # 2.5e-4
