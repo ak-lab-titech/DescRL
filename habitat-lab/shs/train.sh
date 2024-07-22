@@ -5,6 +5,11 @@ SCENE_DATASET="mp3d"
 MODEL="rnn"
 MODEL_NAME="baseline"
 
+# for off-policy iprl pre-training
+LOG_INTERVAL=10
+SAVE_INTERVAL=500
+VAL_INTERVAL=500
+
 echo ENV=$ENV
 echo MODEL=$MODEL
 echo SCENE_DATASET=$SCENE_DATASET
@@ -36,6 +41,20 @@ elif [ $ENV = "habitat-objnav" ] && [ $MODEL = "smt-pretraining" ] && [ $SCENE_D
     python ./sound-spaces/ss_baselines/savi/run.py \
         --exp-config ./habitat-lab/habitat_baselines/config/objectnav/ddppo_smt_pretraining.yaml \
         --model-dir ./habitat-lab/data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME
+elif [ $ENV = "habitat-objnav" ] && [ $MODEL = "smt-offpolicy-iprl-pretraining" ] && [ $SCENE_DATASET = "mp3d" ]; then
+    cd ~/navigation/myss
+    CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
+        --nnodes=1 \
+        --nproc_per_node=$NP \
+        ./sound-spaces/ss_baselines/savi/iprl_pretraining/offpolicy/off_policy_train.py \
+        --config ./habitat-lab/habitat_baselines/config/objectnav_iprl_pretraining/config.yaml \
+        --model-dir ./habitat-lab/data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
+        --use-lmdb True \
+        --log-interval $LOG_INTERVAL \
+        --save-interval $SAVE_INTERVAL \
+        --val-interval $VAL_INTERVAL
+        
+        # RL.DDPPO.pretrained_weights "./habitat-lab/data/models/$ENV/$SCENE_DATASET/$MODEL/$PRETRAINED_MODEL_NAME/data/ckpt.$CKPT_NUM.pth"
 else
     echo ERROR: ENV=$ENV, MODEL=$MODEL, SCENE_DATASET=$SCENE_DATASET.
 fi

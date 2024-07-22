@@ -8,6 +8,7 @@ import time
 import yaml
 import numpy as np
 import torch
+from tqdm import trange
 
 sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
 sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
@@ -16,16 +17,13 @@ sys.path.append("/home/4/ud02274/navigation/myss")
 from habitat.sims import make_sim
 from habitat.datasets import make_dataset
 from habitat_sim.utils.common import quat_from_angle_axis
-from ss_baselines.savi.config.default import get_config
-from soundspaces.tasks.semantic_audionav_task import merge_sim_episode_config
+from habitat_baselines.config.default import get_config as habitat_get_config
+from ss_baselines.savi.config.default import get_config as ss_get_config
+from habitat.tasks.nav.nav import merge_sim_episode_config as habitat_merge_sim_episode_config
+from soundspaces.tasks.semantic_audionav_task import merge_sim_episode_config as ss_merge_sim_episode_config
 from xgenerator.common.lang import R2RLang
 from common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from xgenerator.transformer_speaker.model import Seq2SeqTransformer
-from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import (
-    compute_spectrogram,
-    compute_pose,
-)
-from ss_baselines.savi.iprl_pretraining.offpolicy.off_policy_train import setup_instruction_predictor
 from soundspaces.utils import generate_video, visualize_spectrogram
 from xgenerator.common.lang import R2RLang, tokens2sentences
 
@@ -108,53 +106,24 @@ def get_obs_seqs(sim, future_step_num):
     return image_seqs, action_seqs
 
 
-def get_obs_seqs_for_xpred(sim, episode):
-    image_seqs_list = []
-    audio_seqs_list = []
-    pose_seqs_list = []
-    action_seqs_list = []
-    oracle_actions = sim.get_oracle_actions_from_current_pos()
-    cnt = 0
-    # for文だと-1の時に対応できないのでwhile
-    while True:
-        
-        sim_obs = sim._get_sim_observation()
-        observations = sim._sensor_suite.get_observations(sim_obs)
-        image_shape = np.shape(observations["depth"])
-        
-        if len(image_shape) == 4:
-            depth_img = np.squeeze(observations["depth"], axis=3)
-        else:
-            depth_img = observations["depth"]
-        rgb_img = observations["rgb"] / 255.0
-            
-        image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
-        
-        audio = sim.get_current_spectrogram_observation(compute_spectrogram)
-        pose = compute_pose(episode, sim.get_agent_state(), cnt)
+def get_obs_seqs_for_habitat_objnav(sim, oracle_actions):
+    # oracle_actions = sim.get_oracle_actions_from_current_pos(
+    #     goal_radius=1.0,
+    #     view_points=view_points,
+    # )
+    for i, oracle_action in enumerate(oracle_actions[:-1]):
+        sim.step(oracle_action)
 
-        if cnt == 0:
-            save_pathaction = 0
-        else:
-            save_action = oracle_actions[cnt-1]
-        # action_onehot = np.eye(4)[action].astype(np.int8)
-
-        image_seqs_list.append([image])
-        audio_seqs_list.append([audio])
-        pose_seqs_list.append([pose])
-        action_seqs_list.append([[save_action]])
-
-        if action == 0:
-            break
-        sim.step(oracle_actions[cnt])
-        cnt += 1
-
-    image_seqs = np.array(image_seqs_list)
-    audio_seqs = np.array(audio_seqs_list)
-    pose_seqs = np.array(pose_seqs_list)
-    action_seqs = np.array(action_seqs_list)
+    image_seqs = np.array(sim.k_prev_images)
+    if len(sim.k_prev_actions) == 0:
+        action_seqs = np.eye(4)[0].astype(np.int8).reshape(1, 1, 4)
+    elif len(sim.k_prev_actions) < sim.prev_k:
+        action_seqs = np.array(list(sim.k_prev_actions) + [[np.eye(4)[0].astype(np.int8)]])
+    else:
+        action_seqs = np.array(list(sim.k_prev_actions)[1:] + [[np.eye(4)[0].astype(np.int8)]])
     
-    return image_seqs, audio_seqs, pose_seqs, action_seqs
+    return image_seqs, action_seqs
+
 
 def make_batch(image_seqs, action_seqs, input_future_step_num, future_or_past):
     batch_size = np.shape(image_seqs)[0]
@@ -237,37 +206,6 @@ def generate_instruction(
     return past_tokens
 
 
-def generate_instruction_from_xpred(
-    instruction_predictor,
-    image_seqs,
-    audio_seqs,
-    pose_seqs,
-    action_seqs,
-):
-    inputs = {
-        "rgb": torch.from_numpy(image_seqs[:, :, :, :, :3]).float().cuda(),
-        "depth": torch.from_numpy(image_seqs[:, :, :, :, 3:4]).float().cuda(),
-        "pose": torch.from_numpy(pose_seqs).cuda(),
-        "spectrogram": torch.from_numpy(audio_seqs).float().cuda(),
-        "action": torch.from_numpy(action_seqs).cuda(),
-        "category": None,
-        "location": None,
-        "mask": None,
-        "seq_lengths": torch.from_numpy(np.array([len(audio_seqs)])).cuda(),
-        "target": None,
-    }
-    logits = instruction_predictor(
-        observations=inputs,
-        prev_actions=inputs["action"],
-        masks=None,
-        ext_memory=None,
-        ext_memory_masks=inputs["mask"],
-    )
-    _, tokens = logits.max(2)
-
-    return tokens
-
-
 def make_video(image_seq, audio_seq, pose_seq, action_seq, instruction, output_dir):
     os.makedirs(output_dir, exist_ok=True)  
     os.makedirs(f"{output_dir}/spectrograms", exist_ok=True)
@@ -292,6 +230,7 @@ def main(
     content_scenes_path,
     save_dataset_path,
     future_or_past,
+    environment_type,
 ):
     dataset = make_dataset(
         id_dataset=config.TASK_CONFIG.DATASET.TYPE,
@@ -315,6 +254,7 @@ def main(
     scene_file_names = [
         f for f in os.listdir(content_scenes_path) if os.path.isfile(os.path.join(content_scenes_path, f))
     ]
+    print(f"scene_file_names: {scene_file_names}")
     # for train
     dict_dataset = {f: {'episodes': [], 'scene': f.split('/')[0]} for f in scene_file_names}
 
@@ -323,22 +263,41 @@ def main(
 
     # step_num_for_FEPRL = 5 # for F-EPRL
     print(f"length of episodes: {len(episodes)}\n")
-    for i, episode in enumerate(episodes):
-        sim_cfg = merge_sim_episode_config(sim_cfg, episode)
+
+    if environment_type == "ss1-savi":
+        indices = np.arange(len(episodes))
+    elif environment_type == "habitat-objnav":
+        n_episode = 1000 # for train
+        # n_episode = len(episodes) # for val & test
+        indices = np.random.choice(np.arange(len(episodes)), size=n_episode, replace=False)
+    else:
+        raise Exception(f"environment_type: {environment_type}")
+    
+    for j in trange(len(indices)):
+        i = indices[j]
+        episode = episodes[i]
+        if environment_type == "ss1-savi":
+            sim_cfg = ss_merge_sim_episode_config(sim_cfg, episode)
+        elif environment_type == "habitat-objnav":
+            sim_cfg = habitat_merge_sim_episode_config(sim_cfg, episode)
+            oracle_actions = []
+            for point in episode.shortest_paths[0]:
+                oracle_actions.append(point.action)
+            oracle_actions = oracle_actions[:-1] + [0] # 必ず最後がNoneになっているので0にする
+            sim.prev_k = len(oracle_actions)
+        
         sim.reconfigure(sim_cfg)
         _ = sim.reset()
-        image_seqs, action_seqs = get_obs_seqs(sim, -1)
-        # image_seqs, audio_seqs, pose_seqs, action_seqs = get_obs_seqs_for_xpred(sim, episode)
-
-        # for F-EPRL
-        # image_seqs = image_seqs[:step_num_for_FEPRL]
-        # audio_seqs = audio_seqs[:step_num_for_FEPRL]
-        # pose_seqs = pose_seqs[:step_num_for_FEPRL]
-        # action_seqs = action_seqs[:step_num_for_FEPRL]
-
-        # for XGenerator without batched (VLNCE評価用)
-        # batched_image_seqs = torch.from_numpy(image_seqs).cuda()
-        # batched_action_seqs = torch.from_numpy(action_seqs).cuda()
+        if environment_type == "habitat-objnav":
+            # view_points = [
+            #     view_point.agent_state.position
+            #     for goal in episode.goals
+            #     for view_point in goal.view_points
+            # ]
+            # view_points = [episode.info['best_viewpoint_position']]
+            image_seqs, action_seqs = get_obs_seqs_for_habitat_objnav(sim, oracle_actions)
+        else:
+            image_seqs, action_seqs = get_obs_seqs(sim, -1)
 
         # for XGenerator with batched
         batched_image_seqs, batched_action_seqs, path_masks = make_batch(
@@ -357,54 +316,67 @@ def main(
             # path_mask=path_masks,
             max_instr_len=config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MAX_INSTRUCTION_LENGTH,
         )
-
-        # for XPredictor
-        # instructions = generate_instruction_from_xpred(
-        #     instruction_predictor,
-        #     image_seqs,
-        #     audio_seqs,
-        #     pose_seqs,
-        #     action_seqs,
-        # )
-
-        # make_video(
-        #     image_seq=image_seqs,
-        #     audio_seq=audio_seqs,
-        #     pose_seq=pose_seqs,
-        #     action_seq=action_seqs,
-        #     instruction=instructions,
-        #     output_dir="./hoge",
-        # )
-        # exit()
         
         episode.info["num_action"] = np.shape(batched_image_seqs)[1] # 元々保存されているnum_actionとoracle_action lengthが異なっている時がある
-        # episode.info["num_action"] = np.shape(image_seqs)[1] # 元々保存されているnum_actionとoracle_action lengthが異なっている時がある
-        dict_episode = {
-            'episode_id': episode.episode_id,
-            'scene_id': os.path.join(*episode.scene_id.split("/")[-2:]),
-            'start_position': episode.start_position,
-            'start_rotation': episode.start_rotation,
-            'info': episode.info,
-            'goals': [
-                {
-                    'position': goal.position,
-                    'radius': goal.radius,
-                    'object_id': goal.object_id,
-                    'object_name': goal.object_name,
-                    'object_category': goal.object_category,
-                    'room_id': goal.room_id,
-                    'room_name': goal.room_name,
-                    'view_points': [loc.agent_state.position for loc in goal.view_points],
-                } for goal in episode.goals
-            ],
-            'start_room': episode.start_room,
-            'shortest_paths': episode.shortest_paths,
-            'object_category': episode.object_category,
-            'sound_id': episode.sound_id,
-            'offset': episode.offset,
-            'duration': episode.duration,
-            'instructions': instructions.cpu().numpy().tolist(),
-        }
+        if environment_type == "ss1-savi":
+            dict_episode = {
+                'episode_id': episode.episode_id,
+                'scene_id': os.path.join(*episode.scene_id.split("/")[-2:]),
+                'start_position': episode.start_position,
+                'start_rotation': episode.start_rotation,
+                'info': episode.info,
+                'goals': [
+                    {
+                        'position': goal.position,
+                        'radius': goal.radius,
+                        'object_id': goal.object_id,
+                        'object_name': goal.object_name,
+                        'object_category': goal.object_category,
+                        'room_id': goal.room_id,
+                        'room_name': goal.room_name,
+                        'view_points': [loc.agent_state.position for loc in goal.view_points],
+                    } for goal in episode.goals
+                ],
+                'start_room': episode.start_room,
+                'shortest_paths': episode.shortest_paths,
+                "sound_id": episode.sound_id,
+                "offset": episode.offset,
+                "duration": episode.duration,
+                'object_category': episode.object_category,
+                'instructions': instructions.cpu().numpy().tolist(),
+            }
+        elif environment_type == "habitat-objnav":
+            sps = []
+            for sp in episode.shortest_paths:
+                list_sp = []
+                for point in sp:
+                    list_sp.append(point.action)
+                sps.append(list_sp)
+
+            dict_episode = {
+                'episode_id': episode.episode_id,
+                'scene_id': os.path.join(*episode.scene_id.split("/")[-3:]),
+                'start_position': episode.start_position,
+                'start_rotation': episode.start_rotation,
+                'info': episode.info,
+                'goals': [
+                    {
+                        'position': goal.position,
+                        'radius': goal.radius,
+                        'object_id': goal.object_id,
+                        'object_name': goal.object_name,
+                        'object_category': goal.object_category,
+                        'room_id': goal.room_id,
+                        'room_name': goal.room_name,
+                        'view_points': goal.view_points,
+                    } for goal in episode.goals
+                ],
+                'start_room': episode.start_room,
+                'shortest_paths': sps,
+                'object_category': episode.object_category,
+                'instructions': instructions.cpu().numpy().tolist(),
+            }
+        
         # for train
         dict_dataset[f"{sim_cfg.SCENE.split('/')[-1].split('.')[0]}.json.gz"]['episodes'].append(dict_episode)
 
@@ -439,16 +411,29 @@ if __name__=="__main__":
         type=str,
     )
     args = parser.parse_args()
-    config = get_config(args.config)
-    content_scenes_path = "{data_path}/content".format(
-        data_path=os.path.dirname(config.TASK_CONFIG.DATASET.DATA_PATH.format(
-            version=config.TASK_CONFIG.DATASET.VERSION,
-            split=config.TASK_CONFIG.DATASET.SPLIT,
-        )),
-    )
+    if "ss_baselines" in args.config:
+        config = ss_get_config(args.config)
+        content_scenes_path = "{data_path}/content".format(
+            data_path=os.path.dirname(config.TASK_CONFIG.DATASET.DATA_PATH.format(
+                version=config.TASK_CONFIG.DATASET.VERSION,
+                split=config.TASK_CONFIG.DATASET.SPLIT,
+            )),
+        )
+        environment_type = "ss1-savi"
+    elif "habitat_baselines" in args.config:
+        config = habitat_get_config(args.config, None, "make_instructions")
+        content_scenes_path = "{data_path}/content".format(
+            data_path=os.path.dirname(config.TASK_CONFIG.DATASET.DATA_PATH.format(
+                split=config.TASK_CONFIG.DATASET.SPLIT,
+            )),
+        )
+        environment_type = "habitat-objnav"
+    else:
+        raise Exception(f"args.config: {args.config}")
+    
     os.makedirs(f"{args.save_dataset_path}/content", exist_ok=True)
 
-    main(config, content_scenes_path, args.save_dataset_path, args.future_or_past)
+    main(config, content_scenes_path, args.save_dataset_path, args.future_or_past, environment_type)
 
 
 # simlator: 0.001476287841796875

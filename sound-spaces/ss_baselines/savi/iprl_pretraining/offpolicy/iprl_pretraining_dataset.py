@@ -128,7 +128,7 @@ def quat_to_xy_heading(quat):
     return np.array([phi], dtype=np.float32)
 
 
-def compute_pose(episode, agent_state, ep_time):
+def compute_pose(episode, agent_state, ep_time, environemnt_type="ss1-savi"):
     origin = np.array(episode.start_position, dtype=np.float32)
     rotation_world_start = quaternion_from_coeff(episode.start_rotation)
     agent_position_xyz = agent_state.position
@@ -139,6 +139,8 @@ def compute_pose(episode, agent_state, ep_time):
     agent_heading = quat_to_xy_heading(
         rotation_world_agent.inverse() * rotation_world_start
     )
+    if environemnt_type == "habitat-objnav":
+        agent_heading = agent_heading[0]
     return np.array(
         [-agent_position_xyz[2], agent_position_xyz[0], agent_heading, ep_time],
         dtype=np.float32
@@ -174,9 +176,10 @@ def compute_pointgoal_with_gps_compass(agent_state, episode):
 
 
 class CollateFn:
-    def __init__(self, use_foundation_model, max_instr_len):
+    def __init__(self, use_foundation_model, max_instr_len, environment_type):
         self.use_foundation_model = use_foundation_model
         self.max_instr_length = max_instr_len
+        self.environment_type = environment_type
     
     def __call__(self, batch):
 
@@ -192,15 +195,21 @@ class CollateFn:
                     max_path_length = len(x["action_seq"])
 
         image_shape = np.shape(batch[0][0]["image_seq"][0][0])
-        audio_shape = np.shape(batch[0][0]["audio_seq"][0][0])
-
         batched_image_seqs = np.zeros((max_path_length, batch_size) + image_shape, np.float32)
-        batched_audio_seqs = np.zeros((max_path_length, batch_size) + audio_shape, np.float32)
         batched_pose_seqs = np.zeros((max_path_length, batch_size, 4), np.float32)
         batched_action_seqs = np.zeros((max_path_length, batch_size, 1), np.float32)
-        batched_category = np.zeros((batch_size, 21), np.float32)
-        batched_location = np.zeros((batch_size, 2), np.float32)
         path_masks = np.full((batch_size, max_path_length), True)
+        
+        if self.environment_type == "ss1-savi":
+            audio_shape = np.shape(batch[0][0]["audio_seq"][0][0])
+            batched_audio_seqs = np.zeros((max_path_length, batch_size) + audio_shape, np.float32)
+            batched_category = np.zeros((batch_size, 21), np.float32)
+            batched_location = np.zeros((batch_size, 2), np.float32)
+        elif self.environment_type == "habitat-objnav":
+            batched_objectgoal = np.zeros((batch_size, 21), np.float32)
+        else:
+            raise Exception(f"environment_type: {self.environment_type}")
+        
         seq_lengths = []
 
         if self.use_foundation_model:
@@ -213,11 +222,17 @@ class CollateFn:
                 seq_len = len(x["action_seq"])
                 path_masks[i, :seq_len] = False
                 batched_image_seqs[:seq_len, i] = x["image_seq"][:, 0]
-                batched_audio_seqs[:seq_len, i] = x["audio_seq"][:, 0]
                 batched_pose_seqs[:seq_len, i] = x["pose_seq"][:, 0]
                 batched_action_seqs[:seq_len, i] = x["action_seq"]
-                batched_category[i] = x["category"]
-                batched_location[i] = x["location"]
+                if self.environment_type == "ss1-savi":
+                    batched_audio_seqs[:seq_len, i] = x["audio_seq"][:, 0]
+                    batched_category[i] = x["category"]
+                    batched_location[i] = x["location"]
+                elif self.environment_type == "habitat-objnav":
+                    batched_objectgoal[i] = x["objectgoal"]
+                else:
+                    raise Exception(f"environment_type: {self.environment_type}")
+                
                 seq_lengths.append(seq_len)
 
                 logits_len = len(logit)
@@ -230,25 +245,44 @@ class CollateFn:
                 seq_len = len(x["action_seq"])
                 path_masks[i, :seq_len] = False
                 batched_image_seqs[:seq_len, i] = x["image_seq"][:, 0]
-                batched_audio_seqs[:seq_len, i] = x["audio_seq"][:, 0]
                 batched_pose_seqs[:seq_len, i] = x["pose_seq"][:, 0]
                 batched_action_seqs[:seq_len, i] = x["action_seq"]
-                batched_category[i] = x["category"]
-                batched_location[i] = x["location"]
+                if self.environment_type == "ss1-savi":
+                    batched_audio_seqs[:seq_len, i] = x["audio_seq"][:, 0]
+                    batched_category[i] = x["category"]
+                    batched_location[i] = x["location"]
+                elif self.environment_type == "habitat-objnav":
+                    batched_objectgoal[i] = x["objectgoal"]
+                else:
+                    raise Exception(f"environment_type: {self.environment_type}")
+                
                 seq_lengths.append(seq_len)
                 targets.append(y)
 
-        inputs = {
-            "rgb": torch.from_numpy(batched_image_seqs[:, :, :, :, :3]).cuda(),
-            "depth": torch.from_numpy(batched_image_seqs[:, :, :, :, 3:4]).cuda(),
-            "pose": torch.from_numpy(batched_pose_seqs).cuda(),
-            "spectrogram": torch.from_numpy(batched_audio_seqs).cuda(),
-            "action": torch.from_numpy(batched_action_seqs).cuda(),
-            "category": torch.from_numpy(batched_category).cuda(),
-            "location": torch.from_numpy(batched_location).cuda(),
-            "mask": torch.from_numpy(path_masks).cuda(),
-            "seq_lengths": torch.from_numpy(np.array(seq_lengths)).cuda(),
-        }
+        if self.environment_type == "ss1-savi":
+            inputs = {
+                "rgb": torch.from_numpy(batched_image_seqs[:, :, :, :, :3]).cuda(),
+                "depth": torch.from_numpy(batched_image_seqs[:, :, :, :, 3:4]).cuda(),
+                "pose": torch.from_numpy(batched_pose_seqs).cuda(),
+                "spectrogram": torch.from_numpy(batched_audio_seqs).cuda(),
+                "action": torch.from_numpy(batched_action_seqs).cuda(),
+                "category": torch.from_numpy(batched_category).cuda(),
+                "location": torch.from_numpy(batched_location).cuda(),
+                "mask": torch.from_numpy(path_masks).cuda(),
+                "seq_lengths": torch.from_numpy(np.array(seq_lengths)).cuda(),
+            }
+        elif self.environment_type == "habitat-objnav":
+            inputs = {
+                "rgb": torch.from_numpy(batched_image_seqs[:, :, :, :, :3]).cuda(),
+                "depth": torch.from_numpy(batched_image_seqs[:, :, :, :, 3:4]).cuda(),
+                "pose": torch.from_numpy(batched_pose_seqs).cuda(),
+                "action": torch.from_numpy(batched_action_seqs).cuda(),
+                "mask": torch.from_numpy(path_masks).cuda(),
+                "objectgoal": torch.from_numpy(batched_objectgoal).cuda(),
+                "seq_lengths": torch.from_numpy(np.array(seq_lengths)).cuda(),
+            }
+        else:
+            raise Exception(f"environment_type: {self.environment_type}")
 
         if self.use_foundation_model:
             targets = {

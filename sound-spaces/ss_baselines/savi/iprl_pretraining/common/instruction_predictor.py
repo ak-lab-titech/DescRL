@@ -5,6 +5,7 @@ import sys
 import torch
 import torch.nn as nn
 import numpy as np
+from habitat.tasks.nav.object_nav_task import ObjectGoalSensor
 from soundspaces.tasks.nav import PoseSensor, SpectrogramSensor, LocationBelief, CategoryBelief, Category
 from ss_baselines.savi.models.audio_cnn import AudioCNN
 from ss_baselines.savi.models.smt_state_encoder import SMTStateEncoder
@@ -106,9 +107,13 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         self.use_xgen_visual_encoder = use_xgen_visual_encoder
 
         super().__init__()
-        assert SpectrogramSensor.cls_uuid in observation_space.spaces
-        self.goal_encoder = AudioCNN(observation_space, 128, SpectrogramSensor.cls_uuid)
-        audio_feature_dims = 128
+        self.use_audio = SpectrogramSensor.cls_uuid in observation_space.spaces
+        if self.use_audio:
+            self.goal_encoder = AudioCNN(observation_space, 128, SpectrogramSensor.cls_uuid)
+            audio_feature_dims = 128
+        else:
+            self.goal_encoder = None
+            audio_feature_dims = 0
 
         if self.use_xgen_visual_encoder:
             self.visual_encoder = VisualImageEncoder((128, 128, 4), visual_encoder_output_size)
@@ -265,7 +270,8 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         """Freeze goal, visual and fusion encoders. Pose encoder is not frozen."""
         logging.info(f'AudioNavSMTNet ===> Freezing goal, visual, fusion encoders!')
         params_to_freeze = []
-        params_to_freeze.append(self.goal_encoder.parameters())
+        if self.use_audio:
+            params_to_freeze.append(self.goal_encoder.parameters())
         params_to_freeze.append(self.visual_encoder.parameters())
         params_to_freeze.append(self.action_encoder.parameters())
         for p in itertools.chain(*params_to_freeze):
@@ -273,7 +279,8 @@ class AudioNavSMTInstructionPredictor(nn.Module):
 
     def set_eval_encoders(self):
         """Sets the goal, visual and fusion encoders to eval mode."""
-        self.goal_encoder.eval()
+        if self.use_audio:
+            self.goal_encoder.eval()
         self.visual_encoder.eval()
 
     def get_features(self, observations, prev_actions, return_visual_features=False):
@@ -303,7 +310,8 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             action_features = self.action_encoder(self._get_one_hot(prev_actions))
             
         x.append(action_features)
-        x.append(self.goal_encoder(observations, self.on_or_off))
+        if self.use_audio:
+            x.append(self.goal_encoder(observations, self.on_or_off))
 
         if self._use_category_input:
             x.append(observations[Category.cls_uuid])
@@ -355,14 +363,19 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             
         _, enc_memory = self.smt_state_encoder(x, None, ext_memory_masks, path_lens=observations["seq_lengths"])
 
-        if self.iprl_use_gt_D:
-            category =  observations["category"] # (batch, 21)
-            location =  observations["location"] # (batch, 2)
-        else: 
-            with torch.no_grad():
-                observations = self.update_belief(observations)
-            category = nn.functional.softmax(observations[CategoryBelief.cls_uuid], dim=1) # (batch, 21)
-            location = observations[LocationBelief.cls_uuid] # (batch, 2)
+        if self.use_audio:
+            if self.iprl_use_gt_D:
+                category =  observations["category"] # (batch, 21)
+                location =  observations["location"] # (batch, 2)
+            else: 
+                with torch.no_grad():
+                    observations = self.update_belief(observations)
+                category = nn.functional.softmax(observations[CategoryBelief.cls_uuid], dim=1) # (batch, 21)
+                location = observations[LocationBelief.cls_uuid] # (batch, 2)
+        else:
+            assert ObjectGoalSensor.cls_uuid in observations.keys()
+            category = observations[ObjectGoalSensor.cls_uuid] # (batch, 21)
+            location = torch.from_numpy(np.zeros((len(category), 2))).to(category.device).float() # (batch, 2)
 
         if self.feedback == "teacher":
             pass

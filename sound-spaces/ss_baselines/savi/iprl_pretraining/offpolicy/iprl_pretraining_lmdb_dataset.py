@@ -24,7 +24,18 @@ from videollama2.mm_utils import tokenizer_MMODAL_token
 
 
 class IPRLPretrainingLMDBDataset(Dataset):
-    def __init__(self, config, split, lmdb_dataset_path, data_num, foundation_model_type=None, foundation_model_path=None, num_frames=16):
+    def __init__(
+        self,
+        config,
+        split,
+        lmdb_dataset_path,
+        data_num,
+        foundation_model_type=None,
+        foundation_model_path=None,
+        num_frames=16,
+        environment_type=None,
+        device="cuda",
+    ):
         tmp_split = config.DATASET.SPLIT
         config.defrost()
         config.DATASET.SPLIT = split
@@ -40,11 +51,13 @@ class IPRLPretrainingLMDBDataset(Dataset):
         #         lmdb_dataset_path = f"{lmdb_dataset_path}_2"
         #     else:
         #         lmdb_dataset_path = f"{lmdb_dataset_path}"
-        self.env = lmdb.open(lmdb_dataset_path, readonly=True, lock=False)
+        self.env = lmdb.open(lmdb_dataset_path, readonly=True, lock=False, map_size=5 * 1.1e12)
 
         config.defrost()
         config.DATASET.SPLIT = tmp_split
         config.freeze()
+
+        self.environment_type = environment_type
 
         self.foundation_model_type = foundation_model_type
         if foundation_model_type is None:
@@ -52,6 +65,7 @@ class IPRLPretrainingLMDBDataset(Dataset):
         elif foundation_model_type == "video_llama2":
             tokenizer, self.foundation_model, self.processor, _ = load_pretrained_model(
                 foundation_model_path, None, get_model_name_from_path(foundation_model_path),
+                device=device,
             )
             self.visual_encoder = self.foundation_model.get_model().get_vision_tower().vision_tower
             prompt = "[INST] <<SYS>>\n" \
@@ -71,12 +85,22 @@ class IPRLPretrainingLMDBDataset(Dataset):
     def __getitem__(self, index):
         value = self.get_value(index)
         
-        image_seq = value[0]   # (seq_len, 1, image_shape)
-        audio_seq = value[1]   # (seq_len, 1, spectrogram_shape)
-        pose_seq = value[2]    # (seq_len, 1, 4)
-        action_seq = value[3]  # (seq_len, 1)
-        category = value[4]    # (21,)
-        location = value[5]    # (2,)
+        if self.environment_type == "ss1-savi":
+            image_seq = value[0]   # (seq_len, 1, image_shape)
+            audio_seq = value[1]   # (seq_len, 1, spectrogram_shape)
+            pose_seq = value[2]    # (seq_len, 1, 4)
+            action_seq = value[3]  # (seq_len, 1)
+            category = value[4]    # (21,)
+            location = value[5]    # (2,)
+            objectgoal = None
+        elif self.environment_type == "habitat-objnav":
+            image_seq = value[0]
+            pose_seq = value[1]
+            action_seq = value[2]
+            objectgoal = value[3]
+            audio_seq = None
+            location = None
+            category = None
 
         step = pose_seq[-1, 0, 3]
         if self.foundation_model_type is None:
@@ -135,6 +159,7 @@ class IPRLPretrainingLMDBDataset(Dataset):
             "action_seq": action_seq,
             "category": category,
             "location": location,
+            "objectgoal": objectgoal,
         }
         if self.foundation_model is None:
             return x, instruction
@@ -166,7 +191,8 @@ class IPRLPretrainingLMDBDataset(Dataset):
         pose_seq = x["pose_seq"]
         action_seq = x["action_seq"]
         category = x["category"]
-        location = x["location"]        
+        location = x["location"]
+        objectgoal = x["objectgoal"]    
         
         f = open(f"{output_dir}/output.txt", "w")
         f.write(f"0: found, 1: forward, 2: left, 3: right\n")
@@ -175,6 +201,7 @@ class IPRLPretrainingLMDBDataset(Dataset):
         f.write(f"instructions: {words}\n")
         f.write(f"category: {category}\n")
         f.write(f"location: {location}\n")
+        f.write(f"objectgoal: {objectgoal}\n")
         f.close()
 
         generate_video(torch.from_numpy(image_seq.copy()), f"{output_dir}/image_seq.mp4")

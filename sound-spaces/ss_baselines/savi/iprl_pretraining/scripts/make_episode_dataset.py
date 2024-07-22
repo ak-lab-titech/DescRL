@@ -8,6 +8,7 @@ import numpy as np
 from skimage.measure import block_reduce
 import lmdb
 import msgpack_numpy
+from tqdm import trange
 
 sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
 sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
@@ -15,9 +16,10 @@ sys.path.append("/home/4/ud02274/navigation/myss")
 
 from habitat.datasets import make_dataset
 from habitat.sims import make_sim
-from ss_baselines.savi.config.default import get_config
-from soundspaces.tasks.semantic_audionav_task import merge_sim_episode_config
-from soundspaces.mp3d_utils import CATEGORY_INDEX_MAPPING
+from habitat_baselines.config.default import get_config as habitat_get_config
+from ss_baselines.savi.config.default import get_config as ss_get_config
+from habitat.tasks.nav.nav import merge_sim_episode_config as habitat_merge_sim_episode_config
+from soundspaces.tasks.semantic_audionav_task import merge_sim_episode_config as ss_merge_sim_episode_config
 from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import (
     compute_spectrogram,
     compute_pose,
@@ -75,8 +77,36 @@ def get_obs_seq(num_step, sim, episode):
     return image_seq, audio_seq, pose_seq, action_seq
 
 
+def get_obs_seq_for_habitat_objnav(num_step, sim, episode):
+    pose_seq_list = []
+    action_seq_list = []
+    oracle_actions = []
+    for point in episode.shortest_paths[0]:
+        oracle_actions.append(point.action)
+    oracle_actions = oracle_actions[:-1] + [0] # 最後がNoneになっているので0にする
+
+    for i in range(num_step):
+        pose = compute_pose(episode, sim.get_agent_state(), i, "habitat-objnav")
+        if i == 0:
+            save_action = 0
+        else:
+            save_action = oracle_actions[i-1]
+        pose_seq_list.append([pose])
+        action_seq_list.append([save_action])
+
+        sim.step(oracle_actions[i])
+
+    image_seq = np.array(sim.k_prev_images)[1:]
+    pose_seq = np.array(pose_seq_list)
+    action_seq = np.array(action_seq_list)
+
+    assert np.shape(image_seq)[0] == np.shape(pose_seq)[0] == np.shape(action_seq)[0]
+    
+    return image_seq, pose_seq, action_seq
+
+
 def make_episode_data(sim_cfg, sim, episode):
-    sim_cfg = merge_sim_episode_config(sim_cfg, episode)
+    sim_cfg = ss_merge_sim_episode_config(sim_cfg, episode)
     sim.reconfigure(sim_cfg)
     _ = sim.reset()
     
@@ -96,7 +126,23 @@ def make_episode_data(sim_cfg, sim, episode):
     return data
 
 
-def main(config, sensor_list, save_path, start_index=0):
+def make_episode_data_for_habitat_objnav(sim_cfg, sim, episode):
+    sim_cfg = habitat_merge_sim_episode_config(sim_cfg, episode)
+    sim.reconfigure(sim_cfg)
+    _ = sim.reset()
+    num_step = np.random.randint(1, episode.info["num_action"])
+    image_seq, pose_seq, action_seq = get_obs_seq_for_habitat_objnav(num_step, sim, episode)
+    object_category = get_category(episode)
+    data = [
+        image_seq,
+        pose_seq,
+        action_seq,
+        object_category,
+    ]
+    return data
+
+
+def main(config, sensor_list, save_path, start_index=0, environment_type=None):
     dataset = make_dataset(
         id_dataset=config.DATASET.TYPE,
         config=config.DATASET,
@@ -115,8 +161,14 @@ def main(config, sensor_list, save_path, start_index=0):
     map_size = 5 * 1.1e12 # about 5 TB
     env = lmdb.open(save_path, map_size=int(map_size))
     s = time.time()
-    for i in range(start_index, len(episodes)):
-        data = make_episode_data(sim_cfg, sim, episodes[i])
+    for i in trange(start_index, len(episodes)):
+        if environment_type == "ss1-savi":
+            data = make_episode_data(sim_cfg, sim, episodes[i])
+        elif environment_type == "habitat-objnav":
+            sim.prev_k = episodes[i].info["num_action"]
+            data = make_episode_data_for_habitat_objnav(sim_cfg, sim, episodes[i])
+        else:
+            raise Exception(f"environment_type: {environment_type}")
 
         with env.begin(write=True) as txn:
             txn.put(
@@ -145,8 +197,16 @@ if __name__=="__main__":
     parser.add_argument('--start-index', type=int)
     args = parser.parse_args()
 
-    config = get_config(args.config)
+    if "ss_baselines" in args.config:
+        config = ss_get_config(args.config)
+        environment_type = "ss1-savi"
+    elif "habitat_baselines" in args.config:
+        config = habitat_get_config(args.config, None, "make_episode_dataset")
+        environment_type = "habitat-objnav"
+    else:
+        raise Exception(f"args.config: {args.config}")
+
     os.makedirs(f"{args.save_dataset_path}", exist_ok=True)
-    main(config.TASK_CONFIG, config.SENSORS, args.save_dataset_path, args.start_index)
+    main(config.TASK_CONFIG, config.SENSORS, args.save_dataset_path, args.start_index, environment_type)
 
     

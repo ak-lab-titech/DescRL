@@ -1,35 +1,41 @@
-BASE_TASK_CONFIG_PATH: "configs/semantic_audionav/savi/mp3d/semantic_audiogoal.yaml"
+BASE_TASK_CONFIG_PATH: "habitat-lab/configs/tasks/objectnav_mp3d_smt.yaml"
+CMD_TRAILING_OPTS: [
+  "TASK_CONFIG.ENVIRONMENT.ITERATOR_OPTIONS.MAX_SCENE_REPEAT_STEPS", "50000",
+]
+ENV_NAME: "NavRLEnv"
 TRAINER_NAME: "ddppo"
 NUM_PROCESSES: 1
+NUM_ENVIRONMENTS: 1
 SENSORS: ["DEPTH_SENSOR", "RGB_SENSOR", "SEMANTIC_SENSOR"]
 NUM_UPDATES: 2000000
 LOG_INTERVAL: 10
 CHECKPOINT_INTERVAL: 50
 # VIDEO_OPTION: ["disk"] # video
 VIDEO_OPTION: []
+VISUALIZATION_OPTION: []
 
 
 FOUNDATION_MODEL:
-  model_type: "video_llama2" # null
-  model_path: "../xgenerator/data/models/video_llama2/finetune_videollama2_vllava_qlora_epoch1_frame16" # null
+  model_type: null
+  model_path: null
   visual_feature_coef: 10.0
   logits_coef: 1.0
   visual_encoder_output_size: 1024
   max_instr_len: 40
-TOKENIZER_TYPE: "video_llama2" # "r2r"
+TOKENIZER_TYPE: "r2r"
 
 
 RL:
   PPO: # IPRLPretrainではPPO自体は用いていない
     lr: 2.5e-5 # 2.5e-4
-    eps: 1e-5
-    num_steps: 64 # 150, foundation model: 32
+    eps: 0.00001
+    num_steps: 64 # 150
     num_mini_batch: 1 # 2
     max_grad_norm: 0.2
     use_belief_predictor: False
     use_external_memory: True
     SCENE_MEMORY_TRANSFORMER:
-      memory_size: 64 # 150, foundation model: 32
+      memory_size: 64 # 150
       hidden_size: 256
       nhead: 8
       num_encoder_layers: 2 # 1
@@ -41,12 +47,14 @@ RL:
       use_xgen_visual_encoder: True
       freeze_encoders: False
       pretraining: False
+      use_belief_encoding: False
     BELIEF_PREDICTOR:
       online_training: False # IPRLPretrainでは学習しない。IPRLではなくこれのおかげで精度が向上してしまうかもしれないので
       train_encoder: False
-      lr: 1e-3
-      use_label_belief: True
-      use_location_belief: True
+      lr: 0.001
+      use_label_belief: False
+      use_location_belief: False
+      normalize_category_distribution: False
     INSTRUCTION_PREDICTOR:
       max_instr_len: 40
       num_decoder_layers: 3
@@ -55,7 +63,7 @@ RL:
       nhead: 8
       dim_feedforward: 512
       dropout: 0.2
-      iprl_use_gt_D: True
+      iprl_use_gt_D: False
       feedback: "teacher" # teacher or student
       use_bos: False
   DDPPO:

@@ -26,7 +26,8 @@ sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
 from ss_baselines.savi.iprl_pretraining.common.instruction_predictor import AudioNavSMTInstructionPredictor
 from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_dataset import IPRLPretrainingDataset, CollateFn, compute_spectrogram
 from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_lmdb_dataset import IPRLPretrainingLMDBDataset
-from ss_baselines.savi.config.default import get_config
+from habitat_baselines.config.default import get_config as habitat_get_config
+from ss_baselines.savi.config.default import get_config as ss_get_config
 from ss_baselines.savi.iprl_pretraining.common.videollama2_kd_loss import VideoLLaMA2KDLoss, R2RTokenizerVideoLLaMA2KDLoss
 
 sys.path.append("/home/4/ud02274/navigation/myss")
@@ -45,6 +46,7 @@ class OffPolicyEPRLPreTrainer():
         log_interval,
         save_interval,
         val_interval,
+        environment_type,
     ):
         self.config = config
         self.gpu_id = gpu_id
@@ -69,6 +71,19 @@ class OffPolicyEPRLPreTrainer():
             self.visual_encoder_output_size = self.config.FOUNDATION_MODEL.visual_encoder_output_size
         else:
             raise Exception(f"config.FOUNDATION_MODEL.model_type: {config.foundation_model_type}")
+        self.environment_type = environment_type
+        if self.environment_type == "ss1-savi":
+            self.train_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train"
+            self.train_data_num = 502103
+            self.val_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val"
+            self.val_data_num = 500
+        elif self.environment_type == "habitat-objnav":
+            self.train_lmdb_dataset_path = "habitat-lab/data/lmdb_dataset/iprl_pretrain/train"
+            self.train_data_num = 51000
+            self.val_lmdb_dataset_path = "habitat-lab/data/lmdb_dataset/iprl_pretrain/my_val"
+            self.val_data_num = 500 # maxは800
+        else:
+            raise Exception(f"environemnt_type: {self.environment_type}")
         
         # prepare model and loss_fn
         self.instruction_predictor, self.loss_fn = self.setup_instruction_predictor()
@@ -92,32 +107,57 @@ class OffPolicyEPRLPreTrainer():
 
     def setup_instruction_predictor(self):
         spectrogram_shape = compute_spectrogram(np.ones((2, self.config.TASK_CONFIG.SIMULATOR.AUDIO.RIR_SAMPLING_RATE))).shape
-        observation_spaces = spaces.Dict({
-            "pose": spaces.Box(
-                low=np.finfo(np.float32).min,
-                high=np.finfo(np.float32).max,
-                shape=(4,),
-                dtype=np.float32,
-            ),
-            "spectrogram": spaces.Box(
-                low=np.finfo(np.float32).min,
-                high=np.finfo(np.float32).max,
-                shape=spectrogram_shape,
-                dtype=np.float32,
-            ),
-            "rgb": spaces.Box(
-                low=0,
-                high=1,
-                shape=(128, 128, 3),
-                dtype=np.float32,
-            ),
-            "depth": spaces.Box(
-                low=0,
-                high=1,
-                shape=(128, 128, 1),
-                dtype=np.float32,
-            ),   
-        })
+        if self.environment_type == "ss1-savi":
+            observation_spaces = spaces.Dict({
+                "pose": spaces.Box(
+                    low=np.finfo(np.float32).min,
+                    high=np.finfo(np.float32).max,
+                    shape=(4,),
+                    dtype=np.float32,
+                ),
+                "spectrogram": spaces.Box(
+                    low=np.finfo(np.float32).min,
+                    high=np.finfo(np.float32).max,
+                    shape=spectrogram_shape,
+                    dtype=np.float32,
+                ),
+                "rgb": spaces.Box(
+                    low=0,
+                    high=1,
+                    shape=(128, 128, 3),
+                    dtype=np.float32,
+                ),
+                "depth": spaces.Box(
+                    low=0,
+                    high=1,
+                    shape=(128, 128, 1),
+                    dtype=np.float32,
+                ),   
+            })
+        elif self.environment_type == "habitat-objnav":
+            observation_spaces = spaces.Dict({
+                "pose": spaces.Box(
+                    low=np.finfo(np.float32).min,
+                    high=np.finfo(np.float32).max,
+                    shape=(4,),
+                    dtype=np.float32,
+                ),
+                "rgb": spaces.Box(
+                    low=0,
+                    high=1,
+                    shape=(128, 128, 3),
+                    dtype=np.float32,
+                ),
+                "depth": spaces.Box(
+                    low=0,
+                    high=1,
+                    shape=(128, 128, 1),
+                    dtype=np.float32,
+                ),   
+            })
+        else:
+            raise Exception(f"environment_type: {self.environment_type}")
+
         action_spaces = spaces.Discrete(4)
 
         iprl_cfg=self.config.RL.PPO.INSTRUCTION_PREDICTOR
@@ -218,13 +258,10 @@ class OffPolicyEPRLPreTrainer():
             train_split = self.config.TASK_CONFIG.DATASET.SPLIT
             if train_split == "train_w_instruction" or train_split == "train_w_past_instruction":
                 train_dataset = IPRLPretrainingLMDBDataset(
-                    self.config.TASK_CONFIG, train_split, "./data/lmdb_dataset/iprl_pretrain/train", 502103,
+                    self.config.TASK_CONFIG, train_split, self.train_lmdb_dataset_path, self.train_data_num,
                         self.foundation_model_type, self.foundation_model_path,
-                )
-            elif train_split == "train_cr_0.2_w_past_instruction":
-                train_dataset = IPRLPretrainingLMDBDataset(
-                    self.config.TASK_CONFIG, train_split, "./data/lmdb_dataset/iprl_pretrain/train-last-step-cr02", 100000,
-                    self.foundation_model_type, self.foundation_model_path,
+                        environment_type=self.environment_type,
+                        device=self.device,
                 )
             else:
                 raise Exception(f"train_split: {train_split}")
@@ -232,9 +269,13 @@ class OffPolicyEPRLPreTrainer():
                 val_split = "val_w_past_instruction"
             else:
                 val_split = "val_w_instruction"
+            if self.environment_type == "habitat-objnav":
+                val_split = "my_" + val_split
             val_dataset = IPRLPretrainingLMDBDataset(
-                self.config.TASK_CONFIG, val_split, "./data/lmdb_dataset/iprl_pretrain/val", 500,
+                self.config.TASK_CONFIG, val_split, self.val_lmdb_dataset_path, self.val_data_num,
                 self.foundation_model_type, self.foundation_model_path,
+                environment_type=self.environment_type,
+                device=self.device,
             )
         else:
             # train_dataset = IPRLPretrainingDataset(config.TASK_CONFIG, config.SENSORS)
@@ -255,6 +296,7 @@ class OffPolicyEPRLPreTrainer():
         my_collate_fn = CollateFn(
             use_foundation_model=self.config.FOUNDATION_MODEL.model_type == "video_llama2",
             max_instr_len=self.config.FOUNDATION_MODEL.max_instr_len,
+            environment_type=self.environment_type,
         )
         train_dataloader = DataLoader(
             train_dataset,
@@ -525,8 +567,16 @@ if __name__=="__main__":
     logger.addHandler(handler)
     if rank == 0:
         logger.info("Start!")
+
+    if "ss_baselines" in args.config:
+        config = ss_get_config(args.config, args.opts, args.model_dir, 'train', False)
+        environment_type = "ss1-savi"
+    elif "habitat_baselines" in args.config:
+        config = habitat_get_config(args.config, args.opts, args.model_dir)
+        environment_type = "habitat-objnav"
+    else:
+        raise Exception(f"args.config: {args.config}")
     
-    config = get_config(args.config, args.opts, args.model_dir, 'train', False)
     logger.info(config)
     os.makedirs(config.CHECKPOINT_FOLDER, exist_ok=True)
 
@@ -539,5 +589,6 @@ if __name__=="__main__":
         log_interval=int(args.log_interval),
         save_interval=int(args.save_interval),
         val_interval=int(args.val_interval),
+        environment_type=environment_type,
     )
     trainer.train()

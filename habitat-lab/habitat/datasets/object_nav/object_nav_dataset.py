@@ -21,6 +21,7 @@ from habitat.tasks.nav.object_nav_task import (
     ObjectGoal,
     ObjectGoalNavEpisode,
     ObjectViewLocation,
+    ObjectGoalNavEpisodeWithInstruction,
 )
 
 
@@ -43,7 +44,11 @@ class ObjectNavDatasetV1(PointNavDatasetV1):
             dataset["episodes"][i]["object_category"] = ep["goals"][0][
                 "object_category"
             ]
-            ep = ObjectGoalNavEpisode(**ep)
+
+            if "instructions" in ep.keys():
+                ep = ObjectGoalNavEpisodeWithInstruction(**ep)
+            else:
+                ep = ObjectGoalNavEpisode(**ep)
 
             goals_key = ep.goals_key
             if goals_key not in goals_by_category:
@@ -125,7 +130,10 @@ class ObjectNavDatasetV1(PointNavDatasetV1):
             self.goals_by_category[k] = [self.__deserialize_goal(g) for g in v]
 
         for i, episode in enumerate(deserialized["episodes"]):
-            episode = ObjectGoalNavEpisode(**episode)
+            if "instructions" in episode.keys():
+                episode = ObjectGoalNavEpisodeWithInstruction(**episode)
+            else:
+                episode = ObjectGoalNavEpisode(**episode)
             episode.episode_id = str(i)
 
             if scenes_dir is not None:
