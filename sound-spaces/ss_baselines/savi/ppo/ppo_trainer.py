@@ -117,6 +117,12 @@ class PPOTrainer(BaseRLTrainer):
             belief_cfg = ppo_cfg.BELIEF_PREDICTOR
             iprl_cfg = ppo_cfg.INSTRUCTION_PREDICTOR
             if not self.use_iprl:
+                if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf":
+                    visual_encoder_output_size=512-4
+                elif self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "video_llama2":
+                    visual_encoder_output_size=1024
+                else:
+                    raise Exception(f"model_type: {self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE}")
                 self.actor_critic = AudioNavSMTPolicy(
                     observation_space=observation_space,
                     action_space=self.envs.action_spaces[0],
@@ -134,8 +140,17 @@ class PPOTrainer(BaseRLTrainer):
                     use_label_belief=smt_cfg.use_label_belief,
                     use_location_belief=smt_cfg.use_location_belief,
                     use_xgen_visual_encoder=smt_cfg.use_xgen_visual_encoder,
+                    visual_encoder_output_size=visual_encoder_output_size
                 )
             else:
+                if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf":
+                    visual_encoder_output_size=512-4
+                    tokenizer_type="r2r"
+                elif self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "video_llama2":
+                    visual_encoder_output_size = 1024
+                    tokenizer_type = self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.TOKENIZER_TYPE
+                else:
+                    raise Exception(f"model_type: {self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE}")
                 self.actor_critic = IPRLAudioNavSMTPolicy(
                     observation_space=observation_space,
                     action_space=self.envs.action_spaces[0],
@@ -171,6 +186,8 @@ class PPOTrainer(BaseRLTrainer):
                     use_semantic_predictor=iprl_cfg.use_semantic_predictor,
                     use_audio_location_predictor=iprl_cfg.use_audio_location_predictor,
                     use_audio_category_predictor=iprl_cfg.use_audio_category_predictor,
+                    visual_encoder_output_size=visual_encoder_output_size,
+                    tokenizer_type=tokenizer_type,
                 )
 
             if ppo_cfg.use_belief_predictor:
@@ -193,6 +210,8 @@ class PPOTrainer(BaseRLTrainer):
             lr=ppo_cfg.lr,
             eps=ppo_cfg.eps,
             max_grad_norm=ppo_cfg.max_grad_norm,
+            xgenerator_type=self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE,
+            xgenerator_tokenizer_type=tokenizer_type,
         )
 
         if self.config.RESUME:

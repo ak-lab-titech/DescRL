@@ -30,19 +30,23 @@ class VideoLLaMA2KDLoss(torch.nn.Module):
         student_visual_features: torch.Tensor, # (seq_len, batch, dim)
         path_mask: torch.Tensor, # (batch, seq_len)
     ):
-        teacher_logits_mask = teacher_logits_mask.permute(1, 0)
-
-        teacher_logits = teacher_logits[teacher_logits_mask == 0]
-        student_logits = student_logits[teacher_logits_mask == 0]
+        if teacher_logits_mask is not None:
+            teacher_logits_mask = teacher_logits_mask.permute(1, 0)
+            teacher_logits = teacher_logits[teacher_logits_mask == 0]
+            student_logits = student_logits[teacher_logits_mask == 0]
 
         teacher_probs = F.softmax(teacher_logits, dim=-1)
         student_log_probs = F.log_softmax(student_logits, dim=-1)
         logit_loss = - (teacher_probs * student_log_probs).sum(dim=-1).mean()
 
-        path_mask = path_mask.permute(1, 0)
-        teacher_visual_features = self.relu(teacher_visual_features[path_mask == 0])
-        student_visual_features = student_visual_features[path_mask == 0]
-        visual_feature_loss = self.visual_feature_loss_fn(student_visual_features, teacher_visual_features)
+        if teacher_visual_features is not None:
+            if path_mask is not None:
+                path_mask = path_mask.permute(1, 0)
+                teacher_visual_features = self.relu(teacher_visual_features[path_mask == 0])
+                student_visual_features = student_visual_features[path_mask == 0]
+            visual_feature_loss = self.visual_feature_loss_fn(student_visual_features, teacher_visual_features)
+        else:
+            visual_feature_loss = 0.0
 
         loss = self.visual_feature_coef * visual_feature_loss + self.logits_coef * logit_loss
 
@@ -78,10 +82,14 @@ class R2RTokenizerVideoLLaMA2KDLoss(VideoLLaMA2KDLoss):
             teacher_label.reshape(-1),
         )
 
-        path_mask = path_mask.permute(1, 0)
-        teacher_visual_features = self.relu(teacher_visual_features[path_mask == 0])
-        student_visual_features = student_visual_features[path_mask == 0]
-        visual_feature_loss = self.visual_feature_loss_fn(student_visual_features, teacher_visual_features)
+        if teacher_visual_features is not None:
+            if path_mask is not None:
+                path_mask = path_mask.permute(1, 0)
+                teacher_visual_features = self.relu(teacher_visual_features[path_mask == 0])
+                student_visual_features = student_visual_features[path_mask == 0]
+            visual_feature_loss = self.visual_feature_loss_fn(student_visual_features, teacher_visual_features)
+        else:
+            visual_feature_loss = 0.0
 
         loss = self.visual_feature_coef * visual_feature_loss + self.logits_coef * logit_loss
 

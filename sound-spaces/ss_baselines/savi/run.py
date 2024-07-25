@@ -23,6 +23,9 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 import tensorflow as tf
 import torch
+from transformers.utils import logging as tf_logging
+
+tf_logging.set_verbosity_error() 
 
 from ss_baselines.common.baseline_registry import baseline_registry 
 # habitat_baselinesの方のget_configを後に呼ぶと、ddppoを指定した時のtrainerがhabitat-labのPPOTrainerになる

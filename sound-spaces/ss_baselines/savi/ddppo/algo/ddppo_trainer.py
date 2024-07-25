@@ -105,6 +105,12 @@ class DDPPOTrainer(PPOTrainer):
                 self.belief_predictor.freeze_encoders() # classifierをfreezeさせる。online_trainingでなければpredictorも
 
         elif ppo_cfg.policy_type == 'smt':
+            if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf":
+                visual_encoder_output_size=512-4
+            elif self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "video_llama2":
+                visual_encoder_output_size=1024
+            else:
+                raise Exception(f"model_type: {self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE}")
             smt_cfg = ppo_cfg.SCENE_MEMORY_TRANSFORMER
             belief_cfg = ppo_cfg.BELIEF_PREDICTOR
             iprl_cfg = ppo_cfg.INSTRUCTION_PREDICTOR
@@ -130,8 +136,17 @@ class DDPPOTrainer(PPOTrainer):
                     normalize_category_distribution=belief_cfg.normalize_category_distribution,
                     use_category_input=has_distractor_sound,
                     use_xgen_visual_encoder=smt_cfg.use_xgen_visual_encoder,
+                    visual_encoder_output_size=visual_encoder_output_size,
                 )
             else:
+                if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf":
+                    visual_encoder_output_size=512-4
+                    tokenizer_type="r2r"
+                elif self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "video_llama2":
+                    visual_encoder_output_size=1024
+                    tokenizer_type = self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.TOKENIZER_TYPE
+                else:
+                    raise Exception(f"model_type: {self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE}")
                 self.actor_critic = IPRLAudioNavSMTPolicy(
                     observation_space=self.envs.observation_spaces[0],
                     action_space=self.envs.action_spaces[0],
@@ -171,6 +186,8 @@ class DDPPOTrainer(PPOTrainer):
                     use_semantic_predictor=iprl_cfg.use_semantic_predictor,
                     use_audio_location_predictor=iprl_cfg.use_audio_location_predictor,
                     use_audio_category_predictor=iprl_cfg.use_audio_category_predictor,
+                    visual_encoder_output_size=visual_encoder_output_size,
+                    tokenizer_type=tokenizer_type,
                 )
 
             if smt_cfg.freeze_encoders:
@@ -263,6 +280,8 @@ class DDPPOTrainer(PPOTrainer):
             max_grad_norm=ppo_cfg.max_grad_norm,
             use_normalized_advantage=ppo_cfg.use_normalized_advantage,
             direct_map_loss_coef=ppo_cfg.direct_map_loss_coef,
+            xgenerator_type=self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE,
+            xgenerator_tokenizer_type=tokenizer_type,
         )
         self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
         self.use_gt_direct_map = self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP

@@ -9,11 +9,13 @@ from typing import Any, Type, Union, List
 import logging
 import sys
 import copy
+import os
 
 import yaml
 import cv2
 import numpy as np
 import torch
+import torch.nn.functional as F
 import cv2
 import pickle
 import librosa
@@ -49,6 +51,12 @@ from xgenerator.common.lang import R2RLang
 from common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from xgenerator.transformer_speaker.model import Seq2SeqTransformer
 from xgenerator.common.load_lmdb import d3_40_colors_rgb
+from videollama2.mm_utils import get_model_name_from_path
+from videollama2.model.builder import load_pretrained_model
+from videollama2.train import process_video
+from videollama2.constants import MMODAL_TOKEN_INDEX
+from videollama2.mm_utils import tokenizer_MMODAL_token
+
 
 @registry.register_sensor
 class AudioGoalSensor(Sensor):
@@ -372,9 +380,6 @@ class GeneratedInstruction(Sensor):
         self._sim = sim
         self._sim.prev_k = kwargs["task"]._config["GENERATED_INSTRUCTION"]["FUTURE_STEP_NUM"]
 
-        lang = R2RLang(name="r2r_train")
-        self.vocab_size = lang.vocab_size
-
         xgenerator_path = kwargs["task"]._config["GENERATED_INSTRUCTION"]["XGENERATOR_PATH"]
         ckpt_num = kwargs["task"]._config["GENERATED_INSTRUCTION"]["XGENERATOR_CKPT"]
         self.max_instr_len = kwargs["task"]._config["GENERATED_INSTRUCTION"]["MAX_INSTRUCTION_LENGTH"]
@@ -387,36 +392,58 @@ class GeneratedInstruction(Sensor):
         f.write(f"self.future_or_past: {self.future_or_past}\n")
         f.close()
 
-        with open(f"{xgenerator_path}/config.yaml", "r") as yml:
-            xgenerator_config = yaml.safe_load(yml)
-
-        super().__init__(config=config)
+        self.xgenerator_type = kwargs["task"]._config["GENERATED_INSTRUCTION"]["MODEL_TYPE"]
         self.model_resolution = kwargs["task"]._config["GENERATED_INSTRUCTION"]["MODEL_RESOLUTION"]
-        self.instruction_generator = Seq2SeqTransformer(
-            num_encoder_layers=xgenerator_config["model"]["num_encoder_layers"],   
-            num_decoder_layers=xgenerator_config["model"]["num_decoder_layers"],
-            emb_size=xgenerator_config["model"]["emb_size"],
-            vocab_emb_size=xgenerator_config["model"]["vocab_embedding_size"],
-            use_semantic=xgenerator_config["model"]["use_semantic"],
-            nhead=xgenerator_config["model"]["nhead"],
-            use_image_feature=xgenerator_config["train"]["use_image_feature"],
-            vocab_size=self.vocab_size,
-            glove=lang.glove_vec,
-            dim_feedforward=xgenerator_config["model"]["dim_feedforward"],
-            dropout=xgenerator_config["model"]["dropout_ratio"],
-        )
-        self.instruction_generator.load_state_dict(
-            torch.load(
-                f"{xgenerator_path}/data/{ckpt_num}/seq2seq.pth",
-                map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
+        rank = int(os.environ["LOCAL_RANK"])
+        world_size = torch.cuda.device_count()
+        gpu_id = rank % world_size
+        self.device = torch.device('cuda', gpu_id)
+        if self.xgenerator_type == "cnn_tf":
+            lang = R2RLang(name="r2r_train")
+            self.vocab_size = lang.vocab_size
+            with open(f"{xgenerator_path}/config.yaml", "r") as yml:
+                xgenerator_config = yaml.safe_load(yml)
+            self.instruction_generator = Seq2SeqTransformer(
+                num_encoder_layers=xgenerator_config["model"]["num_encoder_layers"],   
+                num_decoder_layers=xgenerator_config["model"]["num_decoder_layers"],
+                emb_size=xgenerator_config["model"]["emb_size"],
+                vocab_emb_size=xgenerator_config["model"]["vocab_embedding_size"],
+                use_semantic=xgenerator_config["model"]["use_semantic"],
+                nhead=xgenerator_config["model"]["nhead"],
+                use_image_feature=xgenerator_config["train"]["use_image_feature"],
+                vocab_size=self.vocab_size,
+                glove=lang.glove_vec,
+                dim_feedforward=xgenerator_config["model"]["dim_feedforward"],
+                dropout=xgenerator_config["model"]["dropout_ratio"],
             )
-        )
-        if torch.cuda.is_available():
-            self.instruction_generator = self.instruction_generator.to("cuda")
-        
-        self.instruction_generator.eval()
+            self.instruction_generator.load_state_dict(
+                torch.load(
+                    f"{xgenerator_path}/data/{ckpt_num}/seq2seq.pth",
+                    map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
+                )
+            )
+            if torch.cuda.is_available():
+                self.instruction_generator = self.instruction_generator.to("cuda")
+            self.instruction_generator.eval()
+        elif self.xgenerator_type == "video_llama2":
+            self.vocab_size = 32000
+            tokenizer, self.foundation_model, self.processor, _ = load_pretrained_model(
+                xgenerator_path, None, get_model_name_from_path(xgenerator_path),
+                device=self.device,
+            )
+            prompt = "[INST] <<SYS>>\n" \
+                "A chat between a curious user and an artificial intelligence assistant." \
+                "The assistant gives helpful, detailed, and polite answers to the user's questions." \
+                "\n<</SYS>>\n\n <video>\nWhat is the camera wearer doing? [/INST]"
+            self.input_ids = tokenizer_MMODAL_token(
+                prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
+            ).unsqueeze(0).to(self.device)
+            self.num_frames = kwargs["task"]._config["GENERATED_INSTRUCTION"]["NUM_FRAMES"]
+        else:
+            raise Exception(f"xgenerator_type: {self.xgenerator_type}")
         
         self.previous_instruction = None
+        super().__init__(config=config)
 
     def _get_uuid(self, *args: Any, **kwargs: Any):
         return "generated_instruction"
@@ -425,7 +452,17 @@ class GeneratedInstruction(Sensor):
         return SensorTypes.NULL
 
     def _get_observation_space(self, *args: Any, **kwargs: Any):
-        return spaces.MultiDiscrete([self.vocab_size for _ in range(self.max_instr_len)])
+        if self.xgenerator_type == "cnn_tf":
+            return spaces.MultiDiscrete([self.vocab_size for _ in range(self.max_instr_len)])
+        elif self.xgenerator_type == "video_llama2":
+            return spaces.Box(
+                low=np.finfo(np.float32).min,
+                high=np.finfo(np.float32).max,
+                shape=(self.max_instr_len, self.vocab_size),
+                dtype=np.float32,
+            )
+        else:
+            raise Exception(f"xgenerator_type: {self.xgenerator_type}")
 
     def get_observation(self, *args: Any, observations, episode: Episode, **kwargs: Any):
         batch_size = 1 # this must be 1
@@ -437,7 +474,13 @@ class GeneratedInstruction(Sensor):
             image_seqs, action_seqs = self.get_obs_seqs()
             if image_seqs is None and action_seqs is None:
                 return torch.from_numpy(np.array([PAD_IDX for _ in range(self.max_instr_len)])).cuda()
-            generated_instruction = self.generate_instruction(image_seqs, action_seqs, batch_size)
+            
+            if self.xgenerator_type == "cnn_tf":
+                generated_instruction = self.generate_instruction_cnntf(image_seqs, action_seqs, batch_size)
+            elif self.xgenerator_type == "video_llama2":
+                generated_instruction = self.generate_instruction_videollama2(image_seqs)
+            else:
+                raise Exception(f"xgenerator_type: {self.xgenerator_type}")
             self.previous_instruction = generated_instruction
             return generated_instruction
     
@@ -545,12 +588,12 @@ class GeneratedInstruction(Sensor):
             image_seqs = torch.from_numpy(image_seqs)
             action_seqs = torch.from_numpy(action_seqs)
             if torch.cuda.is_available():
-                image_seqs = image_seqs.cuda()
-                action_seqs = action_seqs.cuda()
+                image_seqs = image_seqs.to(self.device)
+                action_seqs = action_seqs.to(self.device)
         
         return image_seqs, action_seqs
 
-    def generate_instruction(self, image_seqs, action_seqs, batch_size):
+    def generate_instruction_cnntf(self, image_seqs, action_seqs, batch_size):
         """
         image_seqs: (seq_l, batch, image_shape)
         action_seqs: (seq_l, batch, 4)
@@ -592,6 +635,40 @@ class GeneratedInstruction(Sensor):
                     break
         past_tokens = past_tokens.view(self.max_instr_len)
         return past_tokens
+
+    def generate_instruction_videollama2(self, image_seq):
+        tmp_image_seq = (image_seq.to('cpu').detach().numpy().copy().squeeze(1)[:, :, :, :3] * 256).astype(np.uint8)
+
+        image_seq_len = len(tmp_image_seq)
+        indices = np.arange(0, image_seq_len,  image_seq_len / self.num_frames).astype(int)
+        visual_tensor = process_video(
+            tmp_image_seq[indices] if self.num_frames < image_seq_len else tmp_image_seq,
+            self.processor,
+            "pad",
+            self.num_frames if self.num_frames < image_seq_len else image_seq_len,
+        ).to(
+            dtype=torch.float16,
+            device=self.device,
+            non_blocking=True,
+        ) # (l, c, h, w)
+        with torch.inference_mode():
+            outputs = self.foundation_model.generate(
+                self.input_ids,
+                images_or_videos=[visual_tensor],
+                modal_list=['video'],
+                do_sample=True,
+                temperature=0.2,
+                # max_new_tokens=1024,
+                max_new_tokens=40,
+                use_cache=True,
+                return_dict_in_generate=True,
+                output_scores=True,
+            )
+        logits = torch.stack(outputs.scores).squeeze(1) # (instr_len, vocab_size)
+        
+        padding_size = self.max_instr_len - np.shape(logits)[0]
+        logits = F.pad(logits, (0, 0, 0, padding_size), "constant", 0)
+        return logits
     
     def resize_observation(self, observation):
         observation['rgb'] = cv2.resize(
@@ -1448,7 +1525,7 @@ class PoseSensor(Sensor):
 
         agent_heading = self._quat_to_xy_heading(
             rotation_world_agent.inverse() * rotation_world_start
-        )
+        )[0]
 
         ep_time = self._episode_time
         self._episode_time += 1.0

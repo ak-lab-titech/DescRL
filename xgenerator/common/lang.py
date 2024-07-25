@@ -2,6 +2,8 @@ import sys
 import gzip
 import json
 from typing import Dict, Tuple
+import os
+import gc
 
 import numpy as np
 import torch
@@ -103,13 +105,17 @@ class R2RLang:
         
         self.word_embed_size = self.glove_vec.shape[1]
 
-
+rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
+world_size = torch.cuda.device_count()
+gpu_id = rank % world_size
 VIDEO_LLAMA2_TOKENIZER, VIDEO_LLAMA2_MODEL, _, _ = load_pretrained_model(
     "DAMO-NLP-SG/VideoLLaMA2-7B-16F-Base",
     None,
     get_model_name_from_path("DAMO-NLP-SG/VideoLLaMA2-7B-16F-Base"),
+    device=torch.device('cuda', gpu_id),
 )
 VIDEO_LLAMA2_VOCAB = VIDEO_LLAMA2_TOKENIZER.get_vocab()
+VIDEO_LLAMA2_EMBS = VIDEO_LLAMA2_MODEL.get_input_embeddings().weight.cpu().detach().numpy().copy()
 class VideoLLaMA2Lang:
     def __init__(self, name: str = "videollama2"):
         self.name = name
@@ -117,5 +123,8 @@ class VideoLLaMA2Lang:
         self.word2index = VIDEO_LLAMA2_VOCAB
         self.index2word = {v: k for k, v in self.word2index.items()}
         self.vocab_size = 32000
-        self.glove_vec = VIDEO_LLAMA2_MODEL.get_input_embeddings().weight.cpu().detach().numpy().copy()
+        self.glove_vec = VIDEO_LLAMA2_EMBS
         self.word_embed_size = self.glove_vec.shape[1]
+
+del VIDEO_LLAMA2_MODEL
+gc.collect()

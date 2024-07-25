@@ -39,7 +39,8 @@ from ss_baselines.savi.models.auxiliary_module import (
 )
 
 sys.path.append("/home/4/ud02274/navigation/myss")
-from xgenerator.common.lang import R2RLang
+from xgenerator.common.lang import R2RLang, VideoLLaMA2Lang, VIDEO_LLAMA2_TOKENIZER, sentence2token
+from xgenerator.common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from xgenerator.common.model import VisualImageEncoder
 
 DUAL_GOAL_DELIMITER = ','
@@ -371,6 +372,7 @@ class AudioNavSMTNet(Net):
         normalize_category_distribution=False,
         use_category_input=False,
         use_xgen_visual_encoder=False,
+        visual_encoder_output_size=512-4,
         **kwargs
     ):
         super().__init__()
@@ -398,7 +400,7 @@ class AudioNavSMTNet(Net):
 
         if self.use_xgen_visual_encoder:
             h, w, _ = observation_space["rgb"].shape
-            self.visual_encoder = VisualImageEncoder((h, w, 4), 512-4)
+            self.visual_encoder = VisualImageEncoder((h, w, 4), visual_encoder_output_size)
         else:
             self.visual_encoder = SMTCNN(observation_space)
         
@@ -610,6 +612,8 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         normalize_category_distribution=False,
         use_category_input=False,
         use_xgen_visual_encoder=False,
+        visual_encoder_output_size=512-4,
+        tokenizer_type="r2r",
         **kwargs
     ):
         super().__init__(
@@ -627,9 +631,19 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             normalize_category_distribution,
             use_category_input,
             use_xgen_visual_encoder,
+            visual_encoder_output_size,
             **kwargs,
         )
-        lang = R2RLang(name="r2r_train")
+
+        self.xgenerator_tokenizer_type = tokenizer_type
+        if tokenizer_type == "r2r":
+            lang = R2RLang()
+            iprl_vocab_emb_size = 50
+        elif tokenizer_type == "video_llama2":
+            lang = VideoLLaMA2Lang()
+            iprl_vocab_emb_size = 4096
+        else:
+            raise Exception(f"tokenizer_type: {tokenizer_type}")
 
         self.use_instruction_predictor = use_instruction_predictor
         self.use_progress_predictor = use_progress_predictor
@@ -776,6 +790,36 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             if self.feedback == "teacher":
                 if "generated_instruction" in observations.keys():
                     target = observations["generated_instruction"] # (batch, instr_len)
+                    if len(np.shape(target)) == 3:
+                        if self.xgenerator_tokenizer_type == "video_llama2":
+                            target = torch.argmax(target, dim=2) # (batch, instr_len)
+                            bos_idx = 1
+                            batch_size = np.shape(target)[0]
+                            target = torch.cat(
+                                [torch.full((batch_size, 1), bos_idx).cuda(), target],
+                                dim=1,
+                            )[:, :-1] # (batch, instr_len)
+                        elif self.xgenerator_tokenizer_type == "r2r":
+                            # まず、logitsを元にvideollama2のtokenierでsentenceに変換する
+                            output_ids = torch.argmax(target, dim=2).permute(1, 0) # (instr_len, batch)
+                            instr_len, batch_size = np.shape(output_ids)
+                            sentences = VIDEO_LLAMA2_TOKENIZER.batch_decode(output_ids.permute(1, 0), skip_special_tokens=True)
+
+                            # 次に、sentenceを、r2rのtokenizerによってr2r用のtokenに変換する
+                            # TODO ここ2重forなので遅くなっているはず
+                            bos_idx = BOS_IDX
+                            eos_idx = EOS_IDX
+                            pad_idx = PAD_IDX
+                            instructions = np.full((batch_size, instr_len), pad_idx)
+                            for i, sentence in enumerate(sentences):
+                                token = [bos_idx] + sentence2token(sentence) + [eos_idx]
+                                if len(token) > instr_len:
+                                    token = token[:instr_len]
+                                instructions[i, :len(token)] = token
+                            
+                            target = torch.from_numpy(instructions).cuda() # (batch, instr_len)
+                        else:
+                            raise Exception(f"self.xgenerator_tokenizer_type: {self.xgenerator_tokenizer_type}")
                 elif "habitat_sim_generated_instruction" in observations.keys():
                     target = observations["habitat_sim_generated_instruction"] # (batch, instr_len)
                 else:
@@ -864,6 +908,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             "predicted_semantic": predicted_semantic,
             "predicted_audio_location": predicted_audio_location,
             "predicted_audio_category": predicted_audio_category,
+            "eprl_target": target,
         }
 
         return x_att, rnn_hidden_states, x, direct_map, aux_infos
