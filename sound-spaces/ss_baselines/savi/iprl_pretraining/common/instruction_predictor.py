@@ -116,7 +116,8 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             audio_feature_dims = 0
 
         if self.use_xgen_visual_encoder:
-            self.visual_encoder = VisualImageEncoder((128, 128, 4), visual_encoder_output_size)
+            h, w, _ = observation_space["rgb"].shape
+            self.visual_encoder = VisualImageEncoder((h, w, 4), visual_encoder_output_size)
         else:
             self.visual_encoder = SMTCNN(observation_space)
 

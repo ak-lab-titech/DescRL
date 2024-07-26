@@ -78,25 +78,32 @@ def get_obs_seq(num_step, sim, episode):
 
 
 def get_obs_seq_for_habitat_objnav(num_step, sim, episode):
+    image_seq_list = []
     pose_seq_list = []
     action_seq_list = []
     oracle_actions = []
     for point in episode.shortest_paths[0]:
         oracle_actions.append(point.action)
     oracle_actions = oracle_actions[:-1] + [0] # 最後がNoneになっているので0にする
-
+    obs = sim.reset()
     for i in range(num_step):
         pose = compute_pose(episode, sim.get_agent_state(), i, "habitat-objnav")
+
+        depth_img = obs["depth"]
+        rgb_img = obs["rgb"] / 255.0
+        image = np.concatenate([rgb_img, depth_img], 2).astype(np.float32)
+
         if i == 0:
             save_action = 0
         else:
             save_action = oracle_actions[i-1]
+        image_seq_list.append([image])
         pose_seq_list.append([pose])
         action_seq_list.append([save_action])
 
-        sim.step(oracle_actions[i])
+        obs = sim.step(oracle_actions[i])
 
-    image_seq = np.array(sim.k_prev_images)[1:]
+    image_seq = np.array(image_seq_list)
     pose_seq = np.array(pose_seq_list)
     action_seq = np.array(action_seq_list)
 
@@ -129,7 +136,6 @@ def make_episode_data(sim_cfg, sim, episode):
 def make_episode_data_for_habitat_objnav(sim_cfg, sim, episode):
     sim_cfg = habitat_merge_sim_episode_config(sim_cfg, episode)
     sim.reconfigure(sim_cfg)
-    _ = sim.reset()
     num_step = np.random.randint(1, episode.info["num_action"])
     image_seq, pose_seq, action_seq = get_obs_seq_for_habitat_objnav(num_step, sim, episode)
     object_category = get_category(episode)

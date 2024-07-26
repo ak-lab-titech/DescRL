@@ -145,13 +145,13 @@ class OffPolicyEPRLPreTrainer():
                 "rgb": spaces.Box(
                     low=0,
                     high=1,
-                    shape=(128, 128, 3),
+                    shape=(480, 640, 3),
                     dtype=np.float32,
                 ),
                 "depth": spaces.Box(
                     low=0,
                     high=1,
-                    shape=(128, 128, 1),
+                    shape=(480, 640, 1),
                     dtype=np.float32,
                 ),   
             })
