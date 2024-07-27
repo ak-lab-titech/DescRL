@@ -139,8 +139,7 @@ def compute_pose(episode, agent_state, ep_time, environemnt_type="ss1-savi"):
     agent_heading = quat_to_xy_heading(
         rotation_world_agent.inverse() * rotation_world_start
     )
-    if environemnt_type == "habitat-objnav":
-        agent_heading = agent_heading[0]
+    agent_heading = agent_heading[0]
     return np.array(
         [-agent_position_xyz[2], agent_position_xyz[0], agent_heading, ep_time],
         dtype=np.float32

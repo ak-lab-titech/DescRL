@@ -361,6 +361,9 @@ def main(
         instruction_predictor, _ = setup_instruction_predictor(
             config=config,
             device=torch.device("cuda", 0),
+            visual_encoder_output_size=512-4,
+            tokenizer_type="r2r",
+            environment_type="ss1-savi",
         )
         pretrained_state = torch.load(config.RL.DDPPO.pretrained_weights, map_location="cpu")
         pretrained_state_dict = {}
@@ -396,6 +399,9 @@ def main(
             None,
             get_model_name_from_path(model_path),
         )
+    elif instruction_predictor_type == "random":
+        lang = R2RLang()
+        vocab_size = lang.vocab_size
     else:
         raise Exception(f"instruction_predictor_type: {instruction_predictor_type}")
     
@@ -509,8 +515,16 @@ def main(
                     pose_seqs,
                     action_seqs,
                 )
+            elif instruction_predictor_type == "random":
+                instructions = torch.from_numpy(
+                    np.random.randint(
+                        0, vocab_size,
+                        size=(config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MAX_INSTRUCTION_LENGTH, 1),
+                    )
+                )
+
             elif instruction_predictor_type == "smt-past-xpred":
-                pass # TODO
+                raise NotImplementedError()
             else:
                 raise Exception(f"instruction_predictor_type: {instruction_predictor_type}")
         

@@ -35,6 +35,156 @@ from xgenerator.common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from xgenerator.common.lang import tokens2sentences, sentence2token, R2RLang, VIDEO_LLAMA2_TOKENIZER
 
 
+def setup_instruction_predictor(
+    config,
+    device,
+    visual_encoder_output_size,
+    tokenizer_type,
+    environment_type,
+):
+    spectrogram_shape = compute_spectrogram(np.ones((2, config.TASK_CONFIG.SIMULATOR.AUDIO.RIR_SAMPLING_RATE))).shape
+    if environment_type == "ss1-savi":
+        observation_spaces = spaces.Dict({
+            "pose": spaces.Box(
+                low=np.finfo(np.float32).min,
+                high=np.finfo(np.float32).max,
+                shape=(4,),
+                dtype=np.float32,
+            ),
+            "spectrogram": spaces.Box(
+                low=np.finfo(np.float32).min,
+                high=np.finfo(np.float32).max,
+                shape=spectrogram_shape,
+                dtype=np.float32,
+            ),
+            "rgb": spaces.Box(
+                low=0,
+                high=1,
+                shape=(128, 128, 3),
+                dtype=np.float32,
+            ),
+            "depth": spaces.Box(
+                low=0,
+                high=1,
+                shape=(128, 128, 1),
+                dtype=np.float32,
+            ),   
+        })
+    elif environment_type == "habitat-objnav":
+        observation_spaces = spaces.Dict({
+            "pose": spaces.Box(
+                low=np.finfo(np.float32).min,
+                high=np.finfo(np.float32).max,
+                shape=(4,),
+                dtype=np.float32,
+            ),
+            "rgb": spaces.Box(
+                low=0,
+                high=1,
+                shape=(480, 640, 3),
+                dtype=np.float32,
+            ),
+            "depth": spaces.Box(
+                low=0,
+                high=1,
+                shape=(480, 640, 1),
+                dtype=np.float32,
+            ),   
+        })
+    else:
+        raise Exception(f"environment_type: {environment_type}")
+
+    action_spaces = spaces.Discrete(4)
+
+    iprl_cfg=config.RL.PPO.INSTRUCTION_PREDICTOR
+    ppo_cfg=config.RL.PPO
+    smt_cfg=config.RL.PPO.SCENE_MEMORY_TRANSFORMER
+    belief_cfg=config.RL.PPO.BELIEF_PREDICTOR
+    has_distractor_sound=config.TASK_CONFIG.SIMULATOR.AUDIO.HAS_DISTRACTOR_SOUND
+    pretrained=config.RL.DDPPO.pretrained
+    pretrained_weights=config.RL.DDPPO.pretrained_weights
+
+    instruction_predictor = AudioNavSMTInstructionPredictor(
+        device=device,
+        observation_space=observation_spaces,
+        action_space=action_spaces,
+        direct_map_size=None,
+        goal_num=1,
+        iprl_max_instr_len=iprl_cfg.max_instr_len,
+        iprl_num_decoder_layers=iprl_cfg.num_decoder_layers,
+        iprl_vocab_emb_size=iprl_cfg.vocab_emb_size,
+        iprl_emb_size=iprl_cfg.emb_size,
+        iprl_nhead=iprl_cfg.nhead,
+        iprl_dim_feedforward=iprl_cfg.dim_feedforward,
+        iprl_dropout=iprl_cfg.dropout,
+        iprl_use_gt_D=iprl_cfg.iprl_use_gt_D,
+        iprl_feedback=iprl_cfg.feedback,
+        iprl_use_bos=iprl_cfg.use_bos,
+        max_grad_norm=ppo_cfg.max_grad_norm,
+        use_xgen_visual_encoder=smt_cfg.use_xgen_visual_encoder,
+        on_or_off="off",
+        hidden_size=smt_cfg.hidden_size,
+        nhead=smt_cfg.nhead,
+        num_encoder_layers=smt_cfg.num_encoder_layers,
+        num_decoder_layers=smt_cfg.num_decoder_layers,
+        dropout=smt_cfg.dropout,
+        activation=smt_cfg.activation,
+        use_pretrained=smt_cfg.use_pretrained,
+        pretrained_path=smt_cfg.pretrained_path,
+        pretraining=smt_cfg.pretraining,
+        use_belief_encoding=smt_cfg.use_belief_encoding,
+        use_belief_as_goal=ppo_cfg.use_belief_predictor,
+        use_label_belief=belief_cfg.use_label_belief,
+        use_location_belief=belief_cfg.use_location_belief,
+        normalize_category_distribution=belief_cfg.normalize_category_distribution,
+        use_category_input=has_distractor_sound,
+        belief_cfg=belief_cfg,
+        batch_size=ppo_cfg.num_steps,
+        visual_encoder_output_size=visual_encoder_output_size,
+        tokenizer_type=tokenizer_type,
+    )
+    instruction_predictor.optimizer = torch.optim.Adam(
+        instruction_predictor.parameters(),
+        lr=ppo_cfg.lr,
+        eps=ppo_cfg.eps,
+    )
+    iprl_loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)
+
+    if smt_cfg.freeze_encoders:
+        instruction_predictor.freeze_encoders()
+
+    if pretrained:
+        # load weights for both actor critic and the encoder
+        pretrained_state = torch.load(pretrained_weights, map_location="cpu")
+        instruction_predictor.load_state_dict(
+            {
+                k[len("actor_critic."):]: v
+                for k, v in pretrained_state["state_dict"].items()
+                if "actor_critic.net.visual_encoder" not in k and
+                    "actor_critic.net.smt_state_encoder" not in k
+            },
+            strict=False
+        )
+        instruction_predictor.visual_encoder.rgb_encoder.load_state_dict(
+            {
+                k[len("actor_critic.net.visual_encoder.rgb_encoder."):]: v
+                for k, v in pretrained_state["state_dict"].items()
+                if "actor_critic.net.visual_encoder.rgb_encoder." in k
+            },
+        )
+        instruction_predictor.visual_encoder.depth_encoder.load_state_dict(
+            {
+                k[len("actor_critic.net.visual_encoder.depth_encoder."):]: v
+                for k, v in pretrained_state["state_dict"].items()
+                if "actor_critic.net.visual_encoder.depth_encoder." in k
+            },
+        )
+
+    instruction_predictor.to(device)
+
+    return instruction_predictor, iprl_loss_fn
+
+
 class OffPolicyEPRLPreTrainer():
     def __init__(
         self,
@@ -86,7 +236,13 @@ class OffPolicyEPRLPreTrainer():
             raise Exception(f"environemnt_type: {self.environment_type}")
         
         # prepare model and loss_fn
-        self.instruction_predictor, self.loss_fn = self.setup_instruction_predictor()
+        self.instruction_predictor, self.loss_fn = self.setup_instruction_predictor(
+            config=self.config,
+            device=self.device,
+            visual_encoder_output_size=self.visual_encoder_output_size,
+            tokenizer_type=self.tokenizer_type,
+            environment_type=self.environment_type,
+        )
         if self.foundation_model_type == "video_llama2" and self.tokenizer_type == "video_llama2":
             self.loss_fn = VideoLLaMA2KDLoss(
                 visual_feature_coef=self.config.FOUNDATION_MODEL.visual_feature_coef,
@@ -104,149 +260,6 @@ class OffPolicyEPRLPreTrainer():
         self.n_batch = len(self.train_dataloader)
 
         self.logger.info(f"device: {torch.device('cuda', self.gpu_id)}")
-
-    def setup_instruction_predictor(self):
-        spectrogram_shape = compute_spectrogram(np.ones((2, self.config.TASK_CONFIG.SIMULATOR.AUDIO.RIR_SAMPLING_RATE))).shape
-        if self.environment_type == "ss1-savi":
-            observation_spaces = spaces.Dict({
-                "pose": spaces.Box(
-                    low=np.finfo(np.float32).min,
-                    high=np.finfo(np.float32).max,
-                    shape=(4,),
-                    dtype=np.float32,
-                ),
-                "spectrogram": spaces.Box(
-                    low=np.finfo(np.float32).min,
-                    high=np.finfo(np.float32).max,
-                    shape=spectrogram_shape,
-                    dtype=np.float32,
-                ),
-                "rgb": spaces.Box(
-                    low=0,
-                    high=1,
-                    shape=(128, 128, 3),
-                    dtype=np.float32,
-                ),
-                "depth": spaces.Box(
-                    low=0,
-                    high=1,
-                    shape=(128, 128, 1),
-                    dtype=np.float32,
-                ),   
-            })
-        elif self.environment_type == "habitat-objnav":
-            observation_spaces = spaces.Dict({
-                "pose": spaces.Box(
-                    low=np.finfo(np.float32).min,
-                    high=np.finfo(np.float32).max,
-                    shape=(4,),
-                    dtype=np.float32,
-                ),
-                "rgb": spaces.Box(
-                    low=0,
-                    high=1,
-                    shape=(480, 640, 3),
-                    dtype=np.float32,
-                ),
-                "depth": spaces.Box(
-                    low=0,
-                    high=1,
-                    shape=(480, 640, 1),
-                    dtype=np.float32,
-                ),   
-            })
-        else:
-            raise Exception(f"environment_type: {self.environment_type}")
-
-        action_spaces = spaces.Discrete(4)
-
-        iprl_cfg=self.config.RL.PPO.INSTRUCTION_PREDICTOR
-        ppo_cfg=self.config.RL.PPO
-        smt_cfg=self.config.RL.PPO.SCENE_MEMORY_TRANSFORMER
-        belief_cfg=self.config.RL.PPO.BELIEF_PREDICTOR
-        has_distractor_sound=self.config.TASK_CONFIG.SIMULATOR.AUDIO.HAS_DISTRACTOR_SOUND
-        pretrained=self.config.RL.DDPPO.pretrained
-        pretrained_weights=self.config.RL.DDPPO.pretrained_weights
-
-        instruction_predictor = AudioNavSMTInstructionPredictor(
-            device=self.device,
-            observation_space=observation_spaces,
-            action_space=action_spaces,
-            direct_map_size=None,
-            goal_num=1,
-            iprl_max_instr_len=iprl_cfg.max_instr_len,
-            iprl_num_decoder_layers=iprl_cfg.num_decoder_layers,
-            iprl_vocab_emb_size=iprl_cfg.vocab_emb_size,
-            iprl_emb_size=iprl_cfg.emb_size,
-            iprl_nhead=iprl_cfg.nhead,
-            iprl_dim_feedforward=iprl_cfg.dim_feedforward,
-            iprl_dropout=iprl_cfg.dropout,
-            iprl_use_gt_D=iprl_cfg.iprl_use_gt_D,
-            iprl_feedback=iprl_cfg.feedback,
-            iprl_use_bos=iprl_cfg.use_bos,
-            max_grad_norm=ppo_cfg.max_grad_norm,
-            use_xgen_visual_encoder=smt_cfg.use_xgen_visual_encoder,
-            on_or_off="off",
-            hidden_size=smt_cfg.hidden_size,
-            nhead=smt_cfg.nhead,
-            num_encoder_layers=smt_cfg.num_encoder_layers,
-            num_decoder_layers=smt_cfg.num_decoder_layers,
-            dropout=smt_cfg.dropout,
-            activation=smt_cfg.activation,
-            use_pretrained=smt_cfg.use_pretrained,
-            pretrained_path=smt_cfg.pretrained_path,
-            pretraining=smt_cfg.pretraining,
-            use_belief_encoding=smt_cfg.use_belief_encoding,
-            use_belief_as_goal=ppo_cfg.use_belief_predictor,
-            use_label_belief=belief_cfg.use_label_belief,
-            use_location_belief=belief_cfg.use_location_belief,
-            normalize_category_distribution=belief_cfg.normalize_category_distribution,
-            use_category_input=has_distractor_sound,
-            belief_cfg=belief_cfg,
-            batch_size=ppo_cfg.num_steps,
-            visual_encoder_output_size=self.visual_encoder_output_size,
-            tokenizer_type=self.tokenizer_type,
-        )
-        instruction_predictor.optimizer = torch.optim.Adam(
-            instruction_predictor.parameters(),
-            lr=ppo_cfg.lr,
-            eps=ppo_cfg.eps,
-        )
-        iprl_loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)
-
-        if smt_cfg.freeze_encoders:
-            instruction_predictor.freeze_encoders()
-
-        if pretrained:
-            # load weights for both actor critic and the encoder
-            pretrained_state = torch.load(pretrained_weights, map_location="cpu")
-            instruction_predictor.load_state_dict(
-                {
-                    k[len("actor_critic."):]: v
-                    for k, v in pretrained_state["state_dict"].items()
-                    if "actor_critic.net.visual_encoder" not in k and
-                        "actor_critic.net.smt_state_encoder" not in k
-                },
-                strict=False
-            )
-            instruction_predictor.visual_encoder.rgb_encoder.load_state_dict(
-                {
-                    k[len("actor_critic.net.visual_encoder.rgb_encoder."):]: v
-                    for k, v in pretrained_state["state_dict"].items()
-                    if "actor_critic.net.visual_encoder.rgb_encoder." in k
-                },
-            )
-            instruction_predictor.visual_encoder.depth_encoder.load_state_dict(
-                {
-                    k[len("actor_critic.net.visual_encoder.depth_encoder."):]: v
-                    for k, v in pretrained_state["state_dict"].items()
-                    if "actor_critic.net.visual_encoder.depth_encoder." in k
-                },
-            )
-
-        instruction_predictor.to(self.device)
-
-        return instruction_predictor, iprl_loss_fn
 
     def setup_datasets(self):
         if multiprocessing.get_start_method() == 'fork':
