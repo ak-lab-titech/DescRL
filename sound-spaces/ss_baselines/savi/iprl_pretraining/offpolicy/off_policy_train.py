@@ -236,7 +236,7 @@ class OffPolicyEPRLPreTrainer():
             raise Exception(f"environemnt_type: {self.environment_type}")
         
         # prepare model and loss_fn
-        self.instruction_predictor, self.loss_fn = self.setup_instruction_predictor(
+        self.instruction_predictor, self.loss_fn = setup_instruction_predictor(
             config=self.config,
             device=self.device,
             visual_encoder_output_size=self.visual_encoder_output_size,
