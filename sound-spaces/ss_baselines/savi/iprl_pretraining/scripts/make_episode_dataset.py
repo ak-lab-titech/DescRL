@@ -164,7 +164,7 @@ def main(config, sensor_list, save_path, start_index=0, environment_type=None):
     sim = make_sim(
         sim_cfg.TYPE, config=sim_cfg,
     )
-    map_size = 5 * 1.1e12 # about 5 TB
+    map_size = 8 * 1.1e12 # about 8 TB
     env = lmdb.open(save_path, map_size=int(map_size))
     s = time.time()
     for i in trange(start_index, len(episodes)):
