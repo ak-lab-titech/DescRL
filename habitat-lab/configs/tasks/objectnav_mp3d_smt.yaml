@@ -69,12 +69,15 @@ TASK:
     GOAL_FORMAT: "CARTESIAN"
     DIMENSIONALITY: 2
   GENERATED_INSTRUCTION:
+    MODEL_TYPE: "cnn_tf"
+    TOKENIZER_TYPE: "r2r"
     XGENERATOR_PATH: "./xgenerator/data/models/tf-speaker-semantic-24h"
     XGENERATOR_CKPT: 1000
     MAX_INSTRUCTION_LENGTH: 40
     FUTURE_STEP_NUM: 20 # -1なら最後まで。ただしpastでは-1は未実装
     MODEL_RESOLUTION: 128
     FUTURE_OR_PAST: "past" # future or past
+    NUM_FRAMES: null
 
   MEASUREMENTS: ['DISTANCE_TO_GOAL', 'SUCCESS', 'SPL', 'SOFT_SPL', 'NUM_ACTION']
 

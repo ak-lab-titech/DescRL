@@ -84,6 +84,13 @@ class ObjectNavDatasetV1(PointNavDatasetV1):
         g = ObjectGoal(**serialized_goal)
 
         for vidx, view in enumerate(g.view_points):
+            # view = {
+            #     'agent_state': {
+            #         'position': view,
+            #         'rotation': [0.0, -0.69163, 0.0, 0.72225],
+            #     },
+            #     'iou': 0.27273,
+            # }
             view_location = ObjectViewLocation(**view)  # type: ignore
             view_location.agent_state = AgentState(**view_location.agent_state)  # type: ignore
             g.view_points[vidx] = view_location
