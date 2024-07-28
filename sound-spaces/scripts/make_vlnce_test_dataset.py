@@ -401,7 +401,7 @@ def main(
         )
     elif instruction_predictor_type == "random":
         lang = R2RLang()
-        vocab_size = lang.vocab_size
+        vocab_size = lang.vocab_size - 2 # bosとeosを除く
     else:
         raise Exception(f"instruction_predictor_type: {instruction_predictor_type}")
     
