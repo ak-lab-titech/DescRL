@@ -138,6 +138,7 @@ class DDPPOTrainer(PPOTrainer):
                     use_xgen_visual_encoder=smt_cfg.use_xgen_visual_encoder,
                     visual_encoder_output_size=visual_encoder_output_size,
                 )
+                tokenizer_type = self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.TOKENIZER_TYPE
             else:
                 if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf":
                     visual_encoder_output_size=512-4
