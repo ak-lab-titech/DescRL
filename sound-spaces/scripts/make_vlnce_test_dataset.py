@@ -367,11 +367,15 @@ def main(
         )
         pretrained_state = torch.load(config.RL.DDPPO.pretrained_weights, map_location="cpu")
         pretrained_state_dict = {}
+
+        # belief_predictor_state = torch.load("data/models/ss1-savi/mp3d/savi-2nd/past-eprl-v2/data/ckpt.45.pth", map_location="cpu")
+        # for k, v in belief_predictor_state["belief_predictor"].items():
         for k, v in pretrained_state["belief_predictor"].items():
             pretrained_state_dict[f"belief_predictor.{k}"] = v
         for k, v in pretrained_state["state_dict"].items():
             if "actor_critic.action_distribution" in k or "actor_critic.critic" in k:
                 continue
+            # pretrained_state_dict[k] = v
             pretrained_state_dict[k[len("actor_critic.net."):]] = v
         
         instruction_predictor.load_state_dict(pretrained_state_dict)
