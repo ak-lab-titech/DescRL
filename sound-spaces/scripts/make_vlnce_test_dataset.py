@@ -469,6 +469,13 @@ def main(
                     )
                 instructions = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0]
                 instructions = torch.tensor([sentence2token(instructions)], dtype=torch.int32).view(-1, 1) # (instr_len, 1)
+            elif instruction_predictor_type == "random":
+                instructions = torch.from_numpy(
+                    np.random.randint(
+                        0, vocab_size,
+                        size=(config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MAX_INSTRUCTION_LENGTH, 1),
+                    )
+                )
             else:
                 image_seqs, action_seqs, target = hf_r2r_dataset[epi_id2lmdb_id[i]]
                 image_seqs = image_seqs.unsqueeze(1) # (l, 1, h, w, c), max:1, min:0
