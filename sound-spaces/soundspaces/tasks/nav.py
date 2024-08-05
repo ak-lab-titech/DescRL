@@ -715,7 +715,7 @@ class HabitatSimGeneratedInstruction(GeneratedInstruction):
             else:
                 raise Exception(f"future_or_past: {self.future_or_past}")
 
-            generated_instruction = self.generate_instruction(image_seqs, action_seqs, batch_size)
+            generated_instruction = self.generate_instruction_cnntf(image_seqs, action_seqs, batch_size)
             self.previous_instruction = generated_instruction
             return generated_instruction
     
