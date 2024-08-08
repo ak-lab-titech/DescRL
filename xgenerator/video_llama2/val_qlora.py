@@ -63,7 +63,7 @@ def main(model_path, data_args):
 
 if __name__=="__main__":
     model_path = "./data/models/video_llama2/finetune_videollama2_vllava_qlora-test"
-    data_path = "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/val_unseen_size512_trajectories.lmdb"
+    data_path = "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/val_unseen_trajectories.lmdb"
     data_num = 10
 
 

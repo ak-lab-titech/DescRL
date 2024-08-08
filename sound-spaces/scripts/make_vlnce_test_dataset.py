@@ -333,7 +333,7 @@ def main(
         else:
             num_frames = config.NUM_FRAMES
             hf_r2r_dataset = HFR2RDataset(
-                data_path="/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/val_unseen_size512_trajectories.lmdb",
+                data_path="/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/val_unseen_trajectories.lmdb",
                 data_num=len(episodes),
                 max_instruction_length=80,
                 n_slice=num_frames,
