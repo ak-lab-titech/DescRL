@@ -213,7 +213,8 @@ class OffPolicyEPRLPreTrainer():
         self.force_student = False
         self.n_update = 0
         self.foundation_model_type = self.config.FOUNDATION_MODEL.model_type
-        self.foundation_model_path = self.config.FOUNDATION_MODEL.model_path
+        self.train_fm_lmdb_path = self.config.FOUNDATION_MODEL.train_fm_lmdb_path
+        self.val_fm_lmdb_path = self.config.FOUNDATION_MODEL.val_fm_lmdb_path
         self.tokenizer_type = self.config.TOKENIZER_TYPE
         if self.foundation_model_type == None:
             self.visual_encoder_output_size = 512-4
@@ -223,8 +224,8 @@ class OffPolicyEPRLPreTrainer():
             raise Exception(f"config.FOUNDATION_MODEL.model_type: {config.foundation_model_type}")
         self.environment_type = environment_type
         if self.environment_type == "ss1-savi":
-            self.train_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train"
-            self.train_data_num = 502103
+            self.train_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train_cr02"
+            self.train_data_num = 100398
             self.val_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val"
             self.val_data_num = 500
         elif self.environment_type == "habitat-objnav":
@@ -269,10 +270,11 @@ class OffPolicyEPRLPreTrainer():
     
         if self.use_lmdb_dataset:
             train_split = self.config.TASK_CONFIG.DATASET.SPLIT
-            if train_split == "train_w_instruction" or train_split == "train_w_past_instruction":
+            if train_split == "train_w_instruction" or train_split == "train_w_past_instruction" or train_split == "train_cr_0.2_w_past_instruction":
                 train_dataset = IPRLPretrainingLMDBDataset(
                     self.config.TASK_CONFIG, train_split, self.train_lmdb_dataset_path, self.train_data_num,
-                        self.foundation_model_type, self.foundation_model_path,
+                        self.foundation_model_type,
+                        fm_lmdb_dataset_path=self.train_fm_lmdb_path,
                         environment_type=self.environment_type,
                         device=self.device,
                 )
@@ -286,7 +288,8 @@ class OffPolicyEPRLPreTrainer():
                 val_split = "my_" + val_split
             val_dataset = IPRLPretrainingLMDBDataset(
                 self.config.TASK_CONFIG, val_split, self.val_lmdb_dataset_path, self.val_data_num,
-                self.foundation_model_type, self.foundation_model_path,
+                self.foundation_model_type,
+                fm_lmdb_dataset_path=self.val_fm_lmdb_path,
                 environment_type=self.environment_type,
                 device=self.device,
             )

@@ -16,11 +16,6 @@ from habitat.datasets import make_dataset
 from ss_baselines.savi.config.default import get_config
 from soundspaces.utils import generate_video, visualize_spectrogram
 from xgenerator.common.lang import R2RLang, tokens2sentences, VideoLLaMA2Lang
-from videollama2.mm_utils import get_model_name_from_path
-from videollama2.model.builder import load_pretrained_model
-from videollama2.train import process_video
-from videollama2.constants import MMODAL_TOKEN_INDEX
-from videollama2.mm_utils import tokenizer_MMODAL_token
 
 
 class IPRLPretrainingLMDBDataset(Dataset):
@@ -31,8 +26,7 @@ class IPRLPretrainingLMDBDataset(Dataset):
         lmdb_dataset_path,
         data_num,
         foundation_model_type=None,
-        foundation_model_path=None,
-        num_frames=16,
+        fm_lmdb_dataset_path=None,
         environment_type=None,
         device="cuda",
     ):
@@ -61,21 +55,9 @@ class IPRLPretrainingLMDBDataset(Dataset):
 
         self.foundation_model_type = foundation_model_type
         if foundation_model_type is None:
-            self.foundation_model = None
+            self.fm_env = None
         elif foundation_model_type == "video_llama2":
-            tokenizer, self.foundation_model, self.processor, _ = load_pretrained_model(
-                foundation_model_path, None, get_model_name_from_path(foundation_model_path),
-                device=device,
-            )
-            self.visual_encoder = self.foundation_model.get_model().get_vision_tower().vision_tower
-            prompt = "[INST] <<SYS>>\n" \
-                "A chat between a curious user and an artificial intelligence assistant." \
-                "The assistant gives helpful, detailed, and polite answers to the user's questions." \
-                "\n<</SYS>>\n\n <video>\nWhat is the camera wearer doing? [/INST]"
-            self.input_ids = tokenizer_MMODAL_token(
-                prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
-            ).unsqueeze(0).to(device="cuda")
-            self.num_frames = num_frames
+            self.fm_env = lmdb.open(fm_lmdb_dataset_path, readonly=True, lock=False, map_size=5 * 1.1e12)
         else:
             raise Exception(f"foundation_model_type: {foundation_model_type}")
     
@@ -106,49 +88,10 @@ class IPRLPretrainingLMDBDataset(Dataset):
         if self.foundation_model_type is None:
             instruction = np.array(self.episodes[index].instructions)[:, int(step)] # (40,)
         elif self.foundation_model_type == "video_llama2":
-            tmp_image_seq = (image_seq.copy().squeeze(1)[:, :, :, :3] * 256).astype(np.uint8)
-            visual_tensor = process_video(
-                tmp_image_seq.copy(),
-                self.processor,
-                "pad",
-                len(tmp_image_seq),
-            ).to(
-                dtype=torch.float16,
-                device='cuda',
-                non_blocking=True,
-            ) # (l, c, h, w)
-            with torch.no_grad():
-                visual_features = self.visual_encoder(
-                    visual_tensor,
-                    output_hidden_states=True,
-                ).pooler_output # (l, 1024)
-
-            image_seq_len = len(tmp_image_seq)
-            indices = np.arange(0, image_seq_len,  image_seq_len / self.num_frames).astype(int)
-            visual_tensor = process_video(
-                tmp_image_seq[indices] if self.num_frames < image_seq_len else tmp_image_seq,
-                self.processor,
-                "pad",
-                self.num_frames if self.num_frames < image_seq_len else image_seq_len,
-            ).to(
-                dtype=torch.float16,
-                device='cuda',
-                non_blocking=True,
-            ) # (l, c, h, w)
-            with torch.inference_mode():
-                outputs = self.foundation_model.generate(
-                    self.input_ids,
-                    images_or_videos=[visual_tensor],
-                    modal_list=['video'],
-                    do_sample=True,
-                    temperature=0.2,
-                    # max_new_tokens=1024,
-                    max_new_tokens=40,
-                    use_cache=True,
-                    return_dict_in_generate=True,
-                    output_scores=True,
-                )
-            logits = torch.stack(outputs.scores).squeeze(1) # (instr_len, vocab_size)
+            with self.fm_env.begin() as txn:
+                fm_value = txn.get(str(index).encode('latin-1'))
+            fm_value = msgpack_numpy.unpackb(fm_value, object_hook=msgpack_numpy.decode)
+            visual_features, logits = torch.from_numpy(fm_value[0]), torch.from_numpy(fm_value[1])
         else:
             raise Exception(f"foundation_model_type: {self.foundation_model_type}")
         
@@ -161,7 +104,7 @@ class IPRLPretrainingLMDBDataset(Dataset):
             "location": location,
             "objectgoal": objectgoal,
         }
-        if self.foundation_model is None:
+        if self.foundation_model_type is None:
             return x, instruction
         else:
             return x, visual_features, logits

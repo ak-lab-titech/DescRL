@@ -46,6 +46,8 @@ elif [ $CMD = "offpolicy_episode_dataset" ] && [ $ENVIRONMENT_TYPE = "ss1-savi" 
         --config ss_baselines/savi/iprl_pretraining/config.yaml \
         --save-dataset-path ./data/lmdb_dataset/iprl_pretrain/$DATASET_NAME \
         --start-index $START_INDEX
+elif [ $CMD = "KD_FM_dataset" ] && [ $ENVIRONMENT_TYPE == "ss1-savi" ]; then
+    python ss_baselines/savi/iprl_pretraining/scripts/make_fm_KD_dataset.py
 elif [ $CMD = "generate_instruction" ] && [ $ENVIRONMENT_TYPE = "habitat-objnav" ]; then
     cd ~/navigation/myss
     python sound-spaces/ss_baselines/savi/iprl_pretraining/scripts/make_instructions.py \

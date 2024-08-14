@@ -53,7 +53,7 @@ TASK:
     TOKENIZER_TYPE: "video_llama2" # "r2r"
     # XGENERATOR_PATH: "../xgenerator/data/models/tf-speaker-semantic-24h"
     XGENERATOR_PATH: "../xgenerator/data/models/video_llama2/finetune_videollama2_vllava_qlora_epoch2_frame16"
-    # XGENERATOR_PATH: "DAMO-NLP-SG/VideoLLaMA2-7B-16F-Base"
+    # XGENERATOR_PATH: "DAMO-NLP-SG/VideoLLaMA2-7B-Base" # num_frames must be 8.
     XGENERATOR_CKPT: 1000
     MAX_INSTRUCTION_LENGTH: 40
     FUTURE_STEP_NUM: 20 # -1なら最後まで。ただしpastでは-1は未実装
