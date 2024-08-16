@@ -283,6 +283,7 @@ class DDPPOTrainer(PPOTrainer):
             direct_map_loss_coef=ppo_cfg.direct_map_loss_coef,
             xgenerator_type=self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE,
             xgenerator_tokenizer_type=tokenizer_type,
+            xgenerator_path=self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.XGENERATOR_PATH,
         )
         self.use_direct_map = (self.config.TASK_CONFIG.SIMULATOR.DIRECT_MAP_SIZE is not None)
         self.use_gt_direct_map = self.config.TASK_CONFIG.SIMULATOR.USE_GT_DIRECT_MAP

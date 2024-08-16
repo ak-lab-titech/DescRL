@@ -212,6 +212,7 @@ class PPOTrainer(BaseRLTrainer):
             max_grad_norm=ppo_cfg.max_grad_norm,
             xgenerator_type=self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE,
             xgenerator_tokenizer_type=tokenizer_type,
+            xgenerator_path=self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.XGENERATOR_PATH,
         )
 
         if self.config.RESUME:

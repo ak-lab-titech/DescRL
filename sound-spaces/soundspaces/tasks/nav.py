@@ -427,17 +427,18 @@ class GeneratedInstruction(Sensor):
             self.instruction_generator.eval()
         elif self.xgenerator_type == "video_llama2":
             self.vocab_size = 32000
-            tokenizer, self.foundation_model, self.processor, _ = load_pretrained_model(
+            _, _, self.processor, _ = load_pretrained_model(
+            # tokenizer, self.foundation_model, self.processor, _ = load_pretrained_model(
                 xgenerator_path, None, get_model_name_from_path(xgenerator_path),
                 device=self.device,
             )
-            prompt = "[INST] <<SYS>>\n" \
-                "A chat between a curious user and an artificial intelligence assistant." \
-                "The assistant gives helpful, detailed, and polite answers to the user's questions." \
-                "\n<</SYS>>\n\n <video>\nWhat is the camera wearer doing? [/INST]"
-            self.input_ids = tokenizer_MMODAL_token(
-                prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
-            ).unsqueeze(0).to(self.device)
+            # prompt = "[INST] <<SYS>>\n" \
+            #     "A chat between a curious user and an artificial intelligence assistant." \
+            #     "The assistant gives helpful, detailed, and polite answers to the user's questions." \
+            #     "\n<</SYS>>\n\n <video>\nWhat is the camera wearer doing? [/INST]"
+            # self.input_ids = tokenizer_MMODAL_token(
+            #     prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
+            # ).unsqueeze(0).to(self.device)
             self.num_frames = kwargs["task"]._config["GENERATED_INSTRUCTION"]["NUM_FRAMES"]
         else:
             raise Exception(f"xgenerator_type: {self.xgenerator_type}")
@@ -458,9 +459,15 @@ class GeneratedInstruction(Sensor):
             return spaces.Box(
                 low=np.finfo(np.float32).min,
                 high=np.finfo(np.float32).max,
-                shape=(self.max_instr_len, self.vocab_size),
+                shape=(self.num_frames, 3, 336, 336),
                 dtype=np.float32,
             )
+            # return spaces.Box(
+            #     low=np.finfo(np.float32).min,
+            #     high=np.finfo(np.float32).max,
+            #     shape=(self.max_instr_len, self.vocab_size),
+            #     dtype=np.float32,
+            # )
         else:
             raise Exception(f"xgenerator_type: {self.xgenerator_type}")
 
@@ -598,7 +605,7 @@ class GeneratedInstruction(Sensor):
         image_seqs: (seq_l, batch, image_shape)
         action_seqs: (seq_l, batch, 4)
         """
-        with torch.no_grad():
+        with torch.inference_mode():
             memory = self.instruction_generator.encode(
                 src_image=image_seqs,
                 src_action=action_seqs,
@@ -642,33 +649,46 @@ class GeneratedInstruction(Sensor):
         image_seq_len = len(tmp_image_seq)
         indices = np.arange(0, image_seq_len,  image_seq_len / self.num_frames).astype(int)
         visual_tensor = process_video(
-            tmp_image_seq[indices] if self.num_frames < image_seq_len else tmp_image_seq,
+            tmp_image_seq[indices],
             self.processor,
             "pad",
-            self.num_frames if self.num_frames < image_seq_len else image_seq_len,
+            self.num_frames,
         ).to(
             dtype=torch.float16,
             device=self.device,
             non_blocking=True,
         ) # (l, c, h, w)
-        with torch.inference_mode():
-            outputs = self.foundation_model.generate(
-                self.input_ids,
-                images_or_videos=[visual_tensor],
-                modal_list=['video'],
-                do_sample=True,
-                temperature=0.2,
-                # max_new_tokens=1024,
-                max_new_tokens=40,
-                use_cache=True,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-        logits = torch.stack(outputs.scores).squeeze(1) # (instr_len, vocab_size)
+
+        return visual_tensor
+
+        # visual_tensor = process_video(
+        #     tmp_image_seq[indices] if self.num_frames < image_seq_len else tmp_image_seq,
+        #     self.processor,
+        #     "pad",
+        #     self.num_frames if self.num_frames < image_seq_len else image_seq_len,
+        # ).to(
+        #     dtype=torch.float16,
+        #     device=self.device,
+        #     non_blocking=True,
+        # ) # (l, c, h, w)
+        # with torch.inference_mode():
+        #     outputs = self.foundation_model.generate(
+        #         self.input_ids,
+        #         images_or_videos=[visual_tensor],
+        #         modal_list=['video'],
+        #         do_sample=True,
+        #         temperature=0.2,
+        #         # max_new_tokens=1024,
+        #         max_new_tokens=40,
+        #         use_cache=True,
+        #         return_dict_in_generate=True,
+        #         output_scores=True,
+        #     )
+        # logits = torch.stack(outputs.scores).squeeze(1) # (instr_len, vocab_size)
         
-        padding_size = self.max_instr_len - np.shape(logits)[0]
-        logits = F.pad(logits, (0, 0, 0, padding_size), "constant", 0)
-        return logits
+        # padding_size = self.max_instr_len - np.shape(logits)[0]
+        # logits = F.pad(logits, (0, 0, 0, padding_size), "constant", 0)
+        # return logits
     
     def resize_observation(self, observation):
         observation['rgb'] = cv2.resize(

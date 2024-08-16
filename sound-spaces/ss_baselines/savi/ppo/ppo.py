@@ -20,6 +20,11 @@ from xgenerator.common.lang import tokens2sentences, R2RLang
 from ss_baselines.savi.iprl_pretraining.common.videollama2_kd_loss import VideoLLaMA2KDLoss, R2RTokenizerVideoLLaMA2KDLoss
 from xgenerator.common.lang import tokens2sentences, sentence2token, R2RLang, VIDEO_LLAMA2_TOKENIZER
 from xgenerator.common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
+from videollama2.mm_utils import get_model_name_from_path
+from videollama2.model.builder import load_pretrained_model
+from videollama2.train import process_video
+from videollama2.constants import MMODAL_TOKEN_INDEX
+from videollama2.mm_utils import tokenizer_MMODAL_token
 
 EPS_PPO = 1e-5
 
@@ -43,6 +48,7 @@ class PPO(nn.Module):
         use_normalized_advantage=True,
         xgenerator_type=None,
         xgenerator_tokenizer_type=None,
+        xgenerator_path=None,
     ):
 
         super().__init__()
@@ -88,6 +94,21 @@ class PPO(nn.Module):
         self.use_normalized_advantage = use_normalized_advantage
         self.update_cnt = 0
 
+        if self.xgenerator_type == "video_llama2" and self.xgenerator_tokenizer_type == "video_llama2":
+            tokenizer, self.foundation_model, _, _ = load_pretrained_model(
+                xgenerator_path, None, get_model_name_from_path(xgenerator_path),
+                device=self.device,
+            )
+            prompt = "[INST] <<SYS>>\n" \
+                "A chat between a curious user and an artificial intelligence assistant." \
+                "The assistant gives helpful, detailed, and polite answers to the user's questions." \
+                "\n<</SYS>>\n\n <video>\nWhat is the camera wearer doing? [/INST]"
+            self.input_ids = tokenizer_MMODAL_token(
+                prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
+            ).unsqueeze(0).to(self.device)
+        else:
+            self.foundation_model = None
+
     def forward(self, *x):
         raise NotImplementedError
 
@@ -128,6 +149,26 @@ class PPO(nn.Module):
                     external_memory_masks,
                 ) = sample
 
+
+                if self.foundation_model is not None:
+                    generated_instructions = obs_batch["generated_instruction"].half() # (b, f, c, h, w)
+                    batch_size = generated_instructions.shape[0]
+                    with torch.inference_mode():
+                        outputs = self.foundation_model.generate(
+                            self.input_ids.repeat(batch_size, 1),
+                            images_or_videos=[generated_instructions[i] for i in range(len(generated_instructions))],
+                            modal_list=['video' for _ in range(batch_size)],
+                            do_sample=True,
+                            temperature=0.2,
+                            # max_new_tokens=1024,
+                            max_new_tokens=40,
+                            use_cache=True,
+                            return_dict_in_generate=True,
+                            output_scores=True,
+                        )
+                    logits = torch.stack(outputs.scores).permute(1, 0, 2) # (batch, l, bocab)
+                    obs_batch["generated_instruction"] = logits
+                
                 # Reshape to do in a single forward pass for all steps
                 (
                     values,
