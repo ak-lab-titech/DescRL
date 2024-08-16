@@ -270,6 +270,10 @@ class OffPolicyEPRLPreTrainer():
     
         if self.use_lmdb_dataset:
             train_split = self.config.TASK_CONFIG.DATASET.SPLIT
+
+            if self.foundation_model_type is not None:
+                assert train_split == "train_cr_0.2_w_past_instruction", "if you want to use a foundation model, use train_cr_0.2_w_past_instruction dataset."
+
             if train_split == "train_w_instruction" or train_split == "train_w_past_instruction" or train_split == "train_cr_0.2_w_past_instruction":
                 train_dataset = IPRLPretrainingLMDBDataset(
                     self.config.TASK_CONFIG, train_split, self.train_lmdb_dataset_path, self.train_data_num,
