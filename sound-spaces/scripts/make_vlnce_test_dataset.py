@@ -164,7 +164,7 @@ def get_obs_seqs_for_xpred(sim, episode):
         pose_seqs_list.append([pose])
         action_seqs_list.append([[save_action]])
 
-        if oracle_actions[cnt-1] == 0:
+        if cnt > 0 and oracle_actions[cnt-1] == 0:
             break
         sim.step(oracle_actions[cnt])
         cnt += 1
