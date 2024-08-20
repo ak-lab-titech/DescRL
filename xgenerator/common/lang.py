@@ -6,6 +6,7 @@ import os
 import gc
 
 import numpy as np
+import matplotlib.pyplot as plt
 import torch
 from videollama2.model.builder import load_pretrained_model
 from videollama2.mm_utils import get_model_name_from_path
@@ -78,6 +79,43 @@ def sentence2token(sentence: str):
             else:
                 token.append(lang.word2index["<unk>"])
     return token
+
+
+def make_word_histgram(
+    probs: torch.Tensor, # (1, vocab_size)
+    top_k: int,
+    tokenizer_type: str,
+    save_dir_path: str,
+    filename: str,
+    past_tokens: torch.Tensor, # (instr_len, batch)
+):
+    assert probs.shape[0] == 1
+    os.makedirs(f"{save_dir_path}", exist_ok=True)
+
+    sorted_prob, sorted_indices = torch.sort(probs, descending=True)
+
+    if tokenizer_type == "r2r":
+        topk_words = tokens2sentences(sorted_indices)[:top_k]
+        topk_words = [word.split(" ")[0] for word in topk_words]
+
+        past_sentence = tokens2sentences(past_tokens[:, 0].view(-1,).view(-1, 1))[0]
+    elif tokenizer_type == "video_llama2":
+        topk_words = VIDEO_LLAMA2_TOKENIZER.batch_decode(sorted_indices.permute(1, 0), skip_special_tokens=False)[:top_k]
+        past_sentence = VIDEO_LLAMA2_TOKENIZER.batch_decode(past_tokens[:, 0].view(-1,).unsqueeze(0), skip_special_tokens=False)[0]
+    else:
+        raise Exception(f"tokenizer_type: {tokenizer_type}")
+    
+    topk_values = sorted_prob.flatten().to('cpu').detach().numpy().copy()[:top_k]
+    plt.figure()
+    plt.bar(
+        range(len(topk_values)),
+        topk_values,
+        tick_label=topk_words,
+    )
+    plt.xlabel("Word")
+    plt.ylabel("Probability")
+    plt.title(f"Input: {past_sentence}")
+    plt.savefig(f"{save_dir_path}/{filename}")
 
 
 class R2RLang:

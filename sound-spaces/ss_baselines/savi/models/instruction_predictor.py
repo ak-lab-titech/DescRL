@@ -9,6 +9,7 @@ import torch.nn as nn
 
 sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
+from xgenerator.common.lang import tokens2sentences, VIDEO_LLAMA2_TOKENIZER, make_word_histgram
 
 
 class PositionalEncoding(nn.Module):
@@ -116,7 +117,9 @@ class InstructionPredictor(nn.Module):
         return logits
 
     def student_forcing_forward(self, category, location, memory, memory_key_padding_mask):
-        batch_size = category.shape[0]     
+        batch_size = category.shape[0]
+        if self.use_bos:
+            raise Exception(f"if you want to use bos, specify tokenizer_type, or you may mistake BOS_IDX.")
         past_tokens = torch.full((1, batch_size), BOS_IDX)
         past_tokens = past_tokens.cuda() if torch.cuda.is_available() else past_tokens
         for i in range(self.max_instr_len-1):
@@ -153,6 +156,114 @@ class InstructionPredictor(nn.Module):
                 )
                 logits = self.generator(decoder_output) # (instr_len, batch, vocab_size)
         return logits
+    
+    def generate(
+        self,
+        category,
+        location,
+        memory,
+        save_dir_path,
+        beam_num,
+        top_k,
+        top_p,
+        temperature,
+        tokenizer_type,
+    ):
+        batch_size = category.shape[0]
+        assert batch_size == 1, "The size of batch must be 1 to use generate method."
+
+        if beam_num > 1:
+            assert top_k is None and top_p is None and temperature is None
+        if top_k is not None or top_p is not None:
+            assert beam_num == 1
+
+        if tokenizer_type == "r2r":
+            past_tokens = torch.full((1, batch_size), BOS_IDX)
+        elif tokenizer_type == "video_llama2":
+            past_tokens = torch.full((1, batch_size), 1)
+        else:
+            raise Exception(f"tokenizer_type: {tokenizer_type}")
+        past_tokens = past_tokens.cuda() if torch.cuda.is_available() else past_tokens
+
+        for i in range(self.max_instr_len-1):
+            if i == 1:
+                memory = memory.repeat(1, beam_num, 1)
+                category = category.repeat(beam_num, 1)
+                location = location.repeat(beam_num, 1)
+                
+            # Calculate logits
+            with torch.inference_mode():
+                if self.use_bos:
+                    past_words = self.embed_word_tokens_using_bos(past_tokens)
+                else:
+                    past_words = self.embed_word_tokens(past_tokens, category, location)
+                tgt_mask = torch.triu(torch.full((i+1, i+1), 1), diagonal=1).type(torch.bool)
+                tgt_mask = tgt_mask.cuda() if torch.cuda.is_available() else tgt_mask
+
+                decoder_output = self.decoder(
+                    tgt=past_words, # (instr_len, batch, embed)
+                    memory=memory, # (mem_size(=152), batch, smt_hidden)
+                    tgt_mask=tgt_mask,
+                    memory_key_padding_mask=None,
+                )[-1, :, :]
+                logits = self.generator(decoder_output) # (batch, vocab_size)  
+
+            if beam_num > 1: # Beam search              
+                probs = nn.functional.softmax(logits, dim=1)
+
+                top_indices = np.argsort(probs.flatten().to('cpu').detach().numpy().copy())[::-1][:beam_num]
+                top_indices = np.unravel_index(top_indices, probs.shape)
+
+                beams = []
+                for j in range(beam_num):
+                    beam_j = past_tokens[:, top_indices[0][j]].view(-1,).to('cpu').detach().numpy().copy().tolist() + [top_indices[1][j]]
+                    beams.append(beam_j)
+
+                past_tokens = torch.from_numpy(np.array(beams)).permute(1, 0).cuda()
+            
+            else:
+                assert logits.shape[0] == 1, "The size of batch must be 1."
+
+                probs = nn.functional.softmax(logits / temperature, dim=1)
+
+                if top_k is not None:
+                    topk_values, topk_indices = torch.topk(probs, top_k, dim=1)
+                    probs = torch.zeros_like(probs)
+                    probs[0, topk_indices] = topk_values
+                    
+                if top_p is not None:
+                    sorted_values, sorted_indices = torch.sort(probs, descending=True)
+                    cumulative_values = torch.cumsum(sorted_values, dim=1)
+                    top_p_mask = cumulative_values <= top_p
+                    top_p_mask[:, 0] = True # 少なくとも最大値は入れておく
+
+                    topp_values = sorted_values[top_p_mask]
+                    topp_indices = sorted_indices[top_p_mask]
+                    probs = torch.zeros_like(probs)
+                    probs[0, topp_indices] = topp_values
+
+                    top_k = min(len(topp_indices), top_k) if top_k is not None else min(len(top_indices), 20)
+
+                make_word_histgram(
+                    probs=probs, # (1, vocab_size)
+                    top_k=top_k,
+                    tokenizer_type=tokenizer_type,
+                    save_dir_path=f"{save_dir_path}/hist",
+                    filename=f"{i}.png",
+                    past_tokens=past_tokens, # (instr_len, batch)
+                )
+
+                probs = probs / torch.sum(probs, dim=1)
+
+                probs = probs.flatten()
+                token = torch.multinomial(probs, num_samples=1)
+                past_tokens = torch.cat((past_tokens, token.unsqueeze(0)), dim=0)
+
+            # sentence = tokens2sentences(past_tokens[:, 0].view(-1,).view(-1, 1))[0]
+            # sentence = VIDEO_LLAMA2_TOKENIZER.batch_decode(past_tokens[:, 0].view(-1,).unsqueeze(0), skip_special_tokens=False)[0]
+            # print(f"sentence: {sentence}")
+
+        return past_tokens[:, 0].view(-1,)   
 
     def teacher_forcing_forward(self, category, location, target, memory, memory_key_padding_mask):
         _, instr_len = target.size()

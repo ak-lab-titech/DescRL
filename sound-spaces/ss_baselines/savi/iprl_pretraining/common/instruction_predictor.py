@@ -168,6 +168,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         if self._use_belief_encoder:
             self.belief_encoder = nn.Linear(self._hidden_size, self._hidden_size)
 
+        self.tokenizer_type = tokenizer_type
         if tokenizer_type == "r2r":
             lang = R2RLang()
         elif tokenizer_type == "video_llama2":
@@ -355,6 +356,47 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             return self.off_forward(observations, prev_actions, ext_memory_masks, observations["target"], return_visual_features)
         else:
             raise Exception(f"on_or_off: {self.on_or_off}")
+    
+    def generate(
+        self,
+        observations,
+        prev_actions,
+        save_dir_path,
+        beam_num,
+        top_k,
+        top_p,
+        temperature,
+    ):
+        x = self.get_features(observations, prev_actions)
+        _, enc_memory = self.smt_state_encoder(x, None, None, path_lens=observations["seq_lengths"])
+
+        if self.use_audio:
+            if self.iprl_use_gt_D:
+                raise Exception(f"self.iprl_use_gt_D must be False.")
+            else: 
+                with torch.no_grad():
+                    observations = self.update_belief(observations)
+                category = nn.functional.softmax(observations[CategoryBelief.cls_uuid], dim=1) # (batch, 21)
+                location = observations[LocationBelief.cls_uuid] # (batch, 2)
+        else:
+            assert ObjectGoalSensor.cls_uuid in observations.keys()
+            category = observations[ObjectGoalSensor.cls_uuid] # (batch, 21)
+            location = torch.from_numpy(np.zeros((len(category), 2))).to(category.device).float() # (batch, 2)
+        
+        batch_size = category.shape[0]
+        assert batch_size == 1, "batch_size must be 1."
+        tokens = self.instruction_predictor.generate(
+            category=category, # (batch, 21)
+            location=location, # (batch, 2)
+            memory=enc_memory, # (mem_size, batch, smt_hidden)
+            save_dir_path=save_dir_path,
+            beam_num=beam_num,
+            tokenizer_type=self.tokenizer_type,
+            top_k=top_k,
+            top_p=top_p,
+            temperature=temperature,
+        )
+        return tokens
 
     def off_forward(self, observations, prev_actions, ext_memory_masks, targets, return_visual_features):
         if return_visual_features:

@@ -1,6 +1,9 @@
 import sys
 import math
+from typing import Optional
+import os
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch import Tensor
@@ -8,11 +11,12 @@ import torch.nn as nn
 from torch.nn import Transformer
 
 sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
-
+from common.load_lmdb import BOS_IDX
 from common.model import (
     VisualFeatureEncoder,
     VisualImageEncoder,
 )
+from xgenerator.common.lang import tokens2sentences, make_word_histgram
 
 
 class PositionalEncoding(nn.Module):
@@ -123,6 +127,107 @@ class Seq2SeqTransformer(nn.Module):
             memory_key_padding_mask=memory_key_padding_mask,
         )
         return self.generator(outs)
+    
+    def generate(
+        self,
+        image_seqs: Tensor, # (l, b, h, w, c)
+        action_seqs: Tensor, # (l, b, 4)
+        max_instr_len: int,
+        save_dir_path: str,
+        beam_num: int = 1,
+        top_k: int = None,
+        top_p: float = None,
+        temperature: float = None,
+    ):
+        batch_size = np.shape(image_seqs)[1]
+        assert batch_size == 1, "batch_size must be 1."
+
+        if beam_num > 1:
+            assert top_k is None and top_p is None and temperature is None
+        if top_k is not None or top_p is not None:
+            assert beam_num == 1
+
+        with torch.inference_mode():
+            memory = self.encode(
+                src_image=image_seqs,
+                src_action=action_seqs,
+                src_mask=None,
+                src_padding_mask=None,
+            )
+        past_tokens = torch.full((1, batch_size), BOS_IDX)
+        past_tokens = past_tokens.cuda() if torch.cuda.is_available() else past_tokens
+
+        for i in range(max_instr_len-1):
+
+            with torch.inference_mode():
+                tgt_mask = torch.triu(torch.full((i+1, i+1), 1), diagonal=1).type(torch.bool)
+                tgt_mask = tgt_mask.cuda() if torch.cuda.is_available() else tgt_mask
+
+                if i == 1:
+                    memory = memory.repeat(1, beam_num, 1)
+
+                logits = self.decode(
+                    trg=past_tokens,
+                    memory=memory,
+                    tgt_mask=tgt_mask,
+                    memory_mask=None,
+                    tgt_padding_mask=None,
+                    memory_key_padding_mask=None,
+                )[-1, :, :] # (batch, vocab_size)
+            
+            if beam_num > 1: # Beam search
+                probs = nn.functional.softmax(logits, dim=1) # (batch, vocab_size)
+
+                top_indices = np.argsort(probs.flatten().to('cpu').detach().numpy().copy())[::-1][:beam_num]
+                top_indices = np.unravel_index(top_indices, probs.shape)
+
+                beams = []
+                for j in range(beam_num):
+                    beam_j = past_tokens[:, top_indices[0][j]].view(-1,).to('cpu').detach().numpy().copy().tolist() + [top_indices[1][j]]
+                    beams.append(beam_j)
+
+                past_tokens = torch.from_numpy(np.array(beams)).permute(1, 0).cuda()
+            else:
+                assert logits.shape[0] == 1, "The size of batch must be 1."
+
+                probs = nn.functional.softmax(logits / temperature, dim=1)
+
+                if top_k is not None:
+                    topk_values, topk_indices = torch.topk(probs, top_k, dim=1)
+                    probs = torch.zeros_like(probs)
+                    probs[0, topk_indices] = topk_values
+                    
+                if top_p is not None:
+                    sorted_values, sorted_indices = torch.sort(probs, descending=True)
+                    cumulative_values = torch.cumsum(sorted_values, dim=1)
+                    top_p_mask = cumulative_values <= top_p
+                    top_p_mask[:, 0] = True # 少なくとも最大値は入れておく
+
+                    topp_values = sorted_values[top_p_mask]
+                    topp_indices = sorted_indices[top_p_mask]
+                    probs = torch.zeros_like(probs)
+                    probs[0, topp_indices] = topp_values
+
+                    top_k = min(len(topp_indices), top_k) if top_k is not None else min(len(top_indices), 20)
+
+                make_word_histgram(
+                    probs=probs, # (1, vocab_size)
+                    top_k=top_k,
+                    tokenizer_type="r2r",
+                    save_dir_path=f"{save_dir_path}/hist",
+                    filename=f"{i}.png",
+                    past_tokens=past_tokens, # (instr_len, batch)
+                )
+                
+                probs = probs / torch.sum(probs, dim=1)
+                probs = probs.flatten()
+                token = torch.multinomial(probs, num_samples=1)
+                past_tokens = torch.cat((past_tokens, token.unsqueeze(0)), dim=0)
+            
+            # sentence = tokens2sentences(past_tokens[:, 0].view(-1,).view(-1, 1))[0]
+            # print(f"sentence: {sentence}")
+
+        return past_tokens[:, 0].view(-1,)        
 
     def encode(
         self,
