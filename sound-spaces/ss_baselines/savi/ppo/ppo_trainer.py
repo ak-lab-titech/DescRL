@@ -242,8 +242,12 @@ class PPOTrainer(BaseRLTrainer):
     def save_checkpoint(
         self, file_name: str, extra_state=None
     ) -> None:
+        agent_state_dict = {}
+        for k, v in self.agent.state_dict().items():
+            if not "foundation_model" in k:
+                agent_state_dict[k] = v
         checkpoint = {
-            "state_dict": self.agent.state_dict(),
+            "state_dict": agent_state_dict,
             "config": self.config,
         }
         if self.config.RL.PPO.use_belief_predictor:
