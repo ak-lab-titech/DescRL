@@ -157,6 +157,7 @@ VIDEO_LLAMA2_VOCAB = VIDEO_LLAMA2_TOKENIZER.get_vocab()
 VIDEO_LLAMA2_EMBS = VIDEO_LLAMA2_MODEL.get_input_embeddings().weight.cpu().detach().numpy().copy()
 del VIDEO_LLAMA2_MODEL
 gc.collect()
+torch.cuda.empty_cache()
 
 # VIDEO_LLAMA2_VOCAB = None
 # VIDEO_LLAMA2_TOKENIZER = None
