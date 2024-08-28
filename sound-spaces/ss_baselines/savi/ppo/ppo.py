@@ -128,6 +128,47 @@ class PPO(nn.Module):
         direct_map_loss_epoch = 0
         iprl_loss_epoch = 0
 
+        # data_generator = rollouts.recurrent_generator(
+        #     advantages, self.num_mini_batch
+        # )
+
+        # for sample in data_generator:
+        #     (
+        #         obs_batch,
+        #         recurrent_hidden_states_batch,
+        #         prev_direct_map_batch,
+        #         actions_batch,
+        #         prev_actions_batch,
+        #         value_preds_batch,
+        #         return_batch,
+        #         masks_batch,
+        #         old_action_log_probs_batch,
+        #         adv_targ,
+        #         external_memory,
+        #         external_memory_masks,
+        #     ) = sample
+
+        #     if self.foundation_model is not None:
+        #         generated_instructions = obs_batch["generated_instruction"].half() # (b, f, c, h, w)
+        #         batch_size = generated_instructions.shape[0]
+        #         with torch.inference_mode():
+        #             outputs = self.foundation_model.generate(
+        #                 self.input_ids.repeat(batch_size, 1),
+        #                 images_or_videos=generated_instructions,
+        #                 modal_list=['video' for _ in range(batch_size)],
+        #                 do_sample=True,
+        #                 temperature=0.2,
+        #                 # max_new_tokens=1024,
+        #                 max_new_tokens=40,
+        #                 use_cache=True,
+        #                 return_dict_in_generate=True,
+        #                 output_scores=True,
+        #             )
+        #         logits = torch.stack(outputs.scores).permute(1, 0, 2) # (batch, l, bocab)
+        #         obs_batch["generated_instruction"] = logits
+
+        #     for e in range(self.ppo_epoch):
+
         for e in range(self.ppo_epoch):
             data_generator = rollouts.recurrent_generator(
                 advantages, self.num_mini_batch
