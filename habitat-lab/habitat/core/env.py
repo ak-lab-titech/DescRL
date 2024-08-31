@@ -334,6 +334,7 @@ class Env:
         self._config.freeze()
 
         self._sim.reconfigure(self._config.SIMULATOR)
+        # self._sim.reconfigure(self._config.SIMULATOR, should_close_on_new_scene=False)
 
     def render(self, mode="rgb") -> np.ndarray:
         return self._sim.render(mode)
