@@ -1,6 +1,7 @@
 from typing import List
 import sys
 import os
+import random
 
 import torch
 import numpy as np
@@ -18,6 +19,19 @@ from ss_baselines.savi.iprl_pretraining.scripts.make_instructions import setup_i
 from soundspaces.tasks.semantic_audionav_task import merge_sim_episode_config as ss_merge_sim_episode_config
 from soundspaces.utils import generate_video
 from xgenerator.common.lang import tokens2sentences, VIDEO_LLAMA2_TOKENIZER
+from videollama2.mm_utils import get_model_name_from_path
+from videollama2.model.builder import load_pretrained_model
+from videollama2.train import process_video
+from videollama2.constants import MMODAL_TOKEN_INDEX
+from videollama2.mm_utils import tokenizer_MMODAL_token
+
+
+def fix_seeds(seed=0):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
 
 
 def setup_config(environment_type: str, dir_path: str = "data/tmp"):
@@ -29,7 +43,7 @@ def setup_config(environment_type: str, dir_path: str = "data/tmp"):
     return config
 
 
-def setup_model(environment_type: str):
+def setup_model(environment_type: str, model_type: str):
     config = setup_config(environment_type)
 
     if model_type == "xgen-cnntf":
@@ -38,6 +52,7 @@ def setup_model(environment_type: str):
             xgenerator_path=config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.XGENERATOR_PATH,
             ckpt_num=config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.XGENERATOR_CKPT,
         )
+        processor = None
     elif model_type == "savi-past-xpred":
         assert environment_type == "ss1-savi", f"Not implemented, {environment_type}"
 
@@ -73,10 +88,18 @@ def setup_model(environment_type: str):
         model.load_state_dict(pretrained_state_dict)
         model.to(torch.device("cuda", 0))
         model.eval()
+        processor = None
+    elif model_type == "video_llama2":
+        model_path = config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.XGENERATOR_PATH
+        _, model, processor, _ = load_pretrained_model(
+            model_path,
+            None,
+            get_model_name_from_path(model_path),
+        )
     else:
         raise Exception(f"model_type: {model_type}")
     
-    return model
+    return model, processor
 
 
 def setup_episodes_and_sim(environment_type: str):
@@ -115,15 +138,16 @@ def main(
 ):
     os.makedirs(save_dir_path, exist_ok=True)
     with open(f"{save_dir_path}/explanation.txt", "w") as f:
-        f.write(f"-model_type: {model_type}\n")
+        f.write(f"model_type: {model_type}\n")
         f.write(f"environment_type: {environment_type}\n")
         f.write(f"indices: {indices}\n")
         f.write(f"beam_num: {beam_num}\n")
         f.write(f"top_k: {top_k}\n")
         f.write(f"top_p: {top_p}\n")
+        f.write(f"temperature: {temperature}\n")
     
     config = setup_config(environment_type, save_dir_path)
-    model = setup_model(environment_type)
+    model, processor = setup_model(environment_type, model_type)
     episodes, sim, sim_cfg = setup_episodes_and_sim(environment_type)
 
     # Evaluate the model
@@ -151,6 +175,7 @@ def main(
                 top_p=top_p,
                 temperature=temperature,
             )
+            image_seqs = image_seqs[:, :, :, :, :3]
         elif model_type == "savi-past-xpred":
             image_seqs, audio_seqs, pose_seqs, action_seqs = get_obs_seqs_for_xpred(sim, episode)
             inputs = {
@@ -174,7 +199,43 @@ def main(
                 top_p=top_p,
                 temperature=temperature,
             )
-            image_seqs = torch.from_numpy(image_seqs[:, :, :, :, :4].copy())
+            image_seqs = torch.from_numpy(image_seqs[:, :, :, :, :3].copy())
+        elif model_type == "video_llama2":
+            prompt = "[INST] <<SYS>>\n" \
+                    "A chat between a curious user and an artificial intelligence assistant." \
+                    "The assistant gives helpful, detailed, and polite answers to the user's questions." \
+                    "\n<</SYS>>\n\n <video>\nWhat is the camera wearer doing? [/INST]"
+            input_ids = tokenizer_MMODAL_token(
+                prompt, VIDEO_LLAMA2_TOKENIZER, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
+            ).unsqueeze(0).to(device="cuda")
+            image_seqs, _ = get_obs_seqs(sim, -1)
+            tensor = image_seqs[:, 0, :, :, :3]
+            n_frame = len(tensor)
+            n_slice = config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.NUM_FRAMES
+            indices = np.arange(0, n_frame, n_frame / n_slice).astype(int)
+            tensor = tensor[indices]
+            tensor = process_video(
+                (tensor.to('cpu').detach().numpy().copy() * 255).astype(np.uint8),
+                processor,
+                "pad",
+                n_slice,
+            ).to(
+                dtype=torch.float16,
+                device='cuda',
+                non_blocking=True,
+            )
+            with torch.inference_mode():
+                tokens = model.generate(
+                    input_ids,
+                    images_or_videos=[tensor],
+                    modal_list=['video'],
+                    do_sample=True,
+                    temperature=0.2,
+                    # max_new_tokens=1024,
+                    max_new_tokens=40,
+                    use_cache=True,
+                ).view(-1,)
+            image_seqs = image_seqs[:, :, :, :, :3]
         else:
             raise Exception(f"model_type: {model_type}")
 
@@ -183,6 +244,7 @@ def main(
 
         with open(f"{save_dir_path}/explanation.txt", "a") as f:
             f.write(f"-------------- {index} --------------\n")
+            f.write(f"Goal object category: {episode.object_category}\n")
             f.write(f"tokens: {tokens}\n")
 
             tokenizer_type = config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.TOKENIZER_TYPE
@@ -196,15 +258,18 @@ def main(
             f.write(f"sentence: {sentence}\n")
 
 
+
 if __name__=="__main__":
-    model_type = "savi-past-xpred" # "xgen-cnntf", "savi-past-xpred"
+    model_type = "xgen-cnntf" # "xgen-cnntf", "savi-past-xpred", "video_llama2"
     environment_type = "ss1-savi" # "ss1-savi", "habitat-objnav"
-    indices = [0, 100, 200]
+    indices = [0, 5]
     beam_num = 1
-    top_k = 10
-    top_p = 0.95
-    temperature = 2.0
-    save_dir_path = "data/videos/qual_eval/hogehoge"
+    top_k = None
+    top_p = None
+    temperature = 1.0
+    save_dir_path = f"data/videos/qual_eval/{environment_type}/{model_type}/beam{beam_num}-k{top_k}-p{top_p}-t{temperature}"
+
+    fix_seeds(seed=0)
 
     main(
         model_type=model_type,

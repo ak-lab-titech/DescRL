@@ -241,8 +241,7 @@ class InstructionPredictor(nn.Module):
                     topp_indices = sorted_indices[top_p_mask]
                     probs = torch.zeros_like(probs)
                     probs[0, topp_indices] = topp_values
-
-                    top_k = min(len(topp_indices), top_k) if top_k is not None else min(len(top_indices), 20)
+                    top_k = min(len(topp_indices), top_k) if top_k is not None else min(len(topp_indices), 20)
 
                 make_word_histgram(
                     probs=probs, # (1, vocab_size)
