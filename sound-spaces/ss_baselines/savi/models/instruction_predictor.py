@@ -243,14 +243,15 @@ class InstructionPredictor(nn.Module):
                     probs[0, topp_indices] = topp_values
                     top_k = min(len(topp_indices), top_k) if top_k is not None else min(len(topp_indices), 20)
 
-                make_word_histgram(
-                    probs=probs, # (1, vocab_size)
-                    top_k=top_k,
-                    tokenizer_type=tokenizer_type,
-                    save_dir_path=f"{save_dir_path}/hist",
-                    filename=f"{i}.png",
-                    past_tokens=past_tokens, # (instr_len, batch)
-                )
+                if save_dir_path is not None:
+                    make_word_histgram(
+                        probs=probs, # (1, vocab_size)
+                        top_k=top_k,
+                        tokenizer_type=tokenizer_type,
+                        save_dir_path=f"{save_dir_path}/hist",
+                        filename=f"{i}.png",
+                        past_tokens=past_tokens, # (instr_len, batch)
+                    )
 
                 probs = probs / torch.sum(probs, dim=1)
 

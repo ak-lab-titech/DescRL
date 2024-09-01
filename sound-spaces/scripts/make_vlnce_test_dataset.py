@@ -229,6 +229,10 @@ def generate_instruction_from_xpred(
     audio_seqs,
     pose_seqs,
     action_seqs,
+    beam_num=1,
+    top_k=None,
+    top_p=None,
+    temperature=1.0,
 ):
     inputs = {
         "rgb": torch.from_numpy(image_seqs[:, :, :, :, :3]).float().cuda(),
@@ -242,14 +246,15 @@ def generate_instruction_from_xpred(
         "seq_lengths": torch.from_numpy(np.array([len(audio_seqs)])).cuda(),
         "target": None,
     }
-    logits = instruction_predictor(
+    tokens = instruction_predictor.generate(
         observations=inputs,
         prev_actions=inputs["action"],
-        masks=None,
-        ext_memory=None,
-        ext_memory_masks=inputs["mask"],
-    )
-    _, tokens = logits.max(2)
+        save_dir_path=None,
+        beam_num=beam_num,
+        top_k=top_k,
+        top_p=top_p,
+        temperature=temperature,
+    ).view(-1, 1)
 
     return tokens
 
@@ -279,6 +284,10 @@ def main(
     save_dataset_path,
     instruction_predictor_type, # "xgen", "savi-past-xpred", "savi-future-xpred", "smt-past-xpred", "video-llava"
     environment_type, # "ss1-savi", "habitat-objnav", "vlnce"
+    beam_num,
+    top_k,
+    top_p,
+    temperature,
     step_num_for_FEPRL=5,
 ):
     # TODO ここら辺のif文は、メソッドとの中に入れた方が綺麗かもしれない
@@ -525,6 +534,10 @@ def main(
                     audio_seqs,
                     pose_seqs,
                     action_seqs,
+                    beam_num,
+                    top_k,
+                    top_p,
+                    temperature,
                 )
             elif instruction_predictor_type == "random":
                 instructions = torch.from_numpy(
@@ -587,7 +600,50 @@ if __name__=="__main__":
         "--environment-type",
         type=str,
     )
+    parser.add_argument(
+        "--beam-num",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=None,
+    )
+    parser.add_argument(
+        "--top-p",
+        type=float,
+        default=None,
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+    )
     args = parser.parse_args()
+
+    if not (args.instruction_predictor_type == "savi-past-xpred" or args.instruction_predictor_type == "savi-future-xpred"):
+        assert (
+            args.beam_num is None
+        ) and (
+            args.top_k is None
+        ) and (
+            args.top_p is None
+        ) and (
+            args.temperature is None
+        ), "Can not scpecify text generation parameters, if not xpred."
+    else:
+        assert not (
+            (
+                args.beam_num is None
+            ) and (
+                args.top_k is None
+            ) and (
+                args.top_p is None
+            ) and (
+                args.temperature is None
+            )
+        ), "specify text generation parameters, if xpred"
 
     if args.environment_type == "ss1-savi":
         config = ss_get_config(args.config)
@@ -618,5 +674,9 @@ if __name__=="__main__":
         args.save_dataset_path,
         args.instruction_predictor_type,
         args.environment_type,
+        args.beam_num,
+        args.top_k,
+        args.top_p,
+        args.temperature,
     )
 
