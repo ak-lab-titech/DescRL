@@ -16,6 +16,16 @@
 * soundspaces1でsemantic audio-visual navigationを動かすことを想定している
 
 
+## submodules
+* `Matterport3DSimulator`
+    * Vision-and-language navigation用のリポジトリ
+    ```
+    git submodule add https://github.com/peteanderson80/Matterport3DSimulator.git
+    cd Matterport3DSimulator/
+    git submodule update --init --recursive
+    ```
+
+
 ## 環境構築
 
 1. habitat-labのセットアップ
