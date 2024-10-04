@@ -125,6 +125,10 @@ def main():
     if args.run_type == "train":
         trainer.train()
     elif args.run_type == "eval":
+        NPERNODE = int(os.getenv("NPERNODE"))
+        rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
+        os.environ["LOCAL_RANK"]=str(rank%NPERNODE)
+        print(f"local rank: {str(rank%NPERNODE)}")
         trainer.eval(args.eval_interval, args.prev_ckpt_ind, config.USE_LAST_CKPT)
 
 

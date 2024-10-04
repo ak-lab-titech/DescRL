@@ -959,6 +959,7 @@ class PPOTrainer(BaseRLTrainer):
             ) and (
                 'generated_instruction' in batch.keys() or 'habitat_sim_generated_instruction' in batch.keys()
             ):
+                iprl_logits = iprl_logits["logits"]
                 _, iprl_tokens = iprl_logits.max(2) # iprl_tokens: (instr_len, batch)
                 confidence = calc_confidence(iprl_logits)
                 confidences[-1].append(confidence)
