@@ -54,14 +54,14 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "savi" ]; then
     python ss_baselines/savi/run.py \
         --run-type eval \
         --exp-config ss_baselines/savi/config/semantic_audionav/savi.yaml \
-        --model-dir data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME \
+        --model-dir data/models/ss1-savi/$DATASET_NAME/savi-2nd/$MODEL_NAME \
         CONTINUOUS False \
         NUM_PROCESSES 1 \
         EVAL.SPLIT test \
         RL.DDPPO.pretrained False \
-        LOG_FILE data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/demo_video.log \
-        TENSORBOARD_DIR data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/tb_demo_video_ckpt$CKPT_NUM \
-        EVAL_CKPT_PATH_DIR data/models/ss1-savi/$DATASET_NAME/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        LOG_FILE data/models/ss1-savi/$DATASET_NAME/savi-2nd/$MODEL_NAME/demo_video.log \
+        TENSORBOARD_DIR data/models/ss1-savi/$DATASET_NAME/savi-2nd/$MODEL_NAME/tb_demo_video_ckpt$CKPT_NUM \
+        EVAL_CKPT_PATH_DIR data/models/ss1-savi/$DATASET_NAME/savi-2nd/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
         TASK_CONFIG.SIMULATOR.USE_RENDERED_OBSERVATIONS False \
         TASK_CONFIG.SIMULATOR.CONTINUOUS_VIEW_CHANGE False \
         DISPLAY_RESOLUTION 512 \
