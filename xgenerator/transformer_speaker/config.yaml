@@ -7,6 +7,9 @@ model:
   dim_feedforward: 512
   dropout_ratio: 0.3
   use_semantic: True
+  lfao:
+    use_lfao: False
+    lfao_num_decoder_layers: 1
 
 train:
   train_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/xgen_pretraining/train_size336_trajectories.lmdb"

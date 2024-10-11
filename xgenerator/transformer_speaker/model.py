@@ -1,6 +1,6 @@
 import sys
 import math
-from typing import Optional
+from typing import Optional, Any, Callable, Union
 import os
 
 import matplotlib.pyplot as plt
@@ -8,7 +8,9 @@ import numpy as np
 import torch
 from torch import Tensor
 import torch.nn as nn
-from torch.nn import Transformer
+import torch.nn.functional as F
+from torch.nn import Transformer, TransformerDecoderLayer, LayerNorm, TransformerDecoder
+from torch.nn.init import xavier_uniform_
 
 sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 from common.load_lmdb import BOS_IDX
@@ -40,6 +42,157 @@ class PositionalEncoding(nn.Module):
         return self.dropout(token_embedding + self.pos_embedding[:token_embedding.size(0), :])
 
 
+class LocalFeatureAndActionOrientedTransformer(Transformer):
+    def __init__(
+        self,
+        d_model: int = 512,
+        nhead: int = 8,
+        num_encoder_layers: int = 6,
+        num_decoder_layers: int = 6,
+        num_lfao_decoder_layers: int = 1,
+        dim_feedforward: int = 2048,
+        dropout: float = 0.1,
+        activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
+        custom_encoder: Optional[Any] = None,
+        custom_decoder: Optional[Any] = None,
+        layer_norm_eps: float = 1e-5,
+        batch_first: bool = False,
+        norm_first: bool = False,
+        bias: bool = True,
+        device=None,
+        dtype=None,
+    ) -> None:
+        super().__init__(
+            d_model=d_model,
+            nhead=nhead,
+            num_encoder_layers=num_encoder_layers,
+            num_decoder_layers=num_decoder_layers,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            activation=activation,
+            custom_encoder=custom_encoder,
+            custom_decoder=custom_decoder,
+            layer_norm_eps=layer_norm_eps,
+            batch_first=batch_first,
+            norm_first=norm_first,
+            bias=bias,
+            device=device,
+            dtype=dtype,
+        )
+
+        factory_kwargs = {"device": device, "dtype": dtype}
+        decoder_layer = TransformerDecoderLayer(
+            d_model,
+            nhead,
+            dim_feedforward,
+            dropout,
+            activation,
+            layer_norm_eps,
+            batch_first,
+            norm_first,
+            bias,
+            **factory_kwargs,
+        )
+        decoder_norm = LayerNorm(
+            d_model, eps=layer_norm_eps, bias=bias, **factory_kwargs
+        )
+        self.lfao_decoder = TransformerDecoder(
+            decoder_layer, num_lfao_decoder_layers, decoder_norm
+        )
+        self.lfao_positional_encoding = PositionalEncoding(
+            d_model,
+            dropout=dropout,
+        )
+        self.lfao_type_embedding = nn.Embedding(2, d_model)
+
+        self.lfao_local_feature_enc = nn.Sequential(
+            nn.Linear(d_model-4, d_model),
+            nn.ReLU(),
+        )
+        self.lfao_action_enc = nn.Sequential(
+            nn.Linear(4, d_model),
+            nn.ReLU(),
+        )
+        self._reset_lfao_parameters()
+    
+    def _reset_lfao_parameters(self):
+        for p in self.lfao_decoder.parameters():
+            if p.dim() > 1:
+                xavier_uniform_(p)
+        for p in self.lfao_positional_encoding.parameters():
+            if p.dim() > 1:
+                xavier_uniform_(p)
+        for p in self.lfao_type_embedding.parameters():
+            if p.dim() > 1:
+                xavier_uniform_(p)
+        for p in self.lfao_local_feature_enc.parameters():
+            if p.dim() > 1:
+                xavier_uniform_(p)
+        for p in self.lfao_action_enc.parameters():
+            if p.dim() > 1:
+                xavier_uniform_(p)
+        
+    def forward(
+        self,
+        src: Tensor, # (l_s, b, emb)
+        local_features: Tensor, # (l_s, b, emb-4)
+        actions: Tensor, # (l_s, b, 4)
+        tgt: Tensor, # (l_t, b, emb_t)
+        src_mask: Optional[Tensor] = None, # (l_s, l_s)
+        tgt_mask: Optional[Tensor] = None, # (l_t, l_t)
+        memory_mask: Optional[Tensor] = None,
+        src_key_padding_mask: Optional[Tensor] = None, # (batch, l_s)
+        tgt_key_padding_mask: Optional[Tensor] = None, # (batch, l_t)
+        memory_key_padding_mask: Optional[Tensor] = None, # (batch, l_s)
+        src_is_causal: Optional[bool] = None,
+        tgt_is_causal: Optional[bool] = None,
+        memory_is_causal: bool = False,
+    ):
+        output = super().forward(
+            src=src,
+            tgt=tgt,
+            src_mask=src_mask,
+            tgt_mask=tgt_mask,
+            memory_mask=memory_mask,
+            src_key_padding_mask=src_key_padding_mask,
+            tgt_key_padding_mask=tgt_key_padding_mask,
+            memory_key_padding_mask=memory_key_padding_mask,
+            src_is_causal=src_is_causal,
+            tgt_is_causal=tgt_is_causal,
+            memory_is_causal=memory_is_causal,
+        )
+
+        # Enc
+        local_features = self.lfao_local_feature_enc(local_features) # (l_s, batch, emb)
+        actions = self.lfao_action_enc(actions) # (l_s, batch, emb)
+
+        #Position Encoding
+        local_features = self.lfao_positional_encoding(local_features) # (l_s, batch, emb)
+        actions = self.lfao_positional_encoding(actions) # (l_s, batch, emb)
+
+        # Type Encoding
+        local_features = local_features + self.lfao_type_embedding(torch.full(local_features.shape[:-1], 0).to(local_features.device)) # (l_s, batch, emb)
+        actions = actions + self.lfao_type_embedding(torch.full(actions.shape[:-1], 1).to(actions.device)) # (l_s, batch, emb)
+
+        lfaos = torch.cat(
+            [local_features, actions],
+            axis=0,
+        ) # (l_s+l_s, batch, emb)
+
+        output = self.lfao_decoder(
+            output,
+            lfaos,
+            tgt_mask=tgt_mask,
+            memory_mask=memory_mask,
+            tgt_key_padding_mask=tgt_key_padding_mask,
+            memory_key_padding_mask=torch.cat([memory_key_padding_mask, memory_key_padding_mask], axis=1),
+            tgt_is_causal=tgt_is_causal,
+            memory_is_causal=memory_is_causal,
+        )
+
+        return output
+
+
 class Seq2SeqTransformer(nn.Module):
     def __init__(
         self,
@@ -54,16 +207,31 @@ class Seq2SeqTransformer(nn.Module):
         glove: np.ndarray = None,
         dim_feedforward: int = 512,
         dropout: float = 0.1,
+        use_lfao: bool = False,
+        num_lfao_decoder_layers: int = 0,
     ):
         super(Seq2SeqTransformer, self).__init__()
-        self.transformer = Transformer(
-            d_model=emb_size,
-            nhead=nhead,
-            num_encoder_layers=num_encoder_layers,
-            num_decoder_layers=num_decoder_layers,
-            dim_feedforward=dim_feedforward,
-            dropout=dropout,
-        )
+        self.is_lfao = use_lfao
+        if self.is_lfao:
+            assert num_lfao_decoder_layers > 0
+            self.transformer = LocalFeatureAndActionOrientedTransformer(
+                d_model=emb_size,
+                nhead=nhead,
+                num_encoder_layers=num_encoder_layers,
+                num_decoder_layers=num_decoder_layers,
+                num_lfao_decoder_layers=num_lfao_decoder_layers,
+                dim_feedforward=dim_feedforward,
+                dropout=dropout,
+            )
+        else:
+            self.transformer = Transformer(
+                d_model=emb_size,
+                nhead=nhead,
+                num_encoder_layers=num_encoder_layers,
+                num_decoder_layers=num_decoder_layers,
+                dim_feedforward=dim_feedforward,
+                dropout=dropout,
+            )
         self.generator = nn.Linear(emb_size, vocab_size)
         if use_image_feature:
             # feature param: 2176*4*4 = 34,816
@@ -108,7 +276,8 @@ class Seq2SeqTransformer(nn.Module):
         src_action_shape = src_action.shape
         src_image = src_image.view(src_image_shape[0] * src_image_shape[1], src_image_shape[2], src_image_shape[3], src_image_shape[4])
         src_action = src_action.view(src_action_shape[0] * src_action_shape[1], src_action_shape[2])
-        src_emb = torch.cat((self.visual_emb(src_image), src_action), 1) # (max_l*batch, embed)
+        src_local_feature = self.visual_emb(src_image)
+        src_emb = torch.cat((src_local_feature, src_action), 1) # (max_l*batch, embed)
         _, emb_size = src_emb.shape
         src_emb = src_emb.view(src_image_shape[0], src_image_shape[1], emb_size) # (max_l, batch, embed)
         src_emb = self.positional_encoding(src_emb)
@@ -118,16 +287,32 @@ class Seq2SeqTransformer(nn.Module):
         tgt_emb = self.word_emb(tgt_emb) # (199*batch, 512)
         tgt_emb = tgt_emb.view(trg_shape[0], trg_shape[1], emb_size)
         tgt_emb = self.positional_encoding(tgt_emb)
-        outs = self.transformer(
-            src=src_emb,
-            tgt=tgt_emb,
-            src_mask=src_mask,
-            src_key_padding_mask=src_padding_mask,
-            tgt_mask=tgt_mask,
-            tgt_key_padding_mask=tgt_padding_mask,
-            memory_mask=memory_mask,
-            memory_key_padding_mask=memory_key_padding_mask,
-        )
+        if self.is_lfao:
+            outs = self.transformer(
+                src=src_emb,
+                local_features=src_local_feature.view(src_image_shape[0], src_image_shape[1], emb_size-4),
+                actions=src_action.view(src_action_shape[0], src_action_shape[1], src_action_shape[2]),
+                tgt=tgt_emb,
+                src_mask=src_mask,
+                src_key_padding_mask=src_padding_mask,
+                tgt_mask=tgt_mask,
+                tgt_key_padding_mask=tgt_padding_mask,
+                memory_mask=memory_mask,
+                memory_key_padding_mask=memory_key_padding_mask,
+            )
+        else:
+            outs = self.transformer(
+                src=src_emb,
+                # local_features=src_local_feature.view(src_image_shape[0], src_image_shape[1], emb_size-4),
+                # actions=src_action.view(src_action_shape[0], src_action_shape[1], src_action_shape[2]),
+                tgt=tgt_emb,
+                src_mask=src_mask,
+                src_key_padding_mask=src_padding_mask,
+                tgt_mask=tgt_mask,
+                tgt_key_padding_mask=tgt_padding_mask,
+                memory_mask=memory_mask,
+                memory_key_padding_mask=memory_key_padding_mask,
+            )
         return self.generator(outs)
     
     def generate(

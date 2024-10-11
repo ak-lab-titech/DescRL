@@ -31,6 +31,8 @@ def load_model(model_path, ckpt_num, train_config, lang):
         glove=lang.glove_vec,
         dim_feedforward=train_config["model"]["dim_feedforward"],
         dropout=train_config["model"]["dropout_ratio"],
+        use_lfao=config["model"]["lfao"]["use_lfao"],
+        num_lfao_decoder_layers=config["model"]["lfao"]["lfao_num_decoder_layers"],
     )
     seq2seq_model.load_state_dict(torch.load(f"{model_path}/data/{ckpt_num}/seq2seq.pth", torch.device("cpu")))
     seq2seq_model = seq2seq_model.to("cuda")

@@ -358,6 +358,8 @@ def main(config, model_name, logger, gpu_id):
         glove=lang.glove_vec,
         dim_feedforward=config["model"]["dim_feedforward"],
         dropout=config["model"]["dropout_ratio"],
+        use_lfao=config["model"]["lfao"]["use_lfao"],
+        num_lfao_decoder_layers=config["model"]["lfao"]["lfao_num_decoder_layers"],
     )
     seq2seq_model = DistributedDataParallel(seq2seq_model.to(gpu_id), device_ids=[gpu_id])
 

@@ -415,6 +415,8 @@ class GeneratedInstruction(Sensor):
                 glove=lang.glove_vec,
                 dim_feedforward=xgenerator_config["model"]["dim_feedforward"],
                 dropout=xgenerator_config["model"]["dropout_ratio"],
+                use_lfao=config["model"]["lfao"]["use_lfao"],
+                num_lfao_decoder_layers=config["model"]["lfao"]["lfao_num_decoder_layers"],
             )
             self.instruction_generator.load_state_dict(
                 torch.load(
