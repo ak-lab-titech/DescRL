@@ -7,6 +7,7 @@ import msgpack_numpy
 import numpy as np
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+from tqdm import trange
 
 sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
@@ -126,6 +127,8 @@ class R2RDataset(Dataset):
         add_bos: bool,
         skip_frame_per: int,
         max_instruction_length: int,
+        lazy_loading: bool,
+        use_cache: bool,
     ):
         self.data_path = data_path
         self.use_image_feature = use_image_feature        
@@ -133,54 +136,88 @@ class R2RDataset(Dataset):
         self.add_bos = add_bos
         self.skip_frame_per = skip_frame_per
         self.max_instruction_length = max_instruction_length
-        
-        env = lmdb.open(self.data_path, readonly=True, lock=False, map_size=int(5*1.1e12))
-        self.image_seqs = []
-        self.semantic_seqs = []
-        self.action_seqs = []
-        self.instructions = []
-        txn = env.begin()
-        for index in range(self.data_num):
-            value = txn.get(str(index).encode('latin-1'))
-            value = msgpack_numpy.unpackb(value, object_hook=msgpack_numpy.decode)
-            observation_seq = dict(value[0])
-            if self.use_image_feature:
-                image_seq = np.concatenate(
-                    [observation_seq["rgb_features"][::self.skip_frame_per], observation_seq["depth_features"][::self.skip_frame_per]], 1
-                ).astype(np.float32)
+        self.lazy_loading = lazy_loading
+        self.use_semantic = None
+        self.use_cache = use_cache
+        self.cache = dict((idx, None) for idx in range(len(self)))
+
+        if not self.lazy_loading:
+            self.env = lmdb.open(self.data_path, readonly=True, lock=False, map_size=int(5*1.1e12))
+            self.image_seqs = []
+            self.semantic_seqs = []
+            self.action_seqs = []
+            self.instructions = []
+            self.txn = self.env.begin()
+            for index in trange(self.data_num):
+                image_seq, semantic_seq, action_seq, instruction = self._data_load(index)
+                self.image_seqs.append(image_seq)
+                if semantic_seq is not None:
+                    self.semantic_seqs.append(semantic_seq)
+                self.action_seqs.append(action_seq)
+                self.instructions.append(instruction)
+            self.txn.commit()
+            self.env.close()
+
+            if semantic_seq is not None:
+                self.use_semantic = True
             else:
-                image_seq = np.concatenate([
-                    np.array(observation_seq["rgb"][::self.skip_frame_per] / 255.0).astype(np.float32),
-                    np.array(observation_seq["depth"][::self.skip_frame_per]).astype(np.float32),
-                ], 3).astype(np.float32)
-                if "semantic" in observation_seq.keys():
-                    self.semantic_seqs.append(
-                        np.array(observation_seq["semantic"][::self.skip_frame_per]).astype(np.uint8)
-                    )
-            action_seq = np.eye(4)[np.array(value[2][::self.skip_frame_per])].astype(np.int8)
-            instruction = np.array(observation_seq["instruction"][0]).astype(np.uint16)
-
-            del observation_seq
-            del value
-            gc.collect()
-
-            self.image_seqs.append(image_seq)
-            self.action_seqs.append(action_seq)
-            self.instructions.append(instruction)
-        txn.commit()
-        env.close()
-   
+                self.use_semantic = False
+        else:
+            if not "npz" in self.data_path:
+                self.env = lmdb.open(self.data_path, readonly=True, lock=False, map_size=int(5*1.1e12))
+                self.txn = self.env.begin()
+    
     def __len__(self):
         return self.data_num
+    
+    def _data_load(self, index):
+        value = self.txn.get(str(index).encode('latin-1'))
+        value = msgpack_numpy.unpackb(value, object_hook=msgpack_numpy.decode)
+        observation_seq = dict(value[0])
+        if self.use_image_feature:
+            image_seq = np.concatenate(
+                [observation_seq["rgb_features"][::self.skip_frame_per], observation_seq["depth_features"][::self.skip_frame_per]], 1
+            ).astype(np.float32)
+            if "semantic" in observation_seq.keys():
+                raise NotImplementedError()
+        else:
+            image_seq = np.concatenate([
+                np.array(observation_seq["rgb"][::self.skip_frame_per] / 255.0).astype(np.float32),
+                np.array(observation_seq["depth"][::self.skip_frame_per]).astype(np.float32),
+            ], 3).astype(np.float32)
+            if "semantic" in observation_seq.keys():
+                semantic_seq = np.array(observation_seq["semantic"][::self.skip_frame_per]).astype(np.uint8)
+            else:
+                semantic_seq = None
+        action_seq = np.eye(4)[np.array(value[2][::self.skip_frame_per])].astype(np.int8)
+        instruction = np.array(observation_seq["instruction"][0]).astype(np.uint16)
+        return image_seq, semantic_seq, action_seq, instruction
+
 
     def __getitem__(self, index):
-        image_seq = self.image_seqs[index]
-        if self.semantic_seqs != []:
-            semantic_seq = self.semantic_seqs[index]
+        if self.lazy_loading:
+            if self.use_cache and self.cache[index] is not None:
+                image_seq, semantic_seq, action_seq, instruction = self.cache[index]
+            else:
+                if "npz" in self.data_path:
+                    npz_data = np.load(f"{self.data_path}/{index}.npz", allow_pickle=True)
+                    image_seq = npz_data["arr_0"]
+                    semantic_seq = npz_data["arr_1"]
+                    action_seq = npz_data["arr_2"]
+                    instruction = npz_data["arr_3"]
+                else:
+                    image_seq, semantic_seq, action_seq, instruction = self._data_load(index)
+                if self.use_cache:
+                    self.cache[index] = (image_seq, semantic_seq, action_seq, instruction)
         else:
-            semantic_seq = None
-        action_seq = self.action_seqs[index]
-        instruction = self.instructions[index]        
+            image_seq = self.image_seqs[index]
+            if self.use_semantic:
+                semantic_seq = self.semantic_seqs[index]
+            else:
+                semantic_seq = None
+            action_seq = self.action_seqs[index]
+            instruction = self.instructions[index]
+
         x = {
             "image_seq": image_seq,
             "semantic_seq": semantic_seq,

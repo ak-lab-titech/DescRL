@@ -9,11 +9,11 @@ model:
   use_semantic: True
 
 train:
-  train_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma_128_semantic/train_trajectories.lmdb"
+  train_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/xgen_pretraining/train_size336_trajectories.lmdb"
   train_data_num: 10819
-  val_seen_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma_128_semantic/val_seen_trajectories.lmdb"
+  val_seen_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/xgen_pretraining/val_seen_size336_trajectories.lmdb"
   val_seen_data_num: 778
-  val_unseen_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma_128_semantic/val_unseen_trajectories.lmdb"
+  val_unseen_data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/xgen_pretraining/val_unseen_size336_trajectories.lmdb"
   val_unseen_data_num: 1839
   batch_size: 32
   use_image_feature: False
@@ -26,4 +26,6 @@ train:
   n_iters: 20000
   save_every: 10
   log_every: 1
-  eval_every: 1
+  eval_every: 10
+  lazy_loading: True
+  use_cache: True

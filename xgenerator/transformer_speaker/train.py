@@ -19,6 +19,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 from torch.nn.parallel import DistributedDataParallel
 from torch.distributed import all_reduce
+from tqdm.contrib import tenumerate
 
 sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
@@ -79,7 +80,7 @@ def rollout(seq2seq_model, inputs, targets, max_instruction_length=80, feedback=
             memory = seq2seq_model.encode(
                 src_image=image_features,
                 src_action=action_embeddings,
-                src_mask=torch.zeros((image_seqs_max_l, image_seqs_max_l), dtype=bool),
+                src_mask=try_cuda(torch.zeros((image_seqs_max_l, image_seqs_max_l), dtype=bool)),
                 src_padding_mask=path_mask,
             ) # (max_l, b, hidden)
         del image_features
@@ -225,6 +226,8 @@ def train(
     save_every: int,
     log_every: int,
     eval_every: int,
+    lazy_loading: bool,
+    use_cache: bool,
 ):
     seq2seq_optimizer = optim.Adam(
         filter_param(seq2seq_model.parameters()),
@@ -234,12 +237,12 @@ def train(
         eps=1e-9,
     )
     seq2seq_model.train()
-    
+
     if multiprocessing.get_start_method() == 'fork':
         multiprocessing.set_start_method('spawn', force=True)
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info("LOADING DATA...")
-    train_dataset = R2RDataset(train_data_path, use_image_feature, train_data_num, True, skip_frame_per, max_instruction_length)
+    train_dataset = R2RDataset(train_data_path, use_image_feature, train_data_num, True, skip_frame_per, max_instruction_length, lazy_loading, use_cache)
     train_sampler = DistributedSampler(
         train_dataset,
         num_replicas=int(os.environ["NP"]),
@@ -258,7 +261,7 @@ def train(
     )
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of train data: {len(train_dataset)}, batch: {len(train_dataloader)}")
-    val_seen_dataset = R2RDataset(val_seen_data_path, use_image_feature, val_seen_data_num, True, skip_frame_per, max_instruction_length)
+    val_seen_dataset = R2RDataset(val_seen_data_path, use_image_feature, val_seen_data_num, True, skip_frame_per, max_instruction_length, lazy_loading, use_cache)
     val_seen_sampler = DistributedSampler(
         val_seen_dataset,
         num_replicas=int(os.environ["NP"]),
@@ -277,7 +280,7 @@ def train(
     )
     if int(os.environ["LOCAL_RANK"]) == 0:
         logger.info(f"The number of val_seen data: {len(val_seen_dataset)}, batch: {len(val_seen_dataloader)}")
-    val_unseen_dataset = R2RDataset(val_unseen_data_path, use_image_feature, val_unseen_data_num, True, skip_frame_per, max_instruction_length)
+    val_unseen_dataset = R2RDataset(val_unseen_data_path, use_image_feature, val_unseen_data_num, True, skip_frame_per, max_instruction_length, lazy_loading, use_cache)
     val_unseen_sampler = DistributedSampler(
         val_unseen_dataset,
         num_replicas=int(os.environ["NP"]),
@@ -310,7 +313,7 @@ def train(
     ) as writer:
         for i in range(1, n_iters + 1):
             losses = []
-            for _, (inputs, targets) in enumerate(train_dataloader):
+            for _, (inputs, targets) in tenumerate(train_dataloader):
                 loss = train_one_step(
                     seq2seq_model,
                     seq2seq_optimizer,
@@ -381,6 +384,8 @@ def main(config, model_name, logger, gpu_id):
         save_every=config["train"]["save_every"],
         log_every=config["train"]["log_every"],
         eval_every=config["train"]["eval_every"],
+        lazy_loading=config["train"]["lazy_loading"],
+        use_cache=config["train"]["use_cache"],
     )
 
 

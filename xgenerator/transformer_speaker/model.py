@@ -16,7 +16,7 @@ from common.model import (
     VisualFeatureEncoder,
     VisualImageEncoder,
 )
-from xgenerator.common.lang import tokens2sentences, make_word_histgram
+from common.lang import tokens2sentences, make_word_histgram
 
 
 class PositionalEncoding(nn.Module):
@@ -75,7 +75,9 @@ class Seq2SeqTransformer(nn.Module):
             # self.visual_emb = VisualImageEncoder((256, 256, 4), emb_size-4)
             if use_semantic:
                 print("Visual image shape: (128, 128, 7)")
-                self.visual_emb = VisualImageEncoder((128, 128, 7), emb_size-4)
+                # self.visual_emb = VisualImageEncoder((128, 128, 7), emb_size-4)
+                # self.visual_emb = VisualImageEncoder((512, 512, 7), emb_size-4)
+                self.visual_emb = VisualImageEncoder((336, 336, 7), emb_size-4)
             else:
                 print("Visual image shape: (128, 128, 4)")
                 self.visual_emb = VisualImageEncoder((128, 128, 4), emb_size-4)
@@ -138,6 +140,7 @@ class Seq2SeqTransformer(nn.Module):
         top_k: int = None,
         top_p: float = None,
         temperature: float = None,
+        src_padding_mask: Tensor = None,
     ):
         batch_size = np.shape(image_seqs)[1]
         assert batch_size == 1, "batch_size must be 1."
@@ -152,7 +155,7 @@ class Seq2SeqTransformer(nn.Module):
                 src_image=image_seqs,
                 src_action=action_seqs,
                 src_mask=None,
-                src_padding_mask=None,
+                src_padding_mask=src_padding_mask,
             )
         past_tokens = torch.full((1, batch_size), BOS_IDX)
         past_tokens = past_tokens.cuda() if torch.cuda.is_available() else past_tokens
@@ -172,7 +175,7 @@ class Seq2SeqTransformer(nn.Module):
                     tgt_mask=tgt_mask,
                     memory_mask=None,
                     tgt_padding_mask=None,
-                    memory_key_padding_mask=None,
+                    memory_key_padding_mask=src_padding_mask,
                 )[-1, :, :] # (batch, vocab_size)
             
             if beam_num > 1: # Beam search
@@ -210,14 +213,16 @@ class Seq2SeqTransformer(nn.Module):
 
                     top_k = min(len(topp_indices), top_k) if top_k is not None else min(len(top_indices), 20)
 
-                make_word_histgram(
-                    probs=probs, # (1, vocab_size)
-                    top_k=top_k,
-                    tokenizer_type="r2r",
-                    save_dir_path=f"{save_dir_path}/hist",
-                    filename=f"{i}.png",
-                    past_tokens=past_tokens, # (instr_len, batch)
-                )
+                # faster if you don't make the histgram
+                if save_dir_path is not None:
+                    make_word_histgram(
+                        probs=probs, # (1, vocab_size)
+                        top_k=top_k,
+                        tokenizer_type="r2r",
+                        save_dir_path=f"{save_dir_path}/hist",
+                        filename=f"{i}.png",
+                        past_tokens=past_tokens, # (instr_len, batch)
+                    )
                 
                 probs = probs / torch.sum(probs, dim=1)
                 probs = probs.flatten()

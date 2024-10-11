@@ -147,6 +147,14 @@ class VisualImageEncoder(nn.Module):
             last_layer_size = 2304
             kernel_sizes = [(8, 8), (4, 4), (3, 3)]
             strides = [(4, 4), (2, 2), (2, 2)]
+        elif image_shape[0] == 336 and image_shape[1] == 336:
+            last_layer_size = 4096
+            kernel_sizes = [(8, 8), (4, 4), (4, 4)]
+            strides = [(4, 4), (3, 3), (3, 3)]
+        elif image_shape[0] == 512 and image_shape[1] == 512:
+            last_layer_size = 2304
+            kernel_sizes = [(8, 8), (8, 8), (8, 8)]
+            strides = [(4, 4), (4, 4), (4, 4)]
         elif image_shape[0] == 480 and image_shape[1] ==  640:
             last_layer_size = 3072
             kernel_sizes = [(8, 8), (8, 8), (8, 8)]

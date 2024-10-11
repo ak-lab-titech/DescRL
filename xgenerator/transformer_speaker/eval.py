@@ -1,9 +1,13 @@
+import os
 import sys
 import argparse
 import random
+import logging
 
 import yaml
 import torch
+import numpy as np
+from moviepy.editor import ImageSequenceClip
 
 sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
@@ -29,6 +33,7 @@ def load_model(model_path, ckpt_num, train_config, lang):
         dropout=train_config["model"]["dropout_ratio"],
     )
     seq2seq_model.load_state_dict(torch.load(f"{model_path}/data/{ckpt_num}/seq2seq.pth", torch.device("cpu")))
+    seq2seq_model = seq2seq_model.to("cuda")
     return seq2seq_model
 
 
@@ -41,6 +46,13 @@ def eval_by_a_dataset(
     data_num,
     skip_frame_per,
     max_instruction_length,
+    logger,
+    save_dir_path,
+    beam_num,
+    top_k,
+    top_p,
+    temperature,
+    video_dir_path=None,
 ):
     dataset = R2RDataset(
         data_path,
@@ -49,6 +61,8 @@ def eval_by_a_dataset(
         True,
         skip_frame_per,
         max_instruction_length,
+        True,
+        False,
     )
     idxs = [random.randint(0, data_num - 1) for _ in range(eval_num)]
     batch = [dataset[idx] for idx in idxs]
@@ -62,26 +76,59 @@ def eval_by_a_dataset(
         feedback="student",
         return_words=True,
     )
+    
+    image_seqs = torch.from_numpy(np.array(inputs["image_seqs"])).cuda()
+    action_seqs = torch.from_numpy(np.array(inputs["action_seqs"])).cuda()
+    path_mask = torch.from_numpy(inputs["mask"]).cuda()
+
     pred_sentences = tokens2sentences(words, lang)
     true_sentences = tokens2sentences(target_words, lang)
-    print(f"Loss: {loss.item()}")
+    logger.info(f"Loss: {loss.item()}")
     for i in range(eval_num):
-        print(f"------- {i+1}/{eval_num} -------")
-        print(f"index: {idxs[i]}")
-        print(f"Predict:\n{pred_sentences[i]}")
-        print(f"True:\n{true_sentences[i]}")
+        logger.info(f"------- {i+1}/{eval_num} -------")
+        logger.info(f"Index: {idxs[i]}")
+        logger.info(f"True: {true_sentences[i]}")
+        logger.info(f"Predict: {pred_sentences[i]}")
+
+        if video_dir_path is not None:
+            image_seq = image_seqs[:, i, :, :, :]*255
+            image_seq = [image_seq[j].cpu().detach().numpy().copy().astype(np.uint8)[:, :, :3] for j in range(len(image_seq)) if j < inputs["seq_lengths"][i]]
+            clip = ImageSequenceClip(image_seq, fps=2)
+            clip.write_videofile(f"{video_dir_path}/{i}.mp4", codec="libx264")
+
+        generated_words = seq2seq_model.generate(
+            image_seqs=image_seqs[:, i:i+1, :, :, :], # (l, b, h, w, c)
+            action_seqs=action_seqs[:, i:i+1, :], # (l, b, 4)
+            max_instr_len=max_instruction_length,
+            # save_dir_path=save_dir_path,
+            save_dir_path=None,
+            beam_num=beam_num,
+            top_k=top_k,
+            top_p=top_p,
+            temperature=temperature,
+            src_padding_mask=path_mask[i:i+1, :], # (b, l)
+        ).view(-1, 1)
+        logger.info(f"Generate (i): {tokens2sentences(generated_words, lang)}")
+
 
 def eval(
     eval_num,
     model_path,
     ckpt_num,
     train_config,
+    logger,
+    beam_num,
+    top_k,
+    top_p,
+    temperature,
 ):
     lang = R2RLang(name="r2r_train")
     seq2seq_model = load_model(model_path, ckpt_num, train_config, lang)
     seq2seq_model.eval()
 
-    print("Seen")
+    os.makedirs(f"{model_path}/video/unseen", exist_ok=True)
+    os.makedirs(f"{model_path}/video/seen", exist_ok=True)
+    logger.info("Seen")
     eval_by_a_dataset(
         eval_num,
         seq2seq_model,
@@ -91,9 +138,15 @@ def eval(
         train_config["train"]["val_seen_data_num"],
         train_config["train"]["skip_frame_per"],
         train_config["train"]["max_instruction_length"],
+        logger,
+        model_path,
+        beam_num,
+        top_k,
+        top_p,
+        temperature,
+        video_dir_path=f"{model_path}/video/seen",
     )
-    print()
-    print("Unseen")
+    logger.info("Unseen")
     eval_by_a_dataset(
         eval_num,
         seq2seq_model,
@@ -103,8 +156,14 @@ def eval(
         train_config["train"]["val_unseen_data_num"],
         train_config["train"]["skip_frame_per"],
         train_config["train"]["max_instruction_length"],
+        logger,
+        model_path,
+        beam_num,
+        top_k,
+        top_p,
+        temperature,
+        video_dir_path=f"{model_path}/video/unseen",
     )
-
 
 
 if __name__=="__main__":
@@ -116,6 +175,10 @@ if __name__=="__main__":
     parser.add_argument('--ckpt-num', help='the number of checkpoint.')
     parser.add_argument('--model-path', help='the path of trained model.')
     parser.add_argument('--random-seed', help="random seed.")
+    parser.add_argument('--beam-num', default=1, type=int)
+    parser.add_argument('--top-k', default=1, type=int)
+    parser.add_argument('--top-p', nargs='?', default=None, type=float)
+    parser.add_argument('--temperature', default=1, type=float)
     
     args = parser.parse_args()
     
@@ -123,10 +186,29 @@ if __name__=="__main__":
         train_config = yaml.safe_load(yml)
     
     random.seed(int(args.random_seed))
+
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    handler = logging.FileHandler(f"{args.model_path}/eval_{args.ckpt_num}.log")
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter("[%(levelname)s] %(asctime)s: %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.info("Start!")
+
+    logger.info(f"beam_num: {args.beam_num}")
+    logger.info(f"top_k: {args.top_k}")
+    logger.info(f"top_p: {args.top_p}")
+    logger.info(f"temperature: {args.temperature}")
     
     eval(
         eval_num=int(args.eval_num),
         model_path=args.model_path,
         ckpt_num=int(args.ckpt_num),
         train_config=train_config,
+        logger=logger,
+        beam_num=args.beam_num,
+        top_k=args.top_k,
+        top_p=args.top_p,
+        temperature=args.temperature,
     )
