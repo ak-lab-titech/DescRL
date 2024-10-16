@@ -335,7 +335,15 @@ class SoundSpacesSim(Simulator, ABC):
 
     @property
     def current_scene_observation_file(self):
-        return os.path.join(self.config.SCENE_OBSERVATION_DIR, self.config.SCENE_DATASET,
+        if self.config.DEPTH_SENSOR.HEIGHT == 336:
+            directory = "mp3d_size336"
+        elif self.config.DEPTH_SENSOR.HEIGHT == 128:
+            directory = "mp3d_size128"
+        elif self.config.DEPTH_SENSOR.HEIGHT == 512:
+            directory = "mp3d_size512"
+        else:
+            raise Exception(f"self.config.DEPTH_SENSOR.HEIGHT: {self.config.DEPTH_SENSOR.HEIGHT}")
+        return os.path.join(self.config.SCENE_OBSERVATION_DIR, directory,
                             self.current_scene_name + '.pkl')
 
     @property
