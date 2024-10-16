@@ -18,9 +18,9 @@ def main(dataset_dir_path, compression_ratio):
 
         compressed_data = {
             "scene": data["scene"],
-            "episodes": np.random.choice(data["episodes"], size=int(len(data["episodes"])*compression_ratio), replace=True).tolist(),
+            "episodes": np.random.choice(data["episodes"], size=int(len(data["episodes"])*compression_ratio), replace=False).tolist(),
         }
-        print(compressed_data["scene"], len(compressed_data["episodes"]))
+        print(compressed_data["scene"], len(compressed_data["episodes"]), "/", len(data["episodes"]))
 
         compressed_data = json.dumps(compressed_data)
         with gzip.open(f"{compressed_dataset_dir_path}/content/{file_name}", "wt") as f:
