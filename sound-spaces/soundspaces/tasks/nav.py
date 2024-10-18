@@ -421,11 +421,10 @@ class GeneratedInstruction(Sensor):
             self.instruction_generator.load_state_dict(
                 torch.load(
                     f"{xgenerator_path}/data/{ckpt_num}/seq2seq.pth",
-                    map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
+                    map_location=torch.device('cpu'),
                 )
             )
-            if torch.cuda.is_available():
-                self.instruction_generator = self.instruction_generator.to("cuda")
+            self.instruction_generator = self.instruction_generator.to(self.device)
             self.instruction_generator.eval()
         elif self.xgenerator_type == "video_llama2":
             self.vocab_size = 32000
@@ -616,12 +615,12 @@ class GeneratedInstruction(Sensor):
             )
             past_tokens = torch.full((1, batch_size), BOS_IDX)
             if torch.cuda.is_available():
-                past_tokens = past_tokens.cuda()
+                past_tokens = past_tokens.to(self.device)
             
             for i in range(self.max_instr_len-1):
                 tgt_mask = torch.triu(torch.full((i+1, i+1), 1), diagonal=1).type(torch.bool)
                 if torch.cuda.is_available():
-                    tgt_mask = tgt_mask.cuda()
+                    tgt_mask = tgt_mask.to(self.device)
                 logits = self.instruction_generator.decode(
                     trg=past_tokens,
                     memory=memory,
@@ -636,7 +635,7 @@ class GeneratedInstruction(Sensor):
                 if next_tokens.item() == EOS_IDX:
                     rest_tokens = torch.full((self.max_instr_len-(i+2), batch_size), PAD_IDX)
                     if torch.cuda.is_available():
-                        rest_tokens = rest_tokens.cuda()
+                        rest_tokens = rest_tokens.to(self.device)
                     past_tokens = torch.cat(
                         [past_tokens, rest_tokens],
                         dim=0,

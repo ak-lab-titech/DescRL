@@ -335,7 +335,7 @@ class PPOTrainer(BaseRLTrainer):
         return results
 
     def _collect_rollout_step(
-        self, rollouts, current_episode_reward, running_episode_stats
+        self, rollouts, current_episode_reward, running_episode_stats, replay_buffer=None,
     ):
         pth_time = 0.0
         env_time = 0.0
@@ -432,6 +432,25 @@ class PPOTrainer(BaseRLTrainer):
                     step_observation[LocationBelief.cls_uuid]
                 )
 
+        if replay_buffer is not None:
+            if self.config.RL.PPO.BELIEF_PREDICTOR.use_label_belief:
+                category_beliefs = step_observation[CategoryBelief.cls_uuid]
+            else:
+                category_beliefs = None
+
+            if self.config.RL.PPO.BELIEF_PREDICTOR.use_location_belief:
+                location_beliefs = step_observation[LocationBelief.cls_uuid]
+            else:
+                location_beliefs = None
+            
+            replay_buffer.insert(
+                encoded_observations=external_memory_features,
+                dones=dones,
+                instructions=batch["generated_instruction"],
+                category_beliefs=category_beliefs,
+                location_beliefs=location_beliefs,
+            )
+
         pth_time += time.time() - t_update_stats
 
         return pth_time, env_time, self.envs.num_envs
@@ -504,7 +523,7 @@ class PPOTrainer(BaseRLTrainer):
 
         return value_loss_epoch, prediction_accuracy
 
-    def _update_agent(self, ppo_cfg, rollouts):
+    def _update_agent(self, ppo_cfg, rollouts, replay_buffer=None, replay_buffer_batch_size=None):
         t_update_model = time.time()
         with torch.no_grad():
             last_observation = {
@@ -530,7 +549,11 @@ class PPOTrainer(BaseRLTrainer):
             next_value, ppo_cfg.use_gae, ppo_cfg.gamma, ppo_cfg.tau
         )
 
-        value_loss, action_loss, dist_entropy, direct_map_loss, iprl_loss = self.agent.update(rollouts)
+        value_loss, action_loss, dist_entropy, direct_map_loss, iprl_loss = self.agent.update(
+            rollouts,
+            replay_buffer,
+            replay_buffer_batch_size,
+        )
 
         rollouts.after_update()
 

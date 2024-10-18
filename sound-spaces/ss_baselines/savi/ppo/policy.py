@@ -115,13 +115,20 @@ class Policy(nn.Module):
         action,
         ext_memory,
         ext_memory_masks,
+        not_need_logits = False,
     ):
         iprl_logits = None
         if self.use_iprl:
-            features, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits = self.net(
-                observations, rnn_hidden_states, prev_direct_map, prev_actions,
-                masks, ext_memory, ext_memory_masks, True, action,
-            )
+            if not not_need_logits:
+                features, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits = self.net(
+                    observations, rnn_hidden_states, prev_direct_map, prev_actions,
+                    masks, ext_memory, ext_memory_masks, True, action,
+                )
+            else:
+                features, rnn_hidden_states, ext_memory_feats, direct_map, _ = self.net(
+                    observations, rnn_hidden_states, prev_direct_map, prev_actions,
+                    masks, ext_memory, ext_memory_masks, True, action,
+                )
         else:
             features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
                 observations, rnn_hidden_states, prev_direct_map, prev_actions,
@@ -912,3 +919,31 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         }
 
         return x_att, rnn_hidden_states, x, direct_map, aux_infos
+    
+    def forward_from_replay_buffer(self, replay_buffer, batch_size: int):
+        (
+            encoded_observations, # (batch_size, max_steps, encoded_observation_dim)
+            masks, # (batch_size, max_steps)
+            seq_lengths, # (batch_size,)
+            category_beliefs, # (batch_size, num_category)
+            location_beliefs, # (batch_size, location_dim)
+            instructions, # (batch_size, instr_len)
+        ) = replay_buffer.random_sampling(batch_size)
+
+        _, enc_memory = self.smt_state_encoder.off_policy_forward(
+            encoded_observations.permute(1, 0, 2),
+            masks,
+            seq_lengths,
+        ) # enc_memory: (seq_len, batch, latent_dim)
+        
+        logits = self.instruction_predictor(
+            category=nn.functional.softmax(category_beliefs), # (batch, 21)
+            location=location_beliefs, # (batch, 2)
+            target=instructions, # (batch, instr_len)
+            memory=enc_memory, # (mem_size, batch, smt_hidden)
+            memory_key_padding_mask=masks,
+            convert_mask=False,
+        ) # (instr_len, batch, vocab_num)
+
+        return logits, instructions
+

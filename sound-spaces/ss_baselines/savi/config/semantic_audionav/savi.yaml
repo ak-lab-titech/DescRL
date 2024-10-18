@@ -56,6 +56,10 @@ RL:
       use_location_belief: True
     INSTRUCTION_PREDICTOR:
       use_iprl: True # IPRLを行うかどうか
+      use_replay_buffer_for_xpred: True
+      replay_buffer_size: 1000
+      replay_buffer_batch_size: 64
+      replay_buffer_max_steps: 150
       max_instr_len: 40
       num_decoder_layers: 3
       vocab_emb_size: 50

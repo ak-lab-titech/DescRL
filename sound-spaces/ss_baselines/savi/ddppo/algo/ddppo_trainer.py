@@ -24,6 +24,7 @@ from ss_baselines.common.baseline_registry import baseline_registry
 from ss_baselines.common.env_utils import construct_envs
 from ss_baselines.common.environments import get_env_class as ss_get_env_class
 from ss_baselines.savi.models.rollout_storage import RolloutStorage
+from ss_baselines.savi.models.replay_buffer_for_xpred import ReplayBufferForXPred
 from ss_baselines.common.tensorboard_utils import TensorboardWriter
 from ss_baselines.common.utils import batch_obs, linear_decay
 from ss_baselines.savi.ddppo.algo.ddp_utils import (
@@ -397,6 +398,19 @@ class DDPPOTrainer(PPOTrainer):
             num_recurrent_layers=self.actor_critic.net.num_recurrent_layers,
         )
         rollouts.to(self.device)
+        
+        self.use_replay_buffer_for_xpred = ppo_cfg.INSTRUCTION_PREDICTOR.use_replay_buffer_for_xpred
+        if self.use_replay_buffer_for_xpred:
+            replay_buffer = ReplayBufferForXPred(
+                buffer_size=ppo_cfg.INSTRUCTION_PREDICTOR.replay_buffer_size,
+                max_steps=ppo_cfg.INSTRUCTION_PREDICTOR.replay_buffer_max_steps,
+                num_envs=self.envs.num_envs,
+                encoded_observation_dim=memory_dim,
+                category_belief_dim=21,
+                location_belief_dim=2,
+                max_instr_len=self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MAX_INSTRUCTION_LENGTH,
+            )
+            replay_buffer.to(self.device)
 
         if self.config.RL.PPO.use_belief_predictor:
             self.belief_predictor.update(batch, None)
@@ -523,7 +537,8 @@ class DDPPOTrainer(PPOTrainer):
                         delta_env_time,
                         delta_steps,
                     ) = self._collect_rollout_step(
-                        rollouts, current_episode_reward, running_episode_stats
+                        rollouts, current_episode_reward, running_episode_stats,
+                        None if not self.use_replay_buffer_for_xpred else replay_buffer,
                     )
                     pth_time += delta_pth_time
                     env_time += delta_env_time
@@ -560,7 +575,11 @@ class DDPPOTrainer(PPOTrainer):
                     dist_entropy,
                     direct_map_loss,
                     iprl_loss
-                ) = self._update_agent(ppo_cfg, rollouts)
+                ) = self._update_agent(
+                    ppo_cfg, rollouts,
+                    None if not self.use_replay_buffer_for_xpred else replay_buffer,
+                    None if not self.use_replay_buffer_for_xpred else ppo_cfg.INSTRUCTION_PREDICTOR.replay_buffer_batch_size,
+                )
                 pth_time += delta_pth_time
 
                 stats_ordering = list(sorted(running_episode_stats.keys()))

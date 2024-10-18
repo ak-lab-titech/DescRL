@@ -119,7 +119,7 @@ class PPO(nn.Module):
 
         return (advantages - advantages.mean()) / (advantages.std() + EPS_PPO)
 
-    def update(self, rollouts):
+    def update(self, rollouts, replay_buffer=None, replay_buffer_batch_size=None):
         advantages = self.get_advantages(rollouts)
 
         value_loss_epoch = 0
@@ -190,7 +190,6 @@ class PPO(nn.Module):
                     external_memory_masks,
                 ) = sample
 
-
                 if self.foundation_model is not None:
                     generated_instructions = obs_batch["generated_instruction"].half() # (b, f, c, h, w)
                     batch_size = generated_instructions.shape[0]
@@ -228,7 +227,19 @@ class PPO(nn.Module):
                     actions_batch,
                     external_memory,
                     external_memory_masks,
+                    not_need_logits=replay_buffer is not None,
                 )
+
+                if replay_buffer is not None:
+                    assert aux_infos is None
+                    logits, targets = self.actor_critic.net.forward_from_replay_buffer(
+                        replay_buffer=replay_buffer,
+                        batch_size=replay_buffer_batch_size,
+                    )
+                    obs_batch["generated_instruction"] = targets
+                    aux_infos = {
+                        "logits": logits
+                    }
 
                 ratio = torch.exp(
                     action_log_probs - old_action_log_probs_batch
@@ -328,41 +339,41 @@ class PPO(nn.Module):
                         else:
                             raise Exception(f"xgenerator_type: {self.xgenerator_type}")
 
-                    if aux_infos["predicted_progress"] is not None:
+                    if "predicted_progress" in aux_infos.keys() and aux_infos["predicted_progress"] is not None:
                         predicted_progress = aux_infos["predicted_progress"]
                         gt_progress = obs_batch["progress_monitor"]
                         iprl_loss += self.predict_progress_loss(predicted_progress.view(-1, predicted_progress.shape[-1]), gt_progress.reshape(-1))
                     
-                    if aux_infos["predicted_action"] is not None:
+                    if "predicted_action" in aux_infos.keys() and aux_infos["predicted_action"] is not None:
                         predicted_action = aux_infos["predicted_action"]
                         gt_action = obs_batch["next_optimal_action"]
                         iprl_loss += self.predict_action_loss(predicted_action.view(-1, predicted_action.shape[-1]), gt_action.reshape(-1).long())
                     
-                    if aux_infos["predicted_next_frame"] is not None:
+                    if "predicted_next_frame" in aux_infos.keys() and aux_infos["predicted_next_frame"] is not None:
                         predicted_next_frame = aux_infos["predicted_next_frame"][:-1, :, :, :] # (150-1, 128, 128, 4)
                         predicted_next_frame = predicted_next_frame[actions_batch.view(-1,)[:-1] != 0]
                         gt_next_frame = torch.cat([obs_batch["rgb"] / 255, obs_batch["depth"]], dim=3)[1:, :, :, :] # (150-1, 128, 128, 4)
                         gt_next_frame = gt_next_frame[actions_batch.view(-1,)[:-1] != 0]
                         iprl_loss += self.predict_next_frame_loss(predicted_next_frame, gt_next_frame)
                     
-                    if aux_infos["predicted_next_spectrogram"] is not None:
+                    if "predicted_next_spectrogram" in aux_infos.keys() and aux_infos["predicted_next_spectrogram"] is not None:
                         predicted_next_spectrogram = aux_infos["predicted_next_spectrogram"][:-1, :, :, :]
                         predicted_next_spectrogram = predicted_next_spectrogram[actions_batch.view(-1,)[:-1] != 0]
                         gt_next_spectrogram = obs_batch["spectrogram"][1:, :, :, :]
                         gt_next_spectrogram = gt_next_spectrogram[actions_batch.view(-1,)[:-1] != 0]
                         iprl_loss += self.predict_next_spectrogram_loss(predicted_next_spectrogram, gt_next_spectrogram)
                     
-                    if aux_infos["predicted_semantic"] is not None:
+                    if "predicted_semantic" in aux_infos.keys() and aux_infos["predicted_semantic"] is not None:
                         predicted_semantic = aux_infos["predicted_semantic"]
                         gt_semantic = obs_batch["semantic"]
                         iprl_loss += self.predict_semantic_loss(predicted_semantic, gt_semantic)
                     
-                    if aux_infos["predicted_audio_location"] is not None:
+                    if "predicted_audio_location" in aux_infos.keys() and aux_infos["predicted_audio_location"] is not None:
                         predicted_audio_location = aux_infos["predicted_audio_location"]
                         gt_audio_location = obs_batch["pointgoal_with_gps_compass"].unsqueeze(0)
                         iprl_loss += self.predict_audio_location_loss(predicted_audio_location, gt_audio_location)
                     
-                    if aux_infos["predicted_audio_category"] is not None:
+                    if "predicted_audio_category" in aux_infos.keys() and aux_infos["predicted_audio_category"] is not None:
                         predicted_audio_category = aux_infos["predicted_audio_category"]
                         predicted_audio_category = predicted_audio_category.view(-1, predicted_audio_category.shape[-1])
                         gt_audio_category = torch.argmax(obs_batch["category"], dim=1).reshape(-1).long()
