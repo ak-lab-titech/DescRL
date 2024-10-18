@@ -190,6 +190,7 @@ class DDPPOTrainer(PPOTrainer):
                     use_audio_category_predictor=iprl_cfg.use_audio_category_predictor,
                     visual_encoder_output_size=visual_encoder_output_size,
                     tokenizer_type=tokenizer_type,
+                    share_decoder=iprl_cfg.share_decoder,
                 )
 
             if smt_cfg.freeze_encoders:

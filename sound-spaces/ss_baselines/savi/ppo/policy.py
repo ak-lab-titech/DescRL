@@ -621,6 +621,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         use_xgen_visual_encoder=False,
         visual_encoder_output_size=512-4,
         tokenizer_type="r2r",
+        share_decoder=False,
         **kwargs
     ):
         super().__init__(
@@ -674,6 +675,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
                 dropout=iprl_dropout,
                 pretraining=kwargs["pretraining"],
                 use_bos=iprl_use_bos,
+                share_decoder=share_decoder,
             )
         if self.use_progress_predictor:
             self.progress_predictor = ProgressMonitorPredictor(
@@ -732,7 +734,15 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         self.iprl_use_gt_D = iprl_use_gt_D
         self.feedback = iprl_feedback
 
-
+        self.share_decoder = share_decoder
+        if self.share_decoder:
+            self.task_embedding_for_RL = nn.Parameter(
+                torch.normal(mean=0.0, std=0.1, size=(self._hidden_size,), requires_grad=True)
+            )
+            self.ac_encoder = nn.Sequential(
+                nn.Linear(iprl_emb_size, self._hidden_size),
+                nn.ReLU(),
+            )
 
         self.train()
     
@@ -768,6 +778,66 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         
         self.load_state_dict(cleaned_state_dict, strict=False)
     
+    def forward_share_decoder(
+        self,
+        observations,
+        rnn_hidden_states,
+        prev_direct_map,
+        prev_actions,
+        masks,
+        ext_memory,
+        ext_memory_masks,
+        need_enc_memory=False
+    ):
+        x, direct_map = self.get_features(observations, prev_direct_map, prev_actions)
+
+        if self._use_belief_as_goal:
+            belief = torch.zeros((x.shape[0], self._hidden_size), device=x.device)
+            if self._use_label_belief:
+                if self._normalize_category_distribution:
+                    belief[:, :21] = nn.functional.softmax(observations[CategoryBelief.cls_uuid], dim=1)
+                else:
+                    belief[:, :21] = observations[CategoryBelief.cls_uuid]
+
+            if self._use_location_belief:
+                belief[:, 21:21 + 2*self.goal_num] = observations[LocationBelief.cls_uuid]
+
+            if self._use_belief_encoder:
+                belief = self.belief_encoder(belief)
+        else:
+            belief = None
+
+        if ObjectGoalSensor.cls_uuid in observations.keys():
+            belief = torch.zeros((x.shape[0], self._hidden_size), device=x.device)
+            objectgoal = observations[ObjectGoalSensor.cls_uuid]
+            objectgoal = torch.nn.functional.one_hot(objectgoal.to(torch.int64).view(-1), num_classes=21)
+            belief[:,:21] = objectgoal
+
+        enc_memory, t_masks = self.smt_state_encoder(
+            x, # (batch, fea_dim)
+            ext_memory, # (mem_size, batch, fea_dim)
+            ext_memory_masks, # (batch, mem_size)
+            only_encode=True,
+        )
+        tgt = belief.unsqueeze(0) + self.task_embedding_for_RL
+
+        decoder_output = self.instruction_predictor.decoder(
+            tgt=tgt, # (1, batch, embed)
+            memory=enc_memory, # (mem_size+1, batch, smt_hidden)
+            tgt_mask=None,
+            memory_key_padding_mask=t_masks,
+        ).squeeze(0) # (batch, embed)
+
+        ac_latent = self.ac_encoder(decoder_output) # (batch, embed)
+
+        if self._use_residual_connection:
+            x_att = torch.cat([x_att, x], 1)
+
+        if need_enc_memory:
+            return ac_latent, rnn_hidden_states, x, direct_map, belief, enc_memory
+        else:
+            return ac_latent, rnn_hidden_states, x, direct_map
+
     def forward(
         self,
         observations,
@@ -780,9 +850,14 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         need_logits=False,
         actions=None,
     ):
-        x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
-            observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, True,
-        )
+        if self.share_decoder:
+            x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = self.forward_share_decoder(
+                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, True,
+            )
+        else:
+            x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
+                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, True,
+            )
         if not need_logits:
             return x_att, rnn_hidden_states, x, direct_map, None
         

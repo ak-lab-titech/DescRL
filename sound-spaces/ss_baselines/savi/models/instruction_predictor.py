@@ -48,6 +48,7 @@ class InstructionPredictor(nn.Module):
         pretraining: bool = False,
         use_bos: bool = False,
         belief_dim: int = 23,
+        share_decoder: bool=False,
     ):
         self.vocab_emb_size = vocab_emb_size
         self.emb_size = emb_size
@@ -98,6 +99,12 @@ class InstructionPredictor(nn.Module):
             emb_size,
             dropout=dropout,
         )
+
+        self.share_decoder = share_decoder
+        if self.share_decoder:
+            self.task_embedding_for_X = nn.Parameter(
+                torch.normal(mean=0.0, std=0.1, size=(emb_size,), requires_grad=True)
+            )
 
     def forward(self,
         category: torch.Tensor,
@@ -308,6 +315,7 @@ class InstructionPredictor(nn.Module):
         words = self.word_emb(embs) # (instr_len*batch, embed)
         words = words.view(instr_len, batch_size, self.emb_size) # (instr_len, batch, embed)
         words = self.positional_encoding(words)
+        words = words + self.task_embedding_for_X
         return words
     
     def embed_word_tokens_using_bos(self, word_tokens):
@@ -320,6 +328,7 @@ class InstructionPredictor(nn.Module):
         words = self.word_emb(embs) # (instr_len*batch, embed)
         words = words.view(instr_len, batch_size, self.emb_size) # (instr_len, batch, embed)
         words = self.positional_encoding(words)
+        words = words + self.task_embedding_for_X
         return words
     
     def convert_memory_masks(self, memory_masks):

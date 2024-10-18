@@ -188,6 +188,7 @@ class PPOTrainer(BaseRLTrainer):
                     use_audio_category_predictor=iprl_cfg.use_audio_category_predictor,
                     visual_encoder_output_size=visual_encoder_output_size,
                     tokenizer_type=tokenizer_type,
+                    share_decoder=iprl_cfg.share_decoder,
                 )
 
             if ppo_cfg.use_belief_predictor:
@@ -968,7 +969,7 @@ class PPOTrainer(BaseRLTrainer):
                     not_done_masks,
                     test_em.memory[:, 0] if ppo_cfg.use_external_memory else None,
                     test_em.masks if ppo_cfg.use_external_memory else None,
-                    need_logits=True,
+                    need_logits=len(self.config.VIDEO_OPTION) > 0, # if video
                     deterministic=False,
                 )
                 if self.use_direct_map:
