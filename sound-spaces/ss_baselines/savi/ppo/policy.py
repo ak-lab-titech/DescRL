@@ -622,6 +622,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         visual_encoder_output_size=512-4,
         tokenizer_type="r2r",
         share_decoder=False,
+        share_decoder_layer_num=0,
         **kwargs
     ):
         super().__init__(
@@ -743,6 +744,8 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
                 nn.Linear(iprl_emb_size, self._hidden_size),
                 nn.ReLU(),
             )
+            self.share_decoder_layer_num = share_decoder_layer_num
+            self.iprl_num_decoder_layers = iprl_num_decoder_layers
 
         self.train()
     
@@ -821,12 +824,27 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         )
         tgt = belief.unsqueeze(0) + self.task_embedding_for_RL
 
-        decoder_output = self.instruction_predictor.decoder(
-            tgt=tgt, # (1, batch, embed)
-            memory=enc_memory, # (mem_size+1, batch, smt_hidden)
-            tgt_mask=None,
-            memory_key_padding_mask=t_masks,
-        ).squeeze(0) # (batch, embed)
+        if self.share_decoder_layer_num != self.iprl_num_decoder_layers:
+            for i in range(self.share_decoder_layer_num):
+                tgt = self.instruction_predictor.decoder.layers[i](
+                    tgt=tgt, # (1, batch, embed)
+                    memory=enc_memory, # (mem_size+1, batch, smt_hidden)
+                    tgt_mask=None,
+                    memory_key_padding_mask=t_masks,
+                )
+            decoder_output = self.smt_state_encoder.transformer.decoder(
+                tgt=tgt, # (1, batch, embed)
+                memory=enc_memory, # (mem_size+1, batch, smt_hidden)
+                tgt_mask=None,
+                memory_key_padding_mask=t_masks,
+            ).squeeze(0)
+        else:
+            decoder_output = self.instruction_predictor.decoder(
+                tgt=tgt, # (1, batch, embed)
+                memory=enc_memory, # (mem_size+1, batch, smt_hidden)
+                tgt_mask=None,
+                memory_key_padding_mask=t_masks,
+            ).squeeze(0) # (batch, embed)
 
         ac_latent = self.ac_encoder(decoder_output) # (batch, embed)
 

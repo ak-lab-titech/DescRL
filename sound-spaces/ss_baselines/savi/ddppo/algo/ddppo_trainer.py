@@ -191,6 +191,7 @@ class DDPPOTrainer(PPOTrainer):
                     visual_encoder_output_size=visual_encoder_output_size,
                     tokenizer_type=tokenizer_type,
                     share_decoder=iprl_cfg.share_decoder,
+                    share_decoder_layer_num=iprl_cfg.share_decoder_layer_num,
                 )
 
             if smt_cfg.freeze_encoders:
