@@ -315,7 +315,8 @@ class InstructionPredictor(nn.Module):
         words = self.word_emb(embs) # (instr_len*batch, embed)
         words = words.view(instr_len, batch_size, self.emb_size) # (instr_len, batch, embed)
         words = self.positional_encoding(words)
-        words = words + self.task_embedding_for_X
+        if self.share_decoder:
+            words = words + self.task_embedding_for_X
         return words
     
     def embed_word_tokens_using_bos(self, word_tokens):
@@ -328,7 +329,8 @@ class InstructionPredictor(nn.Module):
         words = self.word_emb(embs) # (instr_len*batch, embed)
         words = words.view(instr_len, batch_size, self.emb_size) # (instr_len, batch, embed)
         words = self.positional_encoding(words)
-        words = words + self.task_embedding_for_X
+        if self.share_decoder:
+            words = words + self.task_embedding_for_X
         return words
     
     def convert_memory_masks(self, memory_masks):
