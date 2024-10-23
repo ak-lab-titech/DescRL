@@ -243,9 +243,9 @@ class Seq2SeqTransformer(nn.Module):
             # self.visual_emb = VisualImageEncoder((256, 256, 4), emb_size-4)
             if use_semantic:
                 print("Visual image shape: (128, 128, 7)")
-                # self.visual_emb = VisualImageEncoder((128, 128, 7), emb_size-4)
+                self.visual_emb = VisualImageEncoder((128, 128, 7), emb_size-4)
                 # self.visual_emb = VisualImageEncoder((512, 512, 7), emb_size-4)
-                self.visual_emb = VisualImageEncoder((336, 336, 7), emb_size-4)
+                # self.visual_emb = VisualImageEncoder((336, 336, 7), emb_size-4)
             else:
                 print("Visual image shape: (128, 128, 4)")
                 self.visual_emb = VisualImageEncoder((128, 128, 4), emb_size-4)
