@@ -49,15 +49,16 @@ TASK:
     GOAL_FORMAT: "CARTESIAN"
     DIMENSIONALITY: 2
   GENERATED_INSTRUCTION:
-    MODEL_TYPE: "video_llama2" # cnn_tf
-    TOKENIZER_TYPE: "video_llama2" # "r2r"
-    # XGENERATOR_PATH: "../xgenerator/data/models/tf-speaker-semantic-24h"
-    XGENERATOR_PATH: "../xgenerator/data/models/video_llama2/finetune_videollama2_vllava_qlora-size128-e1-f16"
+    MODEL_TYPE: "cnn_tf" # "video_llama2"
+    TOKENIZER_TYPE: "r2r" # "video_llama2"
+    XGENERATOR_PATH: "../xgenerator/data/models/tf-speaker-semantic-24h"
+    # XGENERATOR_PATH: "../xgenerator/data/models/cnntf_size336_48h"
+    # XGENERATOR_PATH: "../xgenerator/data/models/video_llama2/finetune_videollama2_vllava_qlora-size128-e1-f16"
     # XGENERATOR_PATH: "DAMO-NLP-SG/VideoLLaMA2-7B-Base" # num_frames must be 8.
     XGENERATOR_CKPT: 1000
     MAX_INSTRUCTION_LENGTH: 40
     FUTURE_STEP_NUM: 20 # -1なら最後まで。ただしpastでは-1は未実装
-    MODEL_RESOLUTION: 128
+    MODEL_RESOLUTION: 128 # 336
     FUTURE_OR_PAST: "past" # future or past
     NUM_FRAMES: 16 # for video_llama2
 
