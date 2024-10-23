@@ -44,6 +44,10 @@ def setup_instruction_predictor(
 ):
     spectrogram_shape = compute_spectrogram(np.ones((2, config.TASK_CONFIG.SIMULATOR.AUDIO.RIR_SAMPLING_RATE))).shape
     if environment_type == "ss1-savi":
+        if "size336" in self.config.TASK_CONFIG.DATASET.SPLIT:
+            image_size = (336, 336)
+        else:
+            image_size = (128, 128)
         observation_spaces = spaces.Dict({
             "pose": spaces.Box(
                 low=np.finfo(np.float32).min,
@@ -60,13 +64,13 @@ def setup_instruction_predictor(
             "rgb": spaces.Box(
                 low=0,
                 high=1,
-                shape=(128, 128, 3),
+                shape=image_size + (3,),
                 dtype=np.float32,
             ),
             "depth": spaces.Box(
                 low=0,
                 high=1,
-                shape=(128, 128, 1),
+                shape=image_size + (1,),
                 dtype=np.float32,
             ),   
         })
@@ -224,10 +228,16 @@ class OffPolicyEPRLPreTrainer():
             raise Exception(f"config.FOUNDATION_MODEL.model_type: {config.foundation_model_type}")
         self.environment_type = environment_type
         if self.environment_type == "ss1-savi":
-            self.train_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train_cr02"
-            self.train_data_num = 100398
-            self.val_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val"
-            self.val_data_num = 500
+            if "size336" in self.config.TASK_CONFIG.DATASET.SPLIT:
+                self.train_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train_size336_cr02"
+                self.train_data_num = 100398
+                self.val_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val_size336"
+                self.val_data_num = 500
+            else:
+                self.train_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train_cr02"
+                self.train_data_num = 100398
+                self.val_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val"
+                self.val_data_num = 500
         elif self.environment_type == "habitat-objnav":
             self.train_lmdb_dataset_path = "habitat-lab/data/lmdb_dataset/iprl_pretrain/train"
             self.train_data_num = 51000
@@ -274,7 +284,7 @@ class OffPolicyEPRLPreTrainer():
             if self.foundation_model_type is not None:
                 assert train_split == "train_cr_0.2_w_past_instruction", "if you want to use a foundation model, use train_cr_0.2_w_past_instruction dataset."
 
-            if train_split == "train_w_instruction" or train_split == "train_w_past_instruction" or train_split == "train_cr_0.2_w_past_instruction":
+            if train_split == "train_w_instruction" or train_split == "train_w_past_instruction" or train_split == "train_cr_0.2_w_past_instruction" or train_split == "train_size336_w_past_instruction_cr_0.2":
                 train_dataset = IPRLPretrainingLMDBDataset(
                     self.config.TASK_CONFIG, train_split, self.train_lmdb_dataset_path, self.train_data_num,
                         self.foundation_model_type,
@@ -285,7 +295,10 @@ class OffPolicyEPRLPreTrainer():
             else:
                 raise Exception(f"train_split: {train_split}")
             if "past" in train_split:
-                val_split = "val_w_past_instruction"
+                if "size336" in train_split:
+                    val_split = "val_size336_w_past_instruction"
+                else:
+                    val_split = "val_w_past_instruction"
             else:
                 val_split = "val_w_instruction"
             if self.environment_type == "habitat-objnav":
