@@ -146,6 +146,7 @@ def setup_instruction_predictor(
         batch_size=ppo_cfg.num_steps,
         visual_encoder_output_size=visual_encoder_output_size,
         tokenizer_type=tokenizer_type,
+        share_decoder=iprl_cfg.share_decoder,
     )
     instruction_predictor.optimizer = torch.optim.Adam(
         instruction_predictor.parameters(),

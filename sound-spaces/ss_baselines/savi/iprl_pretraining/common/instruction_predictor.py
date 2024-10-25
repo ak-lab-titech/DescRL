@@ -87,6 +87,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         batch_size=-1,
         visual_encoder_output_size=512-4,
         tokenizer_type="r2r",
+        share_decoder=False,
         **kwargs,
     ):
         self.device = device
@@ -187,6 +188,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             dropout=iprl_dropout,
             pretraining=kwargs["pretraining"],
             use_bos=iprl_use_bos,
+            share_decoder=share_decoder,
         )
         self.iprl_use_gt_D = iprl_use_gt_D
         self.feedback = iprl_feedback

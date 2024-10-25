@@ -81,7 +81,7 @@ def setup_model(environment_type: str, model_type: str):
         for k, v in pretrained_state["belief_predictor"].items():
             pretrained_state_dict[f"belief_predictor.{k}"] = v
         for k, v in pretrained_state["state_dict"].items():
-            if "actor_critic.action_distribution" in k or "actor_critic.critic" in k:
+            if "actor_critic.action_distribution" in k or "actor_critic.critic" in k or "task_embedding_for_RL" in k or "ac_encoder" in k:
                 continue
             pretrained_state_dict[k[len("actor_critic.net."):]] = v
         
@@ -194,6 +194,7 @@ def main(
                 observations=inputs,
                 prev_actions=inputs["action"],
                 save_dir_path=f"{save_dir_path}/episode_{index}_hist",
+                # save_dir_path=None,
                 beam_num=beam_num,
                 top_k=top_k,
                 top_p=top_p,

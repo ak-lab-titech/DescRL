@@ -12,6 +12,7 @@ import numpy as np
 import torch
 from PIL import Image
 import matplotlib.pyplot as plt
+from moviepy.editor import ImageSequenceClip
 
 from habitat_sim.utils.common import d3_40_colors_rgb
 
@@ -64,15 +65,7 @@ def generate_video(image_seq: torch.Tensor, output_file: str, frame_rate: int=5)
     """
     image_seq: (seq_len, 1, H, W, C)
     """
-    if image_seq.shape[4] == 7:
-        frame_size = (image_seq.shape[2]*3, image_seq.shape[3])
-    elif image_seq.shape[4] == 4:
-        frame_size = (image_seq.shape[2]*2, image_seq.shape[3])
-    else:
-        frame_size = (image_seq.shape[2], image_seq.shape[3])
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_file, fourcc, frame_rate, frame_size)
-
+    frames = []
     for i in range(len(image_seq)):
         rgb = image_seq[i, 0, :, :, :3].to('cpu').detach().numpy().copy() * 255
         if image_seq.shape[4] > 3:
@@ -87,10 +80,10 @@ def generate_video(image_seq: torch.Tensor, output_file: str, frame_rate: int=5)
         else:
             frame = rgb
         frame = np.clip(frame, 0, 255).astype(np.uint8)
-        out.write(frame)
+        frames.append(frame)
 
-    out.release()
-    cv2.destroyAllWindows()
+    clip = ImageSequenceClip(frames, fps=frame_rate)
+    clip.write_videofile(output_file, codec="libx264")
 
 
 def visualize_spectrogram(spectrogram, output_file):
