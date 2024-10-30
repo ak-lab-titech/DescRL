@@ -436,7 +436,7 @@ class GeneratedInstruction(Sensor):
             # prompt = "[INST] <<SYS>>\n" \
             #     "A chat between a curious user and an artificial intelligence assistant." \
             #     "The assistant gives helpful, detailed, and polite answers to the user's questions." \
-            #     "\n<</SYS>>\n\n <video>\nWhat is the camera wearer doing? [/INST]"
+            #     "\n<</SYS>>\n\n <video>\nDescribe how the camera wearer moves around the indoor environment in 40 words or less. Follow the format of the output as shown in the example below.\n\n[Example of output format]\nTurn left and go down the steps on the left. Turn right and wait near the unicycle.\n[/Example of output format]\n[/INST]"
             # self.input_ids = tokenizer_MMODAL_token(
             #     prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
             # ).unsqueeze(0).to(self.device)

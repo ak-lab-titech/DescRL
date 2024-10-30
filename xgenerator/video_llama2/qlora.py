@@ -78,7 +78,7 @@ class DataCollatorForSupervisedDataset(object):
             conservations = [[
                 {
                     "from": "human",
-                    "value": f"<video>\nWhat is the camera wearer doing?",
+                    "value": f"<video>\nDescribe how the camera wearer moves around the indoor environment in 40 words or less. Follow the format of the output as shown in the example below.\n\n[Example of output format]\nTurn left and go down the steps on the left. Turn right and wait near the unicycle.\n[/Example of output format]\n",
                 },
                 {
                     "from": "gpt",

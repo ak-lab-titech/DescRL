@@ -2,7 +2,7 @@
 
 
 MODEL="video_llama2"
-MODEL_NAME="finetune_videollama2_vllava_qlora-test" # video_llama2の時はfinetune_videollama2_vllava_qloraを入れないとかも？
+MODEL_NAME="finetune_videollama2_vllava_qlora_r128_a256_lr2en5-test" # video_llama2の時はfinetune_videollama2_vllava_qloraを入れないとかも？
 TRAIN_NP=4
 
 export NP=$TRAIN_NP

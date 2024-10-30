@@ -15,8 +15,8 @@ model:
 data:
   image_aspect_ratio: "pad"
   num_frames: 16
-  max_instruction_length: 80
-  data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/train_trajectories.lmdb"
+  max_instruction_length: 40
+  data_path: "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/xgen_pretraining/train_trajectories.lmdb"
   data_num: 10000
 
 

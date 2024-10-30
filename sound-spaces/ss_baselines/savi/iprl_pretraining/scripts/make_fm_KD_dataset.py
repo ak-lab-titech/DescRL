@@ -51,16 +51,21 @@ def get_visual_tensor(image_seq, processor, num_frames):
 
 
 def main():
+    ## Original or Finetune?
     # foundation_model_path = "DAMO-NLP-SG/VideoLLaMA2-7B-Base"
     # num_frames = 8
-    foundation_model_path = "../xgenerator/data/models/video_llama2/finetune_videollama2_vllava_qlora-size128-e1-f16"
+    foundation_model_path = "../xgenerator/data/models/video_llama2/finetune_videollama2_vllava_qlora_r128_a256_lr2en5"
     num_frames = 16
-    lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val"
-    save_path = "./data/lmdb_dataset/iprl_pretrain/testtesttest-bs1"
-    split = "val_w_past_instruction"
-    data_num = 500
+    
+    ## Train or val?
+    # lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train_cr02"
     # split = "train_cr_0.2_w_past_instruction"
     # data_num = 100398
+    lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val"
+    split = "val_w_past_instruction"
+    data_num = 500
+
+    save_path = "./data/lmdb_dataset/iprl_pretrain/val_fm_KD_finetune"
     batch_size = 3
 
     tokenizer, foundation_model, processor, _ = load_pretrained_model(
@@ -71,7 +76,7 @@ def main():
     prompt = "[INST] <<SYS>>\n" \
         "A chat between a curious user and an artificial intelligence assistant." \
         "The assistant gives helpful, detailed, and polite answers to the user's questions." \
-        "\n<</SYS>>\n\n <video>\nWhat is the camera wearer doing? [/INST]"
+        "\n<</SYS>>\n\n <video>\nDescribe how the camera wearer moves around the indoor environment in 40 words or less. Follow the format of the output as shown in the example below.\n\n[Example of output format]\nTurn left and go down the steps on the left. Turn right and wait near the unicycle.\n[/Example of output format]\n[/INST]"
     input_ids = tokenizer_MMODAL_token(
         prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
     ).unsqueeze(0).to(device="cuda")
@@ -83,8 +88,7 @@ def main():
         lmdb_dataset_path=lmdb_dataset_path,
         data_num=data_num,
         foundation_model_type=None,
-        foundation_model_path=None,
-        num_frames=None,
+        fm_lmdb_dataset_path=None,
         environment_type="ss1-savi",
         device="cuda",
     )
@@ -132,7 +136,7 @@ def main():
                 do_sample=True,
                 temperature=0.2,
                 # max_new_tokens=1024,
-                max_new_tokens=40,
+                max_new_tokens=80, # it's not necessarily the number of words.
                 use_cache=True,
                 return_dict_in_generate=True,
                 output_scores=True,

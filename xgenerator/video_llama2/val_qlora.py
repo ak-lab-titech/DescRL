@@ -23,14 +23,14 @@ def main(model_path, data_args):
 
     dataset = data_module["train_dataset"]
 
-    for instance in dataset:
-        print(f"--- True ---")
+    for i, instance in enumerate(dataset):
+        print(f"--- True (i = {i}) ---")
         print(instance[1])
         
         prompt = "[INST] <<SYS>>\n" \
                 "A chat between a curious user and an artificial intelligence assistant." \
                 "The assistant gives helpful, detailed, and polite answers to the user's questions." \
-                "\n<</SYS>>\n\n <video>\nWhat is the camera wearer doing? [/INST]"
+                "\n<</SYS>>\n\n <video>\nDescribe how the camera wearer moves around the indoor environment in 40 words or less. Follow the format of the output as shown in the example below.\n\n[Example of output format]\nTurn left and go down the steps on the left. Turn right and wait near the unicycle.\n[/Example of output format]\n[/INST]"
         input_ids = tokenizer_MMODAL_token(
             prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
         ).unsqueeze(0).to(device="cuda")
@@ -56,14 +56,14 @@ def main(model_path, data_args):
                 use_cache=True,
             )
         pred_sentence = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0]
-        print(f"--- Pred ----")
+        print(f"--- Pred (i = {i}) ----")
         print(pred_sentence)
 
 
 
 if __name__=="__main__":
-    model_path = "./data/models/video_llama2/finetune_videollama2_vllava_qlora-test"
-    data_path = "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/cma/val_unseen_trajectories.lmdb"
+    model_path = "./data/models/video_llama2/finetune_videollama2_vllava_qlora_r128_a256_lr2en5"
+    data_path = "/home/4/ud02274/navigation/my-VLN-CE/data/trajectories_dirs/xgen_pretraining/val_unseen_trajectories.lmdb"
     data_num = 10
 
 
