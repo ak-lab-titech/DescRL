@@ -44,5 +44,5 @@ elif [ $CMD = "make-dataset" ]; then
 elif [ $CMD = "plot-tb-data" ]; then
     ./plot_tb_data.sh
 else
-    echo ERROR: CMD must be 'multi-gpu-train', 'single-gpu-train', 'test', 'video', 'make_dataset', or 'plot_tb_data', not $CMD.
+    echo ERROR: CMD must be 'multi-gpu-train', 'single-gpu-train', 'test', 'video', 'make-dataset', or 'plot_tb_data', not $CMD.
 fi
