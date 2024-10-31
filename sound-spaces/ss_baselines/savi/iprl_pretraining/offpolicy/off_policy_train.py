@@ -44,7 +44,7 @@ def setup_instruction_predictor(
 ):
     spectrogram_shape = compute_spectrogram(np.ones((2, config.TASK_CONFIG.SIMULATOR.AUDIO.RIR_SAMPLING_RATE))).shape
     if environment_type == "ss1-savi":
-        if "size336" in self.config.TASK_CONFIG.DATASET.SPLIT:
+        if "size336" in config.TASK_CONFIG.DATASET.SPLIT:
             image_size = (336, 336)
         else:
             image_size = (128, 128)
@@ -553,11 +553,12 @@ class OffPolicyEPRLPreTrainer():
                         logger.info(f"time:{time_minutes:.2f} [min]")
                         s = time.time()
                 if self.n_update % self.save_interval == 0:
-                    self.save_checkpoint(
-                        file_name=f"ckpt.{save_cnt}.pth",
-                        extra_state=None,
-                    )
-                    save_cnt += 1
+                    if int(os.environ["LOCAL_RANK"]) == 0:
+                        self.save_checkpoint(
+                            file_name=f"ckpt.{save_cnt}.pth",
+                            extra_state=None,
+                        )
+                        save_cnt += 1
                 if self.n_update % self.val_interval == 0:
                     self.evaluate()
                     self.instruction_predictor.train()

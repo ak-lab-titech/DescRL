@@ -53,7 +53,7 @@ TASK:
     TOKENIZER_TYPE: "r2r" # "video_llama2"
     XGENERATOR_PATH: "../xgenerator/data/models/tf-speaker-semantic-24h"
     # XGENERATOR_PATH: "../xgenerator/data/models/cnntf_size336_48h"
-    # XGENERATOR_PATH: "../xgenerator/data/models/video_llama2/finetune_videollama2_vllava_qlora-size128-e1-f16"
+    # XGENERATOR_PATH: "../xgenerator/data/models/video_llama2/finetune_videollama2_vllava_qlora_r128_a256_lr2en5"
     # XGENERATOR_PATH: "DAMO-NLP-SG/VideoLLaMA2-7B-Base" # num_frames must be 8.
     XGENERATOR_CKPT: 1000
     MAX_INSTRUCTION_LENGTH: 40
