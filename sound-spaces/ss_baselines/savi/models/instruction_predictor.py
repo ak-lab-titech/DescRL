@@ -277,7 +277,7 @@ class InstructionPredictor(nn.Module):
         target = target[:, :-1].permute(1, 0).long() # (instr_len, batch)
         
         tgt_mask = torch.triu(torch.full((instr_len-1, instr_len-1), 1), diagonal=1).type(torch.bool)
-        tgt_mask = tgt_mask.cuda() if torch.cuda.is_available() else tgt_mask
+        tgt_mask = tgt_mask.to(target.device)
         if self.use_bos:
             past_words = self.embed_word_tokens_using_bos(target)
         else:

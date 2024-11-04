@@ -481,7 +481,7 @@ class GeneratedInstruction(Sensor):
         else:
             image_seqs, action_seqs = self.get_obs_seqs()
             if image_seqs is None and action_seqs is None:
-                return torch.from_numpy(np.array([PAD_IDX for _ in range(self.max_instr_len)])).cuda()
+                return torch.from_numpy(np.array([PAD_IDX for _ in range(self.max_instr_len)])).to(self.device)
             
             if self.xgenerator_type == "cnn_tf":
                 generated_instruction = self.generate_instruction_cnntf(image_seqs, action_seqs, batch_size)

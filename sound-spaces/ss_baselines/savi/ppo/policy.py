@@ -896,7 +896,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
                             bos_idx = 1
                             batch_size = np.shape(target)[0]
                             target = torch.cat(
-                                [torch.full((batch_size, 1), bos_idx).cuda(), target],
+                                [torch.full((batch_size, 1), bos_idx).to(x.device), target],
                                 dim=1,
                             )[:, :-1] # (batch, instr_len)
                         elif self.xgenerator_tokenizer_type == "r2r":
@@ -917,7 +917,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
                                     token = token[:instr_len]
                                 instructions[i, :len(token)] = token
                             
-                            target = torch.from_numpy(instructions).cuda() # (batch, instr_len)
+                            target = torch.from_numpy(instructions).to(x.device) # (batch, instr_len)
                         else:
                             raise Exception(f"self.xgenerator_tokenizer_type: {self.xgenerator_tokenizer_type}")
                 elif "habitat_sim_generated_instruction" in observations.keys():
