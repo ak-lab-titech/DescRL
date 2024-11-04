@@ -15,7 +15,7 @@ class VisionDataset(Dataset):
         self.num_objects = num_objects
         self.num_regions = num_regions
         self.files = list()
-        self.scene_obs_dir = 'data/scene_observations/default'  # 'data/scene_observations/mp3d', 'data/scene_observations_saven/mp3d'
+        self.scene_obs_dir = 'data/scene_observations/mp3d_size128'  # 'data/scene_observations/mp3d', 'data/scene_observations_saven/mp3d'
 
         for scene in self.scenes_nodes:
             for node_labels in self.scenes_nodes[scene]:

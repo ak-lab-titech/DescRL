@@ -18,6 +18,10 @@ SIMULATOR:
   SCENE_DATASET: "mp3d"
   GRID_SIZE: 1.0
 
+  AUDIO:
+    NUM: 1
+    HEARD_TEST: False
+
 TASK:
   TYPE: AudioNav
   SUCCESS_DISTANCE: 1.0

@@ -26,12 +26,12 @@ python scripts/create_metadata_graph_mp3d.py
 
 - Save vision and semantic observations in `data/scene_observations_gt/mp3d/`:
 ```
-python scripts/cache_observations_gt.py
+python scripts/cache_observations_saven.py
 ```
 
 - Filter images based on criteria to find images that are good for training vision model, and save the list of nodes (point and rotation) and its semantic labels for each scene in `data/metadata/mp3d_scene_valid_semantic_nodes.bin`:
 ```
-python scripts/create_vision_dataset.py
+python scripts/create_vision_dataset_saven.py
 ```
 
 - Find word embeddings for objects and regions from pre-trained word vectors by GloVe, and compute adjacency matrix. Results are saved in `.data/glove_data/`:

@@ -19,15 +19,10 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch
 import argparse
-import torch.multiprocessing as multiprocessing
-from torch.distributed import all_reduce
 from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
-from torch.nn.parallel import DistributedDataParallel
 from torch.utils.tensorboard import SummaryWriter
 from torchsummary import summary
 
-from ss_baselines.savi.ppo.policy import Net, AudioNavBaselinePolicy, Policy
 from soundspaces.utils import load_metadata
 from utils import get_gpu_memory_map
 from audio_model_dataset import AudioDataset
@@ -43,7 +38,7 @@ def get_scenes_sr_pairs(split):
 
     scene_sr_pairs_split = {}
     for scene in tqdm(scenes):
-        points, scene_graph = load_metadata(os.path.join(meta_dir, 'mp3d', scene))
+        points, scene_graph = load_metadata(os.path.join(meta_dir, 'default', scene))
 
         subgraphs = list(nx.connected_components(scene_graph))
 
@@ -66,19 +61,8 @@ def get_scenes_sr_pairs(split):
     return scene_sr_pairs_split
 
 
-def get_parallel_avg(value, device):
-    print(f"value: {value}, type: {type(value)}")
-    if type(value) == torch.Tensor:
-        value = value.to(device)
-    else:
-        value = torch.from_numpy(np.array([value])).to(device)
-    all_reduce(value)
-    value = value.item() / int(os.environ["NP"])
-    return value
-
-
 class AudioPredictorTrainer:
-    def __init__(self, model_dir, use_multiple_gpu, rank):
+    def __init__(self, model_dir, use_multiple_gpu):
         self.model_dir = model_dir
         self.use_multiple_gpu = use_multiple_gpu
 
@@ -96,10 +80,8 @@ class AudioPredictorTrainer:
         if not use_multiple_gpu:
             device_ids = [device_ids[0]]
 
-        self.device = (torch.device("cuda", rank))
+        self.device = (torch.device("cuda", device_ids[0]))
         logging.info('GPU IDs: {}'.format(device_ids))
-        logging.info(f"rank: {rank}")
-        logging.info(f"self.device: {self.device}")
 
         self.batch_size = 1024
         self.num_worker = 8
@@ -108,27 +90,21 @@ class AudioPredictorTrainer:
         self.num_epoch = 50
         self.audio_predictor = AudioPredictor(self.num_objects, self.num_regions)
         summary(self.audio_predictor.predictor, input_size=(2, 65, 26), device='cpu')
-        self.audio_predictor = DistributedDataParallel(
-            self.audio_predictor.to(rank), device_ids=[rank]
-        )
+        self.audio_predictor = nn.DataParallel(self.audio_predictor, device_ids=device_ids)
         self.audio_predictor.to(device=self.device)
 
     def run(self, splits, writer):
 
         datasets = dict()
-        datasamplers = dict()
         dataloaders = dict()
         dataset_sizes = dict()
-        if multiprocessing.get_start_method() == 'fork':
-            multiprocessing.set_start_method('spawn', force=True)
         for split in splits:
             scenes_sr_pairs = get_scenes_sr_pairs(split)
 
             datasets[split] = AudioDataset(scenes_sr_pairs=scenes_sr_pairs, ooi_objects_id_name=self.ooi_objects_id_name,
-                                           ooi_regions_id_name=self.ooi_regions_id_name, use_cache=True, split=split)
-            datasamplers[split] = DistributedSampler(datasets[split], num_replicas=int(os.environ["NP"]), shuffle=True, rank=int(os.environ["LOCAL_RANK"]))
-            dataloaders[split] = DataLoader(dataset=datasets[split], batch_size=self.batch_size,
-                                            pin_memory=True, num_workers=self.num_worker, sampler=datasamplers[split])
+                                           ooi_regions_id_name=self.ooi_regions_id_name, use_cache=True)
+            dataloaders[split] = DataLoader(dataset=datasets[split], batch_size=self.batch_size, shuffle=True,
+                                            pin_memory=True, num_workers=self.num_worker, sampler=None)
 
             dataset_sizes[split] = len(datasets[split])
             print('{} has {} samples'.format(split.upper(), dataset_sizes[split]))
@@ -149,9 +125,8 @@ class AudioPredictorTrainer:
                 num_epoch = self.num_epoch
 
         for epoch in range(num_epoch):
-            if int(os.environ["LOCAL_RANK"]) == 0:
-                logging.info('-' * 40)
-                logging.info('Epoch {}/{}'.format(epoch + 1, num_epoch))
+            logging.info('-' * 40)
+            logging.info('Epoch {}/{}'.format(epoch + 1, num_epoch))
 
             # Each epoch has a training and validation phase
             for split in splits:
@@ -226,25 +201,15 @@ class AudioPredictorTrainer:
                 epoch_exact_match_ratio_regions = running_exact_match_count_regions / dataset_sizes[split]
                 epoch_hamming_loss_regions = running_hamming_loss_regions / dataset_sizes[split]
 
-                epoch_total_loss = get_parallel_avg(epoch_total_loss, self.device)
-                epoch_classifier_loss_objects = get_parallel_avg(epoch_classifier_loss_objects, self.device)
-                epoch_classifier_loss_regions = get_parallel_avg(epoch_classifier_loss_regions, self.device)
-                epoch_classifier_corrects_objects = get_parallel_avg(epoch_classifier_corrects_objects, self.device)
-                epoch_exact_match_ratio_regions = get_parallel_avg(epoch_exact_match_ratio_regions, self.device)
-                epoch_hamming_loss_regions_tmp = {}
-                for reg_id in range(self.num_regions):
-                    epoch_hamming_loss_regions_tmp[reg_id] = get_parallel_avg(epoch_hamming_loss_regions[reg_id], self.device)
-
                 # Writing to tensorboard
-                if int(os.environ["LOCAL_RANK"]) == 0:
-                    writer.add_scalar(f'Loss/{split}_total', epoch_total_loss, epoch)
-                    writer.add_scalar(f'Loss/{split}_classifier_objects', epoch_classifier_loss_objects, epoch)
-                    writer.add_scalar(f'Loss/{split}_classifier_regions', epoch_classifier_loss_regions, epoch)
-                    writer.add_scalar(f'Accuracy/{split}_objects', epoch_classifier_corrects_objects, epoch)
-                    writer.add_scalar(f'Exact_Match_Ratio/{split}_regions', epoch_exact_match_ratio_regions, epoch)
-                    for reg_id in range(self.num_regions):
-                        writer.add_scalar(f'Hamming_Loss/regions/{split}/' + self.ooi_regions_id_name[reg_id],
-                                      epoch_hamming_loss_regions_tmp[reg_id], epoch)
+                writer.add_scalar(f'Loss/{split}_total', epoch_total_loss, epoch)
+                writer.add_scalar(f'Loss/{split}_classifier_objects', epoch_classifier_loss_objects, epoch)
+                writer.add_scalar(f'Loss/{split}_classifier_regions', epoch_classifier_loss_regions, epoch)
+                writer.add_scalar(f'Accuracy/{split}_objects', epoch_classifier_corrects_objects, epoch)
+                writer.add_scalar(f'Exact_Match_Ratio/{split}_regions', epoch_exact_match_ratio_regions, epoch)
+                for reg_id in range(self.num_regions):
+                    writer.add_scalar(f'Hamming_Loss/regions/{split}/' + self.ooi_regions_id_name[reg_id],
+                                      epoch_hamming_loss_regions[reg_id], epoch)
 
                 # deep copy the model
                 target_acc_emr = epoch_classifier_corrects_objects + epoch_exact_match_ratio_regions
@@ -254,7 +219,6 @@ class AudioPredictorTrainer:
                     self.save_checkpoint(splits, f"ckpt.{epoch}.pth")
 
                 time_elapsed = time.time() - since
-                logging.info(f'device: {self.device}')
                 logging.info('Results of {} split has on {} samples'.format(split.upper(), dataset_sizes[split]))
                 logging.info('Time: {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
                 logging.info('Current Accuracy + Exact Match Ratio: {:4f}'.format(target_acc_emr))
@@ -283,13 +247,6 @@ class AudioPredictorTrainer:
 
 
 if __name__ == '__main__':
-    rank = int(os.environ["LOCAL_RANK"])
-    world_size = torch.cuda.device_count()
-    n_proc = int(os.environ["NP"])
-    gpu_id = rank % world_size
-    torch.cuda.set_device(gpu_id)
-    torch.distributed.init_process_group(backend="NCCL", init_method="env://", world_size=n_proc)
-    print(f"rank: {rank}, world_size: {world_size}, gpu_id: {gpu_id}, n_proc: {n_proc}\n")
 
     print("Current working directory: {0}".format(os.getcwd()))
     os.chdir('../sound-spaces')
@@ -312,18 +269,14 @@ if __name__ == '__main__':
 
     time_stamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     log_dir = os.path.join(args.model_dir, 'tb', time_stamp)
-    print(f"log_dir: {log_dir}")
-    if int(os.environ["LOCAL_RANK"]) == 0:
-        summary_writer = SummaryWriter(log_dir=log_dir)
-        logging.basicConfig(filename=log_dir + os.sep + 'audio-model-trainer_' + time_stamp + '_logs.txt',
-                            level=logging.INFO, format='%(asctime)s, %(levelname)s: %(message)s',
-                            datefmt="%Y-%m-%d %H:%M:%S")
-        logging.info('log_dir: {}'.format(log_dir))
-    else:
-        summary_writer = None
+    summary_writer = SummaryWriter(log_dir=log_dir)
 
+    logging.basicConfig(filename=log_dir + os.sep + 'audio-model-trainer_' + time_stamp + '_logs.txt',
+                        level=logging.INFO, format='%(asctime)s, %(levelname)s: %(message)s',
+                        datefmt="%Y-%m-%d %H:%M:%S")
+    logging.info('log_dir: {}'.format(log_dir))
 
-    audio_predictor_trainer = AudioPredictorTrainer(args.model_dir, args.use_multiple_GPU, rank)
+    audio_predictor_trainer = AudioPredictorTrainer(args.model_dir, args.use_multiple_GPU)
 
     if args.run_type == 'train':
         audio_predictor_trainer.run(['train', 'test'], summary_writer)

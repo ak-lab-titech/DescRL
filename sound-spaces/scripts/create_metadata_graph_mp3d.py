@@ -2,6 +2,7 @@ import csv
 import os
 import pickle
 
+import habitat # To import habitat_sim, import habitat first
 import habitat_sim
 
 

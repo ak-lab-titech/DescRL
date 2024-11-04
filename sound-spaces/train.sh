@@ -95,13 +95,10 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-vision" ]; then
         --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
         --use-multiple-GPU
 elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-audio" ]; then
-    CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
-        --nnodes=1 \
-        --nproc_per_node=$NP \
-        ss_baselines/saven/pretraining/audio_model_trainer.py \
-            --run-type train \
-            --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
-            --use-multiple-GPU
+    python ss_baselines/saven/pretraining/audio_model_trainer.py \
+        --run-type train \
+        --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
+        --use-multiple-GPU
 elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven-1st" ]; then
     python ss_baselines/saven/run.py \
         --exp-config ss_baselines/saven/config/semantic_audionav/saven_pretraining.yaml \
