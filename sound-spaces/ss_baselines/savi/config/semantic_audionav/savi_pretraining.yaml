@@ -59,6 +59,12 @@ RL:
       use_location_belief: True # Locationのbeliefを使うかどうか
     INSTRUCTION_PREDICTOR:
       use_iprl: False # IPRLを行うかどうか
+      share_decoder: False
+      share_decoder_layer_num: 0
+      use_replay_buffer_for_xpred: False
+      replay_buffer_size: 1000
+      replay_buffer_batch_size: 64
+      replay_buffer_max_steps: 150
       max_instr_len: 40
       num_decoder_layers: 1
       vocab_emb_size: 50

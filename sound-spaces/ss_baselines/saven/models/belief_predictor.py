@@ -20,7 +20,7 @@ from soundspaces.tasks.nav import SpectrogramSensor, LocationBelief, KSAVENCateg
 from ss_baselines.saven.models.smt_resnet import custom_resnet18
 
 
-AUDIO_MODEL_PATH = 'data/models/saven/audio-multigpu/ckpt.5.pth'
+AUDIO_MODEL_PATH = './data/models/ss1-savi/mp3d/ksaven-audio/audio_base/best_test.pth'
 
 
 class DecentralizedDistributedMixinBelief:

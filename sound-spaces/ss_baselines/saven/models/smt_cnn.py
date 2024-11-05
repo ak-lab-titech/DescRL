@@ -23,7 +23,7 @@ from ss_baselines.saven.models.smt_resnet import custom_resnet18
 from habitat_sim.utils.common import d3_40_colors_rgb
 
 
-VISION_MODEL_PATH = 'data/models/saven/vision-default/ckpt.24.pth'
+VISION_MODEL_PATH = './data/models/ss1-savi/mp3d/ksaven-vision/vision_base/best_test.pth'
 
 
 class SMTCNN(nn.Module):
