@@ -15,7 +15,9 @@ module load cudnn
 module load openmpi/5.0.2-intel
 
 
+export NCCL_DEBUG=INFO
 export NCCL_TIMEOUT_MS=1800000
+
 export NNODES=$NHOSTS
 export NPERNODE=4
 export NP=$(($NPERNODE * $NNODES))
