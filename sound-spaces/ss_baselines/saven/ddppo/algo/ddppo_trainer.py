@@ -187,6 +187,7 @@ class DDPPOTrainer(PPOTrainer):
 
         if self.config.RL.DDPPO.pretrained:
             if not self.use_iprl:
+                pretrained_state = torch.load(self.config.RL.DDPPO.pretrained_weights, map_location="cpu")
                 self.actor_critic.load_state_dict(
                     {
                         k[len("actor_critic."):]: v
