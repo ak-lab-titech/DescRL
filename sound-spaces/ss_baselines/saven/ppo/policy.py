@@ -350,6 +350,7 @@ class AudioNavSMTNet(Net):
         use_belief_encoding=False,
         normalize_category_distribution=False,
         use_category_input=False,
+        visual_encoder_output_size=512-4,
         **kwargs
     ):
         super().__init__()
@@ -549,6 +550,10 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         use_belief_encoding=False,
         normalize_category_distribution=False,
         use_category_input=False,
+        visual_encoder_output_size=512-4,
+        tokenizer_type="r2r",
+        share_decoder=False,
+        share_decoder_layer_num=0,
         **kwargs
     ):
         super().__init__(
@@ -563,9 +568,17 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             use_belief_encoding,
             normalize_category_distribution,
             use_category_input,
+            visual_encoder_output_size,
             **kwargs,
         )
-        lang = R2RLang(name="r2r_train")
+
+        self.xgenerator_tokenizer_type = tokenizer_type
+        if tokenizer_type == "r2r":
+            lang = R2RLang()
+            iprl_vocab_emb_size = 50
+        else:
+            raise Exception(f"tokenizer_type: {tokenizer_type}")
+
         self.instruction_predictor = InstructionPredictor(
             num_decoder_layers=iprl_num_decoder_layers,
             vocab_emb_size=iprl_vocab_emb_size,
@@ -579,13 +592,26 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             pretraining=kwargs["pretraining"],
             use_bos=iprl_use_bos,
             belief_dim=self.audio_gcn.feature_dims+2,
+            share_decoder=share_decoder,
         )
         self.iprl_use_gt_D = iprl_use_gt_D
         self.feedback = iprl_feedback
-
+        
         if use_pretrained:
             assert(pretrained_path != '')
             self.pretrained_initialization(pretrained_path)
+
+        self.share_decoder = share_decoder
+        if self.share_decoder:
+            self.task_embedding_for_RL = nn.Parameter(
+                torch.normal(mean=0.0, std=0.1, size=(self._hidden_size,), requires_grad=True)
+            )
+            self.ac_encoder = nn.Sequential(
+                nn.Linear(iprl_emb_size, self._hidden_size),
+                nn.ReLU(),
+            )
+            self.share_decoder_layer_num = share_decoder_layer_num
+            self.iprl_num_decoder_layers = iprl_num_decoder_layers
 
         self.train()
     
@@ -598,13 +624,104 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         if "xgenerator" in path:
             raise NotImplementedError()
         else:
-            cleaned_state_dict = state_dict['state_dict']
+            cleaned_state_dict = {}
+            for k, v in state_dict["state_dict"].items():
+                if "actor_critic.net." in k:
+                    k = k[len("actor_critic.net."):]
+                cleaned_state_dict[k] = v
+        
         self.load_state_dict(cleaned_state_dict, strict=False)
     
-    def forward(self, observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks, need_logits=False):
-        x_att, rnn_hidden_states, x, belief, enc_memory = super().forward(
-            observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks, True,
+    def forward_share_decoder(
+        self,
+        observations,
+        rnn_hidden_states,
+        prev_actions,
+        masks,
+        ext_memory,
+        ext_memory_masks,
+        need_enc_memory=False
+    ):
+        x = self.get_features(observations, prev_actions)
+
+        if self._use_belief_as_goal:
+            belief = torch.zeros((x.shape[0], self._hidden_size), device=x.device)
+            if self._use_label_belief:
+                if self._normalize_category_distribution:
+                    belief[:, :21] = nn.functional.softmax(observations[KSAVENCategoryBelief.cls_uuid], dim=1)
+                else:
+                    # belief[:, :21] = observations[KSAVENCategoryBelief.cls_uuid]
+
+                    obs_cat_belief = observations[KSAVENCategoryBelief.cls_uuid]
+                    audio_gcn_embds = torch.zeros((obs_cat_belief.shape[0], self.audio_gcn.feature_dims), device=x.device) # dim: 254
+                    for i in range(len(obs_cat_belief)):
+                        audio_gcn_embds[i, :] = self.audio_gcn(obs_cat_belief[i])
+                    belief[:, :self.audio_gcn.feature_dims] = audio_gcn_embds
+
+            if self._use_location_belief:
+                # belief[:, 21:23] = observations[LocationBelief.cls_uuid]
+                belief[:, self.audio_gcn.feature_dims:self.audio_gcn.feature_dims+2] = observations[LocationBelief.cls_uuid]
+
+            if self._use_belief_encoder:
+                belief = self.belief_encoder(belief)
+        else:
+            belief = None
+
+        enc_memory, t_masks = self.smt_state_encoder(
+            x, # (batch, fea_dim)
+            ext_memory, # (mem_size, batch, fea_dim)
+            ext_memory_masks, # (batch, mem_size)
+            only_encode=True,
         )
+        tgt = belief.unsqueeze(0) + self.task_embedding_for_RL
+
+        if self.share_decoder_layer_num != self.iprl_num_decoder_layers:
+            for i in range(self.share_decoder_layer_num):
+                tgt = self.instruction_predictor.decoder.layers[i](
+                    tgt=tgt, # (1, batch, embed)
+                    memory=enc_memory, # (mem_size+1, batch, smt_hidden)
+                    tgt_mask=None,
+                    memory_key_padding_mask=t_masks,
+                )
+            decoder_output = self.smt_state_encoder.transformer.decoder(
+                tgt=tgt, # (1, batch, embed)
+                memory=enc_memory, # (mem_size+1, batch, smt_hidden)
+                tgt_mask=None,
+                memory_key_padding_mask=t_masks,
+            ).squeeze(0)
+        else:
+            decoder_output = self.instruction_predictor.decoder(
+                tgt=tgt, # (1, batch, embed)
+                memory=enc_memory, # (mem_size+1, batch, smt_hidden)
+                tgt_mask=None,
+                memory_key_padding_mask=t_masks,
+            ).squeeze(0) # (batch, embed)
+
+        ac_latent = self.ac_encoder(decoder_output) # (batch, embed)
+
+        if need_enc_memory:
+            return ac_latent, rnn_hidden_states, x, belief, enc_memory
+        else:
+            return ac_latent, rnn_hidden_states, x,
+
+    def forward(
+        self,
+        observations,
+        rnn_hidden_states,
+        prev_actions,
+        masks,
+        ext_memory,
+        ext_memory_masks,
+        need_logits=False,
+    ):
+        if self.share_decoder:
+            x_att, rnn_hidden_states, x, belief, enc_memory = self.forward_share_decoder(
+                observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks, True,
+            )
+        else:
+            x_att, rnn_hidden_states, x, belief, enc_memory = super().forward(
+                observations, rnn_hidden_states, prev_actions, masks, ext_memory, ext_memory_masks, True,
+            )
         if not need_logits:
             return x_att, rnn_hidden_states, x, None
         
@@ -613,7 +730,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         else:
             category = belief[:, :self.audio_gcn.feature_dims]
             location = belief[:, self.audio_gcn.feature_dims:self.audio_gcn.feature_dims+2]
-        
+
         if self.feedback == "teacher":
             if "habitat_sim_generated_instruction" in observations.keys():
                 target = observations["habitat_sim_generated_instruction"] # (batch, instr_len)

@@ -152,10 +152,6 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         if self._use_belief_encoder:
             self.belief_encoder = nn.Linear(self._hidden_size, self._hidden_size)
 
-        if use_pretrained:
-            assert(pretrained_path != '')
-            self.pretrained_initialization(pretrained_path)
-
         lang = R2RLang(name="r2r_train")
         self.instruction_predictor = InstructionPredictor(
             num_decoder_layers=iprl_num_decoder_layers,
@@ -170,11 +166,16 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             pretraining=kwargs["pretraining"],
             use_bos=iprl_use_bos,
             belief_dim=self.audio_gcn.feature_dims+2,
+            share_decoder=False,
         )
 
         self.feedback = iprl_feedback
 
         self.optimizer = None
+
+        if use_pretrained:
+            assert(pretrained_path != '')
+            self.pretrained_initialization(pretrained_path)
 
         self.train()
     

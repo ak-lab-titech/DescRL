@@ -703,7 +703,8 @@ class PPOTrainer(BaseRLTrainer):
         self,
         checkpoint_path: str,
         writer: TensorboardWriter,
-        checkpoint_index: int = 0
+        checkpoint_index: int = 0,
+        dump_config: bool = True,
     ) -> Dict:
         r"""Evaluates a single checkpoint.
 
@@ -750,7 +751,8 @@ class PPOTrainer(BaseRLTrainer):
             config.TASK_CONFIG.TASK.MEASUREMENTS.append("TOP_DOWN_MAP")
             config.freeze()
 
-        logger.info(f"env config: {config}")
+        if dump_config:
+            logger.info(f"env config: {config}")
         self.envs = construct_envs(
             config, get_env_class(config.ENV_NAME)
         )

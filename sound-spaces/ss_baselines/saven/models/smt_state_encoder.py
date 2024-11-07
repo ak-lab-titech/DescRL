@@ -91,7 +91,7 @@ class SMTStateEncoder(nn.Module):
         """
         return (1 - memory_masks) > 0
 
-    def single_forward(self, x, memory, memory_masks, need_enc_memory=False, goal=None):
+    def single_forward(self, x, memory, memory_masks, need_enc_memory=False, goal=None, only_encode=False):
         r"""Forward for a non-sequence input
 
         Args:
@@ -131,6 +131,15 @@ class SMTStateEncoder(nn.Module):
 
         # Transformer operations
         t_masks = self._convert_masks_to_transformer_format(memory_masks)
+        
+        if only_encode:
+            memory = self.transformer.encoder(
+                memory,
+                mask=None,
+                src_key_padding_mask=t_masks,
+            )
+            return memory, t_masks
+
         if goal is not None:
             x_att, enc_memory = self.transformer(
                 memory,

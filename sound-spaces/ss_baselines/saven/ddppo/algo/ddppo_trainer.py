@@ -123,6 +123,10 @@ class DDPPOTrainer(PPOTrainer):
                     use_category_input=has_distractor_sound,
                 )
             else:
+                assert self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf"
+                visual_encoder_output_size=512-4
+                tokenizer_type="r2r"
+
                 self.actor_critic = IPRLAudioNavSMTPolicy(
                     observation_space=self.envs.observation_spaces[0],
                     action_space=self.envs.action_spaces[0],
@@ -151,14 +155,10 @@ class DDPPOTrainer(PPOTrainer):
                     use_location_belief=belief_cfg.use_location_belief,
                     normalize_category_distribution=belief_cfg.normalize_category_distribution,
                     use_category_input=has_distractor_sound,
-                    use_instruction_predictor=iprl_cfg.use_instruction_predictor,
-                    use_progress_predictor=iprl_cfg.use_progress_predictor,
-                    use_action_predictor=iprl_cfg.use_next_action_predictor,
-                    use_next_frame_predictor=iprl_cfg.use_next_frame_predictor,
-                    use_next_spectrogram_predictor=iprl_cfg.use_next_spectrogram_predictor,
-                    use_semantic_predictor=iprl_cfg.use_semantic_predictor,
-                    use_audio_location_predictor=iprl_cfg.use_audio_location_predictor,
-                    use_audio_category_predictor=iprl_cfg.use_audio_category_predictor,
+                    visual_encoder_output_size=visual_encoder_output_size,
+                    tokenizer_type=tokenizer_type,
+                    share_decoder=iprl_cfg.share_decoder,
+                    share_decoder_layer_num=iprl_cfg.share_decoder_layer_num,
                 )
             logger.info("self.actor_critic: {}".format(self.actor_critic))
             if smt_cfg.freeze_encoders:
@@ -186,39 +186,72 @@ class DDPPOTrainer(PPOTrainer):
         self.actor_critic.to(self.device)
 
         if self.config.RL.DDPPO.pretrained:
-            # load weights for both actor critic and the encoder
-            pretrained_state = torch.load(self.config.RL.DDPPO.pretrained_weights, map_location="cpu")
-            self.actor_critic.load_state_dict(
-                {
-                    k[len("actor_critic."):]: v
-                    for k, v in pretrained_state["state_dict"].items()
-                    if "actor_critic.net.visual_encoder" not in k and
-                       "actor_critic.net.smt_state_encoder" not in k
-                },
-                strict=False
-            )
-            self.actor_critic.net.visual_encoder.rgb_encoder.load_state_dict(
-                {
-                    k[len("actor_critic.net.visual_encoder.rgb_encoder."):]: v
-                    for k, v in pretrained_state["state_dict"].items()
-                    if "actor_critic.net.visual_encoder.rgb_encoder." in k
-                },
-            )
-            self.actor_critic.net.visual_encoder.depth_encoder.load_state_dict(
-                {
-                    k[len("actor_critic.net.visual_encoder.depth_encoder."):]: v
-                    for k, v in pretrained_state["state_dict"].items()
-                    if "actor_critic.net.visual_encoder.depth_encoder." in k
-                },
-            )
-            if ppo_cfg.use_belief_predictor:
-                self.belief_predictor.predictor.load_state_dict(
+            if not self.use_iprl:
+                self.actor_critic.load_state_dict(
                     {
-                        k[len("predictor."):]: v
-                        for k, v in pretrained_state['belief_predictor'].items()
-                        if "predictor." in k
-                    }
+                        k[len("actor_critic."):]: v
+                        for k, v in pretrained_state["state_dict"].items()
+                        if "actor_critic.net.visual_encoder" not in k and
+                           "actor_critic.net.smt_state_encoder" not in k
+                    },
+                    strict=False
                 )
+                self.actor_critic.net.visual_encoder.rgb_encoder.load_state_dict(
+                    {
+                        k[len("actor_critic.net.visual_encoder.rgb_encoder."):]: v
+                        for k, v in pretrained_state["state_dict"].items()
+                        if "actor_critic.net.visual_encoder.rgb_encoder." in k
+                    },
+                )
+                self.actor_critic.net.visual_encoder.depth_encoder.load_state_dict(
+                    {
+                        k[len("actor_critic.net.visual_encoder.depth_encoder."):]: v
+                        for k, v in pretrained_state["state_dict"].items()
+                        if "actor_critic.net.visual_encoder.depth_encoder." in k
+                    },
+                )
+                if ppo_cfg.use_belief_predictor:
+                    self.belief_predictor.predictor.load_state_dict(
+                        {
+                            k[len("predictor."):]: v
+                            for k, v in pretrained_state['belief_predictor'].items()
+                            if "predictor." in k
+                        }
+                    )
+            else:
+                # load weights for both actor critic and the encoder
+                pretrained_state = torch.load(self.config.RL.DDPPO.pretrained_weights, map_location="cpu")
+                self.actor_critic.net.load_state_dict(
+                    {
+                        k: v
+                        for k, v in pretrained_state["state_dict"].items()
+                        if "visual_encoder" not in k and
+                           "smt_state_encoder" not in k
+                    },
+                    strict=False
+                )
+                self.actor_critic.net.visual_encoder.rgb_encoder.load_state_dict(
+                    {
+                        k[len("visual_encoder.rgb_encoder."):]: v
+                        for k, v in pretrained_state["state_dict"].items()
+                        if "visual_encoder.rgb_encoder." in k
+                    },
+                )
+                self.actor_critic.net.visual_encoder.depth_encoder.load_state_dict(
+                    {
+                        k[len("visual_encoder.depth_encoder."):]: v
+                        for k, v in pretrained_state["state_dict"].items()
+                        if "visual_encoder.depth_encoder." in k
+                    },
+                )
+                if ppo_cfg.use_belief_predictor:
+                    self.belief_predictor.predictor.load_state_dict(
+                        {
+                            k[len("belief_predictor.predictor."):]: v
+                            for k, v in pretrained_state['state_dict'].items()
+                            if ".predictor." in k and "belief_predictor" in k
+                        }
+                    )
 
         if self.config.RL.DDPPO.reset_critic:
             nn.init.orthogonal_(self.actor_critic.critic.fc.weight)

@@ -260,14 +260,19 @@ def train(
     if use_lmdb_dataset:
         train_split = config.TASK_CONFIG.DATASET.SPLIT
         train_dataset = IPRLPretrainingLMDBDataset(
-            config.TASK_CONFIG, train_split, "./data/lmdb_dataset/iprl_pretrain_train", 502103,
+            # config.TASK_CONFIG, train_split, "./data/lmdb_dataset/iprl_pretrain/train_cr02", 100398,
+            config.TASK_CONFIG, train_split, "./data/lmdb_dataset/iprl_pretrain/train", 502103,
+            environment_type="ss1-savi",
+            device=torch.device("cuda", gpu_id),
         )
         if "past" in train_split:
             val_split = "val_w_past_instruction"
         else:
             val_split = "val_w_instruction"
         val_dataset = IPRLPretrainingLMDBDataset(
-            config.TASK_CONFIG, val_split, "./data/lmdb_dataset/iprl_pretrain_val", 500,
+            config.TASK_CONFIG, val_split, "./data/lmdb_dataset/iprl_pretrain/val", 500,
+            environment_type="ss1-savi",
+            device=torch.device("cuda", gpu_id),
         )
     else:
         # train_dataset = IPRLPretrainingDataset(config.TASK_CONFIG, config.SENSORS)
@@ -276,6 +281,7 @@ def train(
     my_collate_fn = CollateFn(
         use_foundation_model=config.FOUNDATION_MODEL.model_type == "video_llama2",
         max_instr_len=config.FOUNDATION_MODEL.max_instr_len,
+        environment_type="ss1-savi",
     )
     train_sampler = DistributedSampler(
         train_dataset,
@@ -392,7 +398,7 @@ if __name__=="__main__":
     gpu_id = rank % NPERNODE
     torch.cuda.set_device(gpu_id)
     torch.distributed.init_process_group(
-        backend="NCCL" # "GLOO",
+        backend="NCCL", # "GLOO",
         init_method="env://",
         world_size=n_proc,
     )
