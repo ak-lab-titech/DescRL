@@ -25,3 +25,4 @@ xgenerator/data
 tbs
 
 access_tokens.py
+tests/

@@ -681,8 +681,8 @@ class SoundSpacesSim(Simulator, ABC):
         else:
             if self.config.USE_RENDERED_OBSERVATIONS:
             # if True: # for video
-                binaural_rir_file = os.path.join(self.binaural_rir_dir, str(self.azimuth_angle), '{}_{}.wav'.format(
-                    self._receiver_position_index, self._source_position_index))
+                binaural_rir_file = os.path.join(self.binaural_rir_dir, str(self.azimuth_angle), '{}/{}_{}.wav'.format(
+                    self._receiver_position_index, self._receiver_position_index, self._source_position_index))
                 try:
                     sampling_freq, binaural_rir = wavfile.read(binaural_rir_file)  # float32
                 except ValueError:
@@ -716,8 +716,8 @@ class SoundSpacesSim(Simulator, ABC):
                     audiogoal = binaural_convolved
 
             if self.config.AUDIO.HAS_DISTRACTOR_SOUND:
-                binaural_rir_file = os.path.join(self.binaural_rir_dir, str(self.azimuth_angle), '{}_{}.wav'.format(
-                    self._receiver_position_index, self._distractor_position_index))
+                binaural_rir_file = os.path.join(self.binaural_rir_dir, str(self.azimuth_angle), '{}/{}_{}.wav'.format(
+                    self._receiver_position_index, self._receiver_position_index, self._distractor_position_index))
                 try:
                     sampling_freq, distractor_rir = wavfile.read(binaural_rir_file)
                 except ValueError:

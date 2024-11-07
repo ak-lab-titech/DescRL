@@ -51,7 +51,7 @@ class AudioDataset(Dataset):
                     list(self.ooi_objects_id_name.values()).index(object_name)]
 
                 angle = np.random.choice([0, 90, 180, 270])
-                rir_file = os.path.join(self.binaural_rir_dir, scene, str(angle), f"{r}_{s}.wav")
+                rir_file = os.path.join(self.binaural_rir_dir, scene, str(angle), f"{r}/{r}_{s}.wav")
 
                 self.files.append((rir_file, sound_file))
                 goals.append(object_id)

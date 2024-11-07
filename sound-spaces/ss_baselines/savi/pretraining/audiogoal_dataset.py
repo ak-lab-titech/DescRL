@@ -41,7 +41,7 @@ class AudioGoalDataset(Dataset):
                 sound_file = random.choice(sound_files)
                 index = CATEGORY_INDEX_MAPPING[sound_file[:-4]]
                 angle = random.choice([0, 90, 180, 270])
-                rir_file = os.path.join(self.binaural_rir_dir, scene, str(angle), f"{r}_{s}.wav")
+                rir_file = os.path.join(self.binaural_rir_dir, scene, str(angle), f"{r}/{r}_{s}.wav")
 
                 self.files.append((rir_file, sound_file))
                 delta_x = scene_graph.nodes[s]['point'][0] - scene_graph.nodes[r]['point'][0]

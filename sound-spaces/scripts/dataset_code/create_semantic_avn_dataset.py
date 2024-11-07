@@ -108,7 +108,7 @@ class SemanticDataset(Dataset):
                     continue
 
                 angle = random.choice([0, 90, 180, 270])
-                sr, data = wavfile.read('../data/binaural_rirs/default/{}/{}/{}_{}.wav'.format(scene, angle, r, s))
+                sr, data = wavfile.read('../data/binaural_rirs/default/{}/{}/{}/{}_{}.wav'.format(scene, angle, r, r, s))
                 if data.shape[0] == 0:
                     continue
 
