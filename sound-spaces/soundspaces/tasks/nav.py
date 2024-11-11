@@ -752,8 +752,8 @@ class HabitatSimGeneratedInstruction(GeneratedInstruction):
         image_seqs = torch.from_numpy(image_seqs)
         action_seqs = torch.from_numpy(action_seqs)
         if torch.cuda.is_available():
-            image_seqs = image_seqs.cuda()
-            action_seqs = action_seqs.cuda()
+            image_seqs = image_seqs.to(self.device)
+            action_seqs = action_seqs.to(self.device)
         
         return image_seqs, action_seqs
     
