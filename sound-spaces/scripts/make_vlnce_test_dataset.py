@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from dotmap import DotMap
 from tqdm import trange
-from transformers import AutoProcessor, VideoLlavaForConditionalGeneration
+from transformers import AutoProcessor
 
 sys.path.insert(0, "/home/4/ud02274/navigation/myss/sound-spaces")
 sys.path.append("/home/4/ud02274/navigation/myss/habitat-lab")
@@ -36,7 +36,7 @@ from ss_baselines.savi.iprl_pretraining.offpolicy.off_policy_train import setup_
 from soundspaces.utils import generate_video, visualize_spectrogram
 from xgenerator.common.lang import R2RLang, tokens2sentences
 from xgenerator.common.hugging_face_utils import HFR2RDataset
-from xgenerator.video_llava.qlora import video_llava_collate_fn
+# from xgenerator.video_llava.qlora import video_llava_collate_fn
 import vlnce_baselines
 from peft import PeftModel
 from videollama2.mm_utils import get_model_name_from_path
@@ -186,41 +186,25 @@ def generate_instruction(
     action_seqs,
     path_mask,
     max_instr_len,
+    beam_num,
+    top_k,
+    top_p,
+    temperature,
 ):
     """
     image_seqs: (seq_l, batch, image_shape)
     action_seqs: (seq_l, batch, 4)
     """
-    batch_size = np.shape(image_seqs)[1]
-    ended = torch.full((1, batch_size), False)
-    with torch.no_grad():
-        memory = instruction_generator.encode(
-            src_image=image_seqs,
-            src_action=action_seqs,
-            src_mask=None,
-            src_padding_mask=path_mask,
-        )
-        past_tokens = torch.full((1, batch_size), BOS_IDX)
-        if torch.cuda.is_available():
-            past_tokens = past_tokens.cuda()
-        
-        for i in range(max_instr_len-1):
-            tgt_mask = torch.triu(torch.full((i+1, i+1), 1), diagonal=1).type(torch.bool)
-            if torch.cuda.is_available():
-                tgt_mask = tgt_mask.cuda()
-            logits = instruction_generator.decode(
-                trg=past_tokens,
-                memory=memory,
-                tgt_mask=tgt_mask,
-                memory_mask=None,
-                tgt_padding_mask=None,
-                memory_key_padding_mask=path_mask,
-            )[-1, :, :] # (batch, vocab_size)
-            _, next_tokens = logits.max(1)
-            next_tokens = next_tokens.view(1, batch_size)
-            next_tokens[ended] = PAD_IDX
-            ended[next_tokens == EOS_IDX] = True
-            past_tokens = torch.cat([past_tokens, next_tokens], dim=0)
+    past_tokens = instruction_generator.generate(
+        image_seqs=image_seqs,
+        action_seqs=action_seqs,
+        max_instr_len=max_instr_len,
+        save_dir_path=None,
+        beam_num=beam_num,
+        top_k=top_k,
+        top_p=top_p,
+        temperature=temperature,
+    )
     past_tokens = past_tokens[past_tokens != 0.0][1:-1].view(-1, 1) # EOS, BOS, PADを外す
     return past_tokens
 
@@ -373,13 +357,24 @@ def main(
             config=config,
             device=torch.device("cuda", 0),
             visual_encoder_output_size=512-4,
+            # visual_encoder_output_size=1024,
             tokenizer_type="r2r",
+            # tokenizer_type="video_llama2",
             environment_type="ss1-savi",
         )
+
+        # videollama2 xpredictor
+        # model_path = config.MODEL_PATH
+        # tokenizer, _, _, _ = load_pretrained_model(
+        #     model_path,
+        #     None,
+        #     get_model_name_from_path(model_path),
+        # )
+        
         pretrained_state = torch.load(config.RL.DDPPO.pretrained_weights, map_location="cpu")
         pretrained_state_dict = {}
 
-        # belief_predictor_state = torch.load("data/models/ss1-savi/mp3d/savi-2nd/past-eprl-v2/data/ckpt.45.pth", map_location="cpu")
+        # belief_predictor_state = torch.load("data/models/ss1-savi/mp3d/savi-2nd/past-eprl-sharedecoder-partially2/data/ckpt.39.pth", map_location="cpu")
         # for k, v in belief_predictor_state["belief_predictor"].items():
         for k, v in pretrained_state["belief_predictor"].items():
             pretrained_state_dict[f"belief_predictor.{k}"] = v
@@ -408,6 +403,7 @@ def main(
         if trained_model is not None:
             instruction_predictor = PeftModel.from_pretrained(instruction_predictor, trained_model)
     elif instruction_predictor_type == "video-llama2":
+        num_frames = config.NUM_FRAMES
         model_path = config.MODEL_PATH
         tokenizer, instruction_predictor, processor, _ = load_pretrained_model(
             model_path,
@@ -522,7 +518,55 @@ def main(
                     action_seqs=action_seqs,
                     path_mask=None,
                     max_instr_len=config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MAX_INSTRUCTION_LENGTH,
+                    beam_num=beam_num,
+                    top_k=top_k,
+                    top_p=top_p,
+                    temperature=temperature
                 )
+            elif instruction_predictor_type == "video-llama2":
+                assert environment_type == "ss1-savi"
+
+                prompt = "[INST] <<SYS>>\n" \
+                        "A chat between a curious user and an artificial intelligence assistant." \
+                        "The assistant gives helpful, detailed, and polite answers to the user's questions." \
+                        "\n<</SYS>>\n\n <video>\nDescribe how the camera wearer moves around the indoor environment in 40 words or less. Follow the format of the output as shown in the example below.\n\n[Example of output format]\nTurn left and go down the steps on the left. Turn right and wait near the unicycle.\n[/Example of output format]\n[/INST]"
+                input_ids = tokenizer_MMODAL_token(
+                    prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
+                ).unsqueeze(0).to(device="cuda")
+
+                image_seqs, action_seqs = get_obs_seqs(sim, -1)
+
+                tmp_image_seq = (image_seqs.to('cpu').detach().numpy().copy().squeeze(1)[:, :, :, :3] * 256).astype(np.uint8)
+
+                image_seq_len = len(tmp_image_seq)
+                indices = np.arange(0, image_seq_len,  image_seq_len / num_frames).astype(int)
+
+                visual_tensor = process_video(
+                    tmp_image_seq[indices] if num_frames < image_seq_len else tmp_image_seq,
+                    processor,
+                    "pad",
+                    num_frames if num_frames < image_seq_len else image_seq_len,
+                ).to(
+                    dtype=torch.float16,
+                    device=torch.device('cuda') ,
+                    non_blocking=True,
+                ) # (l, c, h, w)
+
+                with torch.inference_mode():
+                    outputs = instruction_predictor.generate(
+                        input_ids,
+                        images_or_videos=[visual_tensor],
+                        modal_list=['video'],
+                        do_sample=True,
+                        temperature=0.2,
+                        # max_new_tokens=1024,
+                        max_new_tokens=40,
+                        use_cache=True,
+                        # return_dict_in_generate=True,
+                        # output_scores=True,
+                    )
+                instructions = tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
+                instructions = torch.tensor([sentence2token(instructions)], dtype=torch.int32).view(-1, 1) # (instr_len, 1)
             elif instruction_predictor_type == "savi-past-xpred" or instruction_predictor_type == "savi-future-xpred":
                 image_seqs, audio_seqs, pose_seqs, action_seqs = get_obs_seqs_for_xpred(sim, episode)
                 if instruction_predictor_type == "savi-future-xpred":
@@ -541,6 +585,10 @@ def main(
                     top_p,
                     temperature,
                 )
+                
+                # videollama2 xpredictor
+                # instructions = tokenizer.batch_decode(instructions.view(1,-1), skip_special_tokens=True)[0]
+                # instructions = torch.tensor([sentence2token(instructions)], dtype=torch.int32).view(-1, 1)
             elif instruction_predictor_type == "random":
                 instructions = torch.from_numpy(
                     np.random.randint(
@@ -624,7 +672,7 @@ if __name__=="__main__":
     )
     args = parser.parse_args()
 
-    if not (args.instruction_predictor_type == "savi-past-xpred" or args.instruction_predictor_type == "savi-future-xpred"):
+    if not (args.instruction_predictor_type == "xgen" or args.instruction_predictor_type == "savi-past-xpred" or args.instruction_predictor_type == "savi-future-xpred"):
         assert (
             args.beam_num is None
         ) and (
@@ -633,7 +681,7 @@ if __name__=="__main__":
             args.top_p is None
         ) and (
             args.temperature is None
-        ), "Can not scpecify text generation parameters, if not xpred."
+        )
     else:
         assert not (
             (
@@ -645,7 +693,7 @@ if __name__=="__main__":
             ) and (
                 args.temperature is None
             )
-        ), "specify text generation parameters, if xpred"
+        ), "specify text generation parameters"
 
     if args.environment_type == "ss1-savi":
         config = ss_get_config(args.config)

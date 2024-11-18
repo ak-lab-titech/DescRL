@@ -972,6 +972,7 @@ class PPOTrainer(BaseRLTrainer):
                     test_em.masks if ppo_cfg.use_external_memory else None,
                     need_logits=len(self.config.VIDEO_OPTION) > 0, # if video
                     deterministic=False,
+                    make_video=len(self.config.VIDEO_OPTION) > 0, # if video
                 )
                 if self.use_direct_map:
                     # predict_direct_map.copy_(batch["direct_map"]) # こっちを選択するとGTをいれることになる
@@ -984,10 +985,11 @@ class PPOTrainer(BaseRLTrainer):
             ) and (
                 'generated_instruction' in batch.keys() or 'habitat_sim_generated_instruction' in batch.keys()
             ):
-                iprl_logits = iprl_logits["logits"]
-                _, iprl_tokens = iprl_logits.max(2) # iprl_tokens: (instr_len, batch)
-                confidence = calc_confidence(iprl_logits)
-                confidences[-1].append(confidence)
+                iprl_tokens = iprl_logits.view(-1, 1)
+                confidence = None
+                # _, iprl_tokens = iprl_logits.max(2) # iprl_tokens: (instr_len, batch)
+                # confidence = calc_confidence(iprl_logits)
+                # confidences[-1].append(confidence)
                 iprl_sentences = tokens2sentences(iprl_tokens, lang)
                 if 'generated_instruction' in batch.keys():
                     true_sentences = tokens2sentences(batch['generated_instruction'].permute(1,0).int(), lang)

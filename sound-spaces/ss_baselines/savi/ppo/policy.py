@@ -72,12 +72,19 @@ class Policy(nn.Module):
         ext_memory_masks,
         need_logits=False,
         deterministic=False,
+        make_video=False,
     ):
         iprl_logits = None
         if self.use_iprl:
-            features, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits = self.net(
-                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, need_logits
-            )
+            if make_video:
+                assert need_logits
+                features, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits = self.net.predict_explanation(
+                    observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, need_logits
+                )
+            else:
+                features, rnn_hidden_states, ext_memory_feats, direct_map, iprl_logits = self.net(
+                    observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, need_logits
+                )
         else:
             features, rnn_hidden_states, ext_memory_feats, direct_map = self.net(
                 observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks
@@ -1039,4 +1046,98 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         ) # (instr_len, batch, vocab_num)
 
         return logits, instructions
+    
+    def predict_explanation(
+        self,
+        observations,
+        rnn_hidden_states,
+        prev_direct_map,
+        prev_actions,
+        masks,
+        ext_memory,
+        ext_memory_masks,
+        need_logits=False,
+        actions=None,
+        beam_num=1,
+        k=10,
+        p=0.95,
+        temperature=2.0,
+    ):
+        if self.share_decoder:
+            x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = self.forward_share_decoder(
+                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, True,
+            )
+        else:
+            x_att, rnn_hidden_states, x, direct_map, belief, enc_memory = super().forward(
+                observations, rnn_hidden_states, prev_direct_map, prev_actions, masks, ext_memory, ext_memory_masks, True,
+            )
+        if not need_logits:
+            return x_att, rnn_hidden_states, x, direct_map, None
+        
+        if self.iprl_use_gt_D:
+            category = observations["category"] # (batch, 21)
+            location = observations["pointgoal_with_gps_compass"] # (batch, 2)
+        else:
+            category = nn.functional.softmax(belief[:, :21], dim=1)
+            location = belief[:, 21:21+2*self.goal_num]
+
+        if self.use_instruction_predictor:
+            if self.feedback == "teacher":
+                if "generated_instruction" in observations.keys():
+                    target = observations["generated_instruction"] # (batch, instr_len)
+                    if len(np.shape(target)) == 3:
+                        if self.xgenerator_tokenizer_type == "video_llama2":
+                            target = torch.argmax(target, dim=2) # (batch, instr_len)
+                            bos_idx = 1
+                            batch_size = np.shape(target)[0]
+                            target = torch.cat(
+                                [torch.full((batch_size, 1), bos_idx).to(x.device), target],
+                                dim=1,
+                            )[:, :-1] # (batch, instr_len)
+                        elif self.xgenerator_tokenizer_type == "r2r":
+                            # まず、logitsを元にvideollama2のtokenierでsentenceに変換する
+                            output_ids = torch.argmax(target, dim=2).permute(1, 0) # (instr_len, batch)
+                            instr_len, batch_size = np.shape(output_ids)
+                            sentences = VIDEO_LLAMA2_TOKENIZER.batch_decode(output_ids.permute(1, 0), skip_special_tokens=True)
+
+                            # 次に、sentenceを、r2rのtokenizerによってr2r用のtokenに変換する
+                            # TODO ここ2重forなので遅くなっているはず
+                            bos_idx = BOS_IDX
+                            eos_idx = EOS_IDX
+                            pad_idx = PAD_IDX
+                            instructions = np.full((batch_size, instr_len), pad_idx)
+                            for i, sentence in enumerate(sentences):
+                                token = [bos_idx] + sentence2token(sentence) + [eos_idx]
+                                if len(token) > instr_len:
+                                    token = token[:instr_len]
+                                instructions[i, :len(token)] = token
+                            
+                            target = torch.from_numpy(instructions).to(x.device) # (batch, instr_len)
+                        else:
+                            raise Exception(f"self.xgenerator_tokenizer_type: {self.xgenerator_tokenizer_type}")
+                elif "habitat_sim_generated_instruction" in observations.keys():
+                    target = observations["habitat_sim_generated_instruction"] # (batch, instr_len)
+                else:
+                    raise Exception(f"feedback type is teacher, but there is no generated instruction.")
+            elif self.feedback == "student":
+                target = None
+            else:
+                raise Exception(f"feedback must be 'teacher' or 'student', not {self.feedback}")
+            
+
+            predicted_tokens = self.instruction_predictor.generate(
+                category,
+                location,
+                enc_memory,
+                None,
+                beam_num,
+                k,
+                p,
+                temperature,
+                "r2r",
+            )
+        else:
+            raise Exception()
+
+        return x_att, rnn_hidden_states, x, direct_map, predicted_tokens
 

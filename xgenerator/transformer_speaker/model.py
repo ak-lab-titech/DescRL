@@ -13,7 +13,7 @@ from torch.nn import Transformer, TransformerDecoderLayer, LayerNorm, Transforme
 from torch.nn.init import xavier_uniform_
 
 sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
-from common.load_lmdb import BOS_IDX
+from common.load_lmdb import BOS_IDX, PAD_IDX, EOS_IDX
 from common.model import (
     VisualFeatureEncoder,
     VisualImageEncoder,
@@ -329,6 +329,7 @@ class Seq2SeqTransformer(nn.Module):
     ):
         batch_size = np.shape(image_seqs)[1]
         assert batch_size == 1, "batch_size must be 1."
+        ended = torch.full((1, batch_size), False)
 
         if beam_num > 1:
             assert top_k is None and top_p is None and temperature is None
@@ -412,7 +413,10 @@ class Seq2SeqTransformer(nn.Module):
                 probs = probs / torch.sum(probs, dim=1)
                 probs = probs.flatten()
                 token = torch.multinomial(probs, num_samples=1)
-                past_tokens = torch.cat((past_tokens, token.unsqueeze(0)), dim=0)
+                next_tokens = token.unsqueeze(0)
+                next_tokens[ended] = PAD_IDX
+                ended[next_tokens == EOS_IDX] = True
+                past_tokens = torch.cat((past_tokens, next_tokens), dim=0)
             
             # sentence = tokens2sentences(past_tokens[:, 0].view(-1,).view(-1, 1))[0]
             # print(f"sentence: {sentence}")
