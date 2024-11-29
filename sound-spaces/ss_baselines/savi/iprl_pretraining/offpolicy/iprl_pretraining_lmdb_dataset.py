@@ -160,11 +160,12 @@ if __name__=="__main__":
 
     dataset_name = "val_w_past_instruction"
     lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val"
-    save_video_path = "./data/videos/offpolicy_lmdb_dataset/hoge"
-    foundation_model_type = "video_llama2"
-    foundation_model_path = "DAMO-NLP-SG/VideoLLaMA2-7B-16F-Base"
-    num_frames = 16
-    indices = [0, 1, 2, 3]
+    save_video_path = "./data/videos/offpolicy_lmdb_dataset/val_CNNTF_xgen"
+    foundation_model_type = None
+    fm_lmdb_dataset_path = None
+    indices = [0, 100, 200, 300, 400]
+    environment_type = "ss1-savi"
+    
     config = get_config("ss_baselines/savi/iprl_pretraining/config.yaml")
     dataset = IPRLPretrainingLMDBDataset(
         config=config.TASK_CONFIG,
@@ -172,8 +173,8 @@ if __name__=="__main__":
         lmdb_dataset_path=lmdb_dataset_path,
         data_num=100,
         foundation_model_type=foundation_model_type,
-        foundation_model_path=foundation_model_path,
-        num_frames=num_frames,
+        fm_lmdb_dataset_path=fm_lmdb_dataset_path,
+        environment_type=environment_type,
     )
 
     for idx in indices:
