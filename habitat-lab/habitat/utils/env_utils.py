@@ -26,11 +26,16 @@ def make_env_fn(
     Returns:
         env object created according to specification.
     """
-    if "TASK_CONFIG" in config:
-        config = config.TASK_CONFIG
-    dataset = make_dataset(config.DATASET.TYPE, config=config.DATASET)
-    env = env_class(config=config, dataset=dataset)
-    env.seed(config.SEED)
+    if "VLNCEDaggerEnv" in str(env_class):
+        dataset = make_dataset(config.TASK_CONFIG.DATASET.TYPE, config=config.TASK_CONFIG.DATASET)
+        env = env_class(config=config, dataset=dataset)
+        env.seed(config.TASK_CONFIG.SEED)
+    else:
+        if "TASK_CONFIG" in config:
+            config = config.TASK_CONFIG
+        dataset = make_dataset(config.DATASET.TYPE, config=config.DATASET)
+        env = env_class(config=config, dataset=dataset)
+        env.seed(config.SEED)
     return env
 
 
