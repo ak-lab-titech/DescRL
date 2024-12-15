@@ -17,6 +17,8 @@ import glob
 import copy
 import sys
 import pickle
+import gzip
+import json
 
 import numpy as np
 import torch
@@ -946,6 +948,17 @@ class PPOTrainer(BaseRLTrainer):
         ]
         if len(self.config.VIDEO_OPTION) > 0:
             os.makedirs(self.config.VIDEO_DIR, exist_ok=True)
+        
+
+        save_dir = self.config.VIDEO_DIR.rsplit("/", 1)[0]
+        os.makedirs(f"{save_dir}/episodes/content", exist_ok=True)
+        with gzip.open(
+            "/home/4/ud02274/navigation/my-VLN-CE/data/datasets/R2R_VLNCE_v1-3_preprocessed/val_unseen/val_unseen.json.gz",
+            'rb',
+        ) as f:
+            file_content = f.read()
+        val_unseen_data = json.loads(file_content.decode('utf-8'))
+        dict_dataset = {"instruction_vocab": val_unseen_data["instruction_vocab"], "episodes": []}
 
         self.actor_critic.eval()
         if self.config.RL.PPO.use_belief_predictor:
@@ -1164,6 +1177,34 @@ class PPOTrainer(BaseRLTrainer):
                             plt.yticks([])
                             plt.imshow(top_down_map)
                             fig.savefig(f'./{self.config.VIDEO_DIR}/top_down_map_cnt{len(stats_episodes)}.pdf')
+                            
+                            episode_dict = {
+                                'episode_id': current_episodes[i].episode_id,
+                                'trajectory_id': current_episodes[i].episode_id,
+                                'scene_id': os.path.join(*current_episodes[i].scene_id.split("/")[-3:]),
+                                'start_position': current_episodes[i].start_position,
+                                'start_rotation': current_episodes[i].start_rotation,
+                                'goals': [
+                                    {
+                                        'position': goal.position,
+                                        'radius': goal.radius,
+                                    } for goal in current_episodes[i].goals
+                                ],
+                                'instruction': {
+                                    'instruction_text': iprl_sentences[i],
+                                    'instruction_tokens': iprl_tokens[i, :].view(-1,).cpu().numpy().tolist(),
+                                },
+                                'reference_path': None,
+                                "map_info": {
+                                    "map": infos[i]["top_down_map"]["map"].tolist(),
+                                    "fog_of_war_mask": infos[i]["top_down_map"]["fog_of_war_mask"].tolist(),
+                                    "agent_map_coord": infos[i]["top_down_map"]["agent_map_coord"],
+                                    "agent_angle": infos[i]["top_down_map"]["agent_angle"],
+                                    "grid_size": infos[i]["top_down_map"]["grid_size"],
+                                    "bounds": (infos[i]["top_down_map"]["bounds"][0].tolist(), infos[i]["top_down_map"]["bounds"][1].tolist()),
+                                },
+                            }
+                            dict_dataset["episodes"].append(episode_dict)
 
                         # observations has been reset but info has not
                         # to be consistent, do not use the last frame
@@ -1196,6 +1237,12 @@ class PPOTrainer(BaseRLTrainer):
                 test_em,
                 descriptor_pred_gt
             )
+        
+        if len(self.config.VIDEO_OPTION) > 0 and "top_down_map" in self.config.VISUALIZATION_OPTION:
+            # Save episode infos
+            dataset_json_str = json.dumps(dict_dataset)
+            with gzip.open(f"{save_dir}/episodes/episodes.json.gz", "wt") as f:
+                f.write(dataset_json_str)
 
         # dump stats for each episode
         stats_file = os.path.join(

@@ -52,6 +52,9 @@ try:
 except ImportError:
     pass
 
+import matplotlib.pyplot as plt
+from habitat.utils.visualizations import maps
+
 cv2 = try_cv2_import()
 
 
@@ -1074,6 +1077,7 @@ class TopDownMap(Measure):
             "agent_map_coord": (map_agent_x, map_agent_y),
             "agent_angle": self.get_polar_angle(),
             "grid_size": grid_size,
+            "bounds": (lower_bound, upper_bound),
         }
 
     def get_polar_angle(self):
