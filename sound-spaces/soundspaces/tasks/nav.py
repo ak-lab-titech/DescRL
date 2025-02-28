@@ -508,7 +508,7 @@ class GeneratedInstruction(Sensor):
             assert oracle_actions is not None, "oracle_action is None. Maybe you are trying ss1-objnav?"
             # TODO ss1-objnavはゴール地点がgridとして存在しないことがある
             # return None, None
-        elif self.future_or_past == "past":
+        elif self.future_or_past == "past" or self.future_or_past == "future_and_past":
             self._sim._previous_step_collided = self._sim.k_prev_previous_step_collided[0]
             self._sim._is_episode_active = True
             self._sim._receiver_position_index = self._sim.k_prev_reciever_position_index[0]
@@ -520,8 +520,14 @@ class GeneratedInstruction(Sensor):
                 position=list(self._sim.graph.nodes[self._sim._receiver_position_index]['point']),
                 rotation=quat_from_angle_axis(np.deg2rad(self._sim._rotation_angle), np.array([0, 1, 0])),
             )
-            oracle_actions = [self._sim.k_prev_actions[i] for i in range(len(self._sim.k_prev_actions))]
-            oracle_actions = oracle_actions + [0]
+            if self.future_or_past == "past":
+                oracle_actions = [self._sim.k_prev_actions[i] for i in range(len(self._sim.k_prev_actions))]
+                oracle_actions = oracle_actions + [0]
+            else: # self.future_or_past == "future_and_past"
+                assert self.future_step_num == self._sim.prev_k, f"future_step_num: {self.future_step_num}, k_prev: {self._sim.k_prev}" # 必ずしも一緒じゃなくていいんだけど一緒になるようにコードは書いているので
+                past_actions = [self._sim.k_prev_actions[i] for i in range(len(self._sim.k_prev_actions))]
+                future_actions = self._sim.get_oracle_actions_from_current_pos()
+                oracle_actions = past_actions + future_actions
         else:
             raise Exception(f"future_or_past in GeneratedInstruction: {self.future_or_past}")
         future_step_cnt = 0
@@ -572,6 +578,8 @@ class GeneratedInstruction(Sensor):
                 self.future_or_past == "future" and (action == 0 or future_step_cnt == self.future_step_num)
             ) or (
                 self.future_or_past == "past" and (action == 0)
+            ) or (
+                self.future_or_past == "future_and_past" and (action == 0 or future_step_cnt == self.future_step_num + self._sim.prev_k)
             ):
                 break
             self._sim.step(action, append_k_prev=False)

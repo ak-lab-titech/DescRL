@@ -129,20 +129,34 @@ def get_obs_seqs_for_habitat_objnav(sim, oracle_actions):
 
 def make_batch(image_seqs, action_seqs, input_future_step_num, future_or_past):
     batch_size = np.shape(image_seqs)[0]
-    batched_image_seqs = np.zeros(
-        (input_future_step_num, batch_size) + np.shape(image_seqs[0][0]),
-        np.float32,
-    )
-    batched_action_seqs = np.zeros(
-        (input_future_step_num, batch_size, 4),
-        np.float32,
-    )
+    
+    if future_or_past == "future_and_past":
+        batched_image_seqs = np.zeros(
+            (input_future_step_num*2, batch_size) + np.shape(image_seqs[0][0]),
+            np.float32,
+        )
+        batched_action_seqs = np.zeros(
+            (input_future_step_num*2, batch_size, 4),
+            np.float32,
+        )
+    else:
+        batched_image_seqs = np.zeros(
+            (input_future_step_num, batch_size) + np.shape(image_seqs[0][0]),
+            np.float32,
+        )
+        batched_action_seqs = np.zeros(
+            (input_future_step_num, batch_size, 4),
+            np.float32,
+        )
     path_masks = np.full((batch_size, input_future_step_num), True)
 
     for i in range(batch_size):
         if future_or_past == "future":
             image_seq = image_seqs[i:i+input_future_step_num, 0]
             action_seq = action_seqs[i:i+input_future_step_num, 0]
+        elif future_or_past == "future_and_past":
+            image_seq = image_seqs[max(0, i-input_future_step_num+1):i+input_future_step_num, 0]
+            action_seq = action_seqs[max(0, i-input_future_step_num+1):i+input_future_step_num, 0]
         elif future_or_past == "past":
             image_seq = image_seqs[max(0, i-input_future_step_num+1):i+1, 0]
             action_seq = action_seqs[max(0, i-input_future_step_num+1):i+1, 0]
@@ -263,7 +277,6 @@ def main(
     # for val & test
     # dict_dataset = {}
 
-    # step_num_for_FEPRL = 5 # for F-EPRL
     print(f"length of episodes: {len(episodes)}\n")
 
     if environment_type == "ss1-savi":

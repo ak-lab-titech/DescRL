@@ -59,7 +59,7 @@ TASK:
     MAX_INSTRUCTION_LENGTH: 40
     FUTURE_STEP_NUM: 20 # -1なら最後まで。ただしpastでは-1は未実装
     MODEL_RESOLUTION: 128 # 336
-    FUTURE_OR_PAST: "past" # future or past
+    FUTURE_OR_PAST: "past" # future or past or future_and_past
     NUM_FRAMES: 16 # for video_llama2
 
   MEASUREMENTS: ['DISTANCE_TO_GOAL', 'NORMALIZED_DISTANCE_TO_GOAL', 'SUCCESS', 'SPL', 'SOFT_SPL', 'NUM_ACTION', 'SUCCESS_WEIGHTED_BY_NUM_ACTION', 'SUCCESS_WHEN_SILENT']

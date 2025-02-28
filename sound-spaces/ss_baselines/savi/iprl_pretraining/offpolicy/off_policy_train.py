@@ -235,8 +235,8 @@ class OffPolicyEPRLPreTrainer():
                 self.val_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val_size336"
                 self.val_data_num = 500
             else:
-                self.train_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train_cr02"
-                self.train_data_num = 100398
+                self.train_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train"
+                self.train_data_num = 502103
                 self.val_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val"
                 self.val_data_num = 500
         elif self.environment_type == "habitat-objnav":
@@ -285,7 +285,7 @@ class OffPolicyEPRLPreTrainer():
             if self.foundation_model_type is not None:
                 assert train_split == "train_cr_0.2_w_past_instruction", "if you want to use a foundation model, use train_cr_0.2_w_past_instruction dataset."
 
-            if train_split == "train_w_instruction" or train_split == "train_w_past_instruction" or train_split == "train_cr_0.2_w_past_instruction" or train_split == "train_size336_w_past_instruction_cr_0.2":
+            if train_split == "train_w_instruction" or train_split == "train_w_past_instruction" or train_split == "train_cr_0.2_w_past_instruction" or train_split == "train_size336_w_past_instruction_cr_0.2" or train_split == "train_w_future_and_past_instruction":
                 train_dataset = IPRLPretrainingLMDBDataset(
                     self.config.TASK_CONFIG, train_split, self.train_lmdb_dataset_path, self.train_data_num,
                         self.foundation_model_type,
@@ -295,11 +295,13 @@ class OffPolicyEPRLPreTrainer():
                 )
             else:
                 raise Exception(f"train_split: {train_split}")
-            if "past" in train_split:
+            if "past" in train_split and not "future" in train_split:
                 if "size336" in train_split:
                     val_split = "val_size336_w_past_instruction"
                 else:
                     val_split = "val_w_past_instruction"
+            elif "past" in train_split and "future" in train_split:
+                val_split = "val_w_future_and_past_instruction"
             else:
                 val_split = "val_w_instruction"
             if self.environment_type == "habitat-objnav":
