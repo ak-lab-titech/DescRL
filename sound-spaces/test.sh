@@ -61,13 +61,13 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven" ]; then
     python ss_baselines/saven/run.py \
         --run-type eval \
         --exp-config ss_baselines/saven/config/semantic_audionav/saven.yaml \
-        --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME \
-        EVAL_CKPT_PATH_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
-        LOG_FILE data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
-        TENSORBOARD_DIR data/models/$ENV/$SCENE_DATASET/$MODEL/$MODEL_NAME/test \
+        --model-dir data/models/$ENV/$SCENE_DATASET/$MODEL-2nd/$MODEL_NAME \
+        EVAL_CKPT_PATH_DIR data/models/$ENV/$SCENE_DATASET/$MODEL-2nd/$MODEL_NAME/data/ckpt.$CKPT_NUM.pth \
+        LOG_FILE data/models/$ENV/$SCENE_DATASET/$MODEL-2nd/$MODEL_NAME/test-ckpt$CKPT_NUM.log \
+        TENSORBOARD_DIR data/models/$ENV/$SCENE_DATASET/$MODEL-2nd/$MODEL_NAME/test \
         NUM_PROCESSES 10 \
         CONTINUOUS False \
-        EVAL.SPLIT test \
+        EVAL.SPLIT test_unseen-scenes_unheard-sounds \
         RL.DDPPO.pretrained False \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
         USE_SYNC_VECENV True
