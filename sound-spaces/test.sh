@@ -67,7 +67,7 @@ elif [ $ENV = "ss1-savi" ] && [ $MODEL = "ksaven" ]; then
         TENSORBOARD_DIR data/models/$ENV/$SCENE_DATASET/$MODEL-2nd/$MODEL_NAME/test \
         NUM_PROCESSES 10 \
         CONTINUOUS False \
-        EVAL.SPLIT test_unseen-scenes_unheard-sounds \
+        EVAL.SPLIT test \
         RL.DDPPO.pretrained False \
         TEST_EPISODE_COUNT $TEST_EPISODE_COUNT \
         USE_SYNC_VECENV True
