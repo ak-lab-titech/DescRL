@@ -1,7 +1,9 @@
 import logging
 import itertools
 import sys
+import pickle
 
+import pandas as pd
 import torch
 import torch.nn as nn
 import numpy as np
@@ -67,6 +69,7 @@ class AudioNavSMTInstructionPredictor(nn.Module):
         iprl_nhead,
         iprl_dim_feedforward,
         iprl_dropout,
+        iprl_use_gt_D,
         iprl_feedback,
         iprl_use_bos,
         max_grad_norm,
@@ -139,18 +142,36 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             pretraining=kwargs["pretraining"],
             on_or_off="off",
         )
-        self.belief_predictor = BeliefPredictor(
-            belief_cfg,
-            self.device,
-            self.smt_state_encoder._input_size,
-            self.smt_state_encoder._pose_indices,
-            self.smt_state_encoder.hidden_state_size,
-            batch_size, # num_envs
-            False, # has_distractor_sound
-        ).to(device=self.device)
+
+        if not iprl_use_gt_D:
+            raise NotImplementedError()
+            # self.belief_predictor = BeliefPredictor(
+            #     belief_cfg,
+            #     self.device,
+            #     self.smt_state_encoder._input_size,
+            #     self.smt_state_encoder._pose_indices,
+            #     self.smt_state_encoder.hidden_state_size,
+            #     batch_size, # num_envs
+            #     False, # has_distractor_sound
+            # ).to(device=self.device)
+            
 
         if self._use_belief_encoder:
             self.belief_encoder = nn.Linear(self._hidden_size, self._hidden_size)
+
+        mp3d_objects_of_interest_filepath = r"data/metadata/mp3d_objects_of_interest_data.bin"
+        with open(mp3d_objects_of_interest_filepath, 'rb') as bin_file:
+            self.ooi_objects_id_name = pickle.load(bin_file)
+            self.ooi_regions_id_name = pickle.load(bin_file)
+        
+        graph_filename = r"data/metadata/mp3d_graph_object.csv"
+        df = pd.read_csv(graph_filename, delimiter=',')
+        self.object_regions = {}
+        for index, row in df.iterrows():
+            obj = row['Sounding Objects']
+            regions = row['Regions']
+            regions = [reg.strip() for reg in regions.split(',')]
+            self.object_regions[obj] = regions
 
         lang = R2RLang(name="r2r_train")
         self.instruction_predictor = InstructionPredictor(
@@ -296,16 +317,30 @@ class AudioNavSMTInstructionPredictor(nn.Module):
 
         belief = torch.zeros((x.shape[1], self._hidden_size), device=x.device)
         
-        with torch.no_grad():
-            observations = self.update_belief(observations)
+        # with torch.no_grad():
+        #     observations = self.update_belief(observations)
 
-        obs_cat_belief = observations[KSAVENCategoryBelief.cls_uuid]
+        categories = observations["category"]
+        obs_cat_belief = torch.zeros(
+            (categories.shape[0], len(self.ooi_objects_id_name) + len(self.ooi_regions_id_name)),
+            device=x.device,
+        )
+        object_ids = torch.argmax(categories, axis=1)
+        for i, object_id in enumerate(object_ids):
+            object_name = self.ooi_objects_id_name[object_id.item()]
+            regions = self.object_regions[object_name]
+            regions_id = [list(self.ooi_regions_id_name.keys())[list(self.ooi_regions_id_name.values()).index(reg)]
+                              for reg in regions]
+            regions_id = torch.tensor([1 if reg_id in regions_id else 0
+                                       for reg_id in range(len(self.ooi_regions_id_name))])
+            obs_cat_belief[i] = torch.cat([categories[i].to(x.device), regions_id.to(x.device)])
+    
         audio_gcn_embds = torch.zeros((obs_cat_belief.shape[0], self.audio_gcn.feature_dims), device=x.device) # dim: 254
         for i in range(len(obs_cat_belief)):
             audio_gcn_embds[i, :] = self.audio_gcn(obs_cat_belief[i].to(x.device))
         belief[:, :self.audio_gcn.feature_dims] = audio_gcn_embds
 
-        belief[:, self.audio_gcn.feature_dims:self.audio_gcn.feature_dims+2] = observations[LocationBelief.cls_uuid].to(x.device)
+        belief[:, self.audio_gcn.feature_dims:self.audio_gcn.feature_dims+2] = observations["location"].to(x.device)
 
         if self._use_belief_encoder:
             belief = self.belief_encoder(belief)

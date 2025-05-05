@@ -445,6 +445,7 @@ class AudioNavSMTNet(Net):
                     # belief[:, :21] = observations[KSAVENCategoryBelief.cls_uuid]
 
                     obs_cat_belief = observations[KSAVENCategoryBelief.cls_uuid]
+                    obs_cat_belief[:, :21] = nn.functional.softmax(obs_cat_belief[:, :21], dim=1)
                     audio_gcn_embds = torch.zeros((obs_cat_belief.shape[0], self.audio_gcn.feature_dims), device=x.device) # dim: 254
                     for i in range(len(obs_cat_belief)):
                         audio_gcn_embds[i, :] = self.audio_gcn(obs_cat_belief[i])
@@ -653,6 +654,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
                     # belief[:, :21] = observations[KSAVENCategoryBelief.cls_uuid]
 
                     obs_cat_belief = observations[KSAVENCategoryBelief.cls_uuid]
+                    obs_cat_belief[:, :21] = nn.functional.softmax(obs_cat_belief[:, :21], dim=1)
                     audio_gcn_embds = torch.zeros((obs_cat_belief.shape[0], self.audio_gcn.feature_dims), device=x.device) # dim: 254
                     for i in range(len(obs_cat_belief)):
                         audio_gcn_embds[i, :] = self.audio_gcn(obs_cat_belief[i])

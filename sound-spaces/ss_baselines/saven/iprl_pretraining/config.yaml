@@ -25,7 +25,7 @@ RL:
     num_steps: 64 # 150
     num_mini_batch: 1 # 2
     max_grad_norm: 0.2
-    use_belief_predictor: True
+    use_belief_predictor: False
     use_external_memory: True
     SCENE_MEMORY_TRANSFORMER:
       memory_size: 64 # 150
@@ -38,10 +38,10 @@ RL:
       use_pretrained: False
       pretrained_path: ''
       use_xgen_visual_encoder: False
-      freeze_encoders: True
+      freeze_encoders: False
       pretraining: False
     BELIEF_PREDICTOR:
-      online_training: True # 学習はしないけど、belief_encoderのパラメータがTrueにしないと合わなくなるのでTrueにしている
+      online_training: False
       train_encoder: False
       lr: 1e-3
       use_label_belief: True

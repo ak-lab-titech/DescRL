@@ -245,14 +245,35 @@ class DDPPOTrainer(PPOTrainer):
                         if "visual_encoder.depth_encoder." in k
                     },
                 )
+
+                first_path = "data/models/ss1-savi/mp3d/ksaven-1st/baseline/data/ckpt.36.pth"
+                first_pretrained_state = torch.load(first_path, map_location="cpu")
                 if ppo_cfg.use_belief_predictor:
                     self.belief_predictor.predictor.load_state_dict(
                         {
-                            k[len("belief_predictor.predictor."):]: v
-                            for k, v in pretrained_state['state_dict'].items()
-                            if ".predictor." in k and "belief_predictor" in k
+                            k[len("predictor."):]: v
+                            for k, v in first_pretrained_state['belief_predictor'].items()
+                            if "predictor." in k
                         }
                     )
+                
+                # if ppo_cfg.use_belief_predictor:
+                #     if "belief_predictor" in pretrained_state.keys():
+                #         self.belief_predictor.predictor.load_state_dict(
+                #             {
+                #                 k[len("predictor."):]: v
+                #                 for k, v in pretrained_state['belief_predictor'].items()
+                #                 if "predictor." in k
+                #             }
+                #         )
+                #     else:
+                #         self.belief_predictor.predictor.load_state_dict(
+                #             {
+                #                 k[len("belief_predictor.predictor."):]: v
+                #                 for k, v in pretrained_state['state_dict'].items()
+                #                 if ".predictor." in k and "belief_predictor" in k
+                #             }
+                #         )
 
         if self.config.RL.DDPPO.reset_critic:
             nn.init.orthogonal_(self.actor_critic.critic.fc.weight)
