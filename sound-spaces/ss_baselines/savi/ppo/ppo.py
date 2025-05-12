@@ -12,12 +12,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor, AutoTokenizer
+from qwen_vl_utils import process_vision_info
+from PIL import Image
 
 from habitat import logger
 sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.load_lmdb import PAD_IDX
 from xgenerator.common.lang import tokens2sentences, R2RLang
 from ss_baselines.savi.iprl_pretraining.common.videollama2_kd_loss import VideoLLaMA2KDLoss, R2RTokenizerVideoLLaMA2KDLoss
+from ss_baselines.savi.iprl_pretraining.common.qwen25vl_kd_loss import Qwen25VLKDLoss
 from xgenerator.common.lang import tokens2sentences, sentence2token, R2RLang, VIDEO_LLAMA2_TOKENIZER
 from xgenerator.common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from videollama2.mm_utils import get_model_name_from_path
@@ -63,6 +67,10 @@ class PPO(nn.Module):
         logger.info(f"xgenerator_type: {self.xgenerator_type}, tokenizer_type: {self.xgenerator_tokenizer_type}")
         if self.xgenerator_type == "cnn_tf":
             self.iprl_loss_fn = torch.nn.CrossEntropyLoss(ignore_index=PAD_IDX)
+        elif self.xgenerator_type == "qwen25vl" and self.xgenerator_tokenizer_type == "qwen25vl":
+            self.iprl_loss_fn = Qwen25VLKDLoss()
+        elif self.xgenerator_type == "qwen25vl" and self.xgenerator_tokenizer_type == "r2r":
+            raise NotImplementedError()
         elif self.xgenerator_type == "video_llama2" and self.xgenerator_tokenizer_type == "video_llama2":
             self.iprl_loss_fn = VideoLLaMA2KDLoss(visual_feature_coef=0.0, logits_coef=1.0)
         elif self.xgenerator_type == "video_llama2" and self.xgenerator_tokenizer_type == "r2r":
@@ -106,6 +114,27 @@ class PPO(nn.Module):
             self.input_ids = tokenizer_MMODAL_token(
                 prompt, tokenizer, MMODAL_TOKEN_INDEX["VIDEO"], return_tensors='pt',
             ).unsqueeze(0).to(self.device)
+        elif self.xgenerator_type == "qwen25vl" and self.xgenerator_tokenizer_type == "qwen25vl":
+            print(f"Device in PPO: {self.device}")
+
+            model_path = "Qwen/Qwen2.5-VL-7B-Instruct"
+            self.foundation_model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                model_path,
+                torch_dtype=torch.bfloat16,
+                # attn_implementation="flash_attention_2", # TODO installにめちゃ時間かかる...
+                device_map=self.device,
+            )
+            self.processor = AutoProcessor.from_pretrained(model_path)
+            self.text = "<|im_start|>system\n" \
+                "You are a helpful assistant.<|im_end|>\n" \
+                "<|im_start|>user\n" \
+                "<|vision_start|><|video_pad|><|vision_end|>Describe how the camera wearer moves around the indoor environment in 40 words or less. Follow the format of the output as shown in the example below.\n" \
+                "\n" \
+                "[Example of output format]\n" \
+                "Turn left and go down the steps on the left. Turn right and wait near the unicycle.\n" \
+                "[/Example of output format]\n" \
+                "<|im_end|>\n" \
+                "<|im_start|>assistant\n"
         else:
             self.foundation_model = None
 
@@ -128,86 +157,129 @@ class PPO(nn.Module):
         direct_map_loss_epoch = 0
         iprl_loss_epoch = 0
 
-        # data_generator = rollouts.recurrent_generator(
-        #     advantages, self.num_mini_batch
-        # )
+        data_generator = rollouts.recurrent_generator(
+            advantages, self.num_mini_batch
+        )
 
-        # for sample in data_generator:
-        #     (
-        #         obs_batch,
-        #         recurrent_hidden_states_batch,
-        #         prev_direct_map_batch,
-        #         actions_batch,
-        #         prev_actions_batch,
-        #         value_preds_batch,
-        #         return_batch,
-        #         masks_batch,
-        #         old_action_log_probs_batch,
-        #         adv_targ,
-        #         external_memory,
-        #         external_memory_masks,
-        #     ) = sample
+        for sample in data_generator:
+            (
+                obs_batch,
+                recurrent_hidden_states_batch,
+                prev_direct_map_batch,
+                actions_batch,
+                prev_actions_batch,
+                value_preds_batch,
+                return_batch,
+                masks_batch,
+                old_action_log_probs_batch,
+                adv_targ,
+                external_memory,
+                external_memory_masks,
+            ) = sample
 
-        #     if self.foundation_model is not None:
-        #         generated_instructions = obs_batch["generated_instruction"].half() # (b, f, c, h, w)
-        #         batch_size = generated_instructions.shape[0]
-        #         with torch.inference_mode():
-        #             outputs = self.foundation_model.generate(
-        #                 self.input_ids.repeat(batch_size, 1),
-        #                 images_or_videos=generated_instructions,
-        #                 modal_list=['video' for _ in range(batch_size)],
-        #                 do_sample=True,
-        #                 temperature=0.2,
-        #                 # max_new_tokens=1024,
-        #                 max_new_tokens=40,
-        #                 use_cache=True,
-        #                 return_dict_in_generate=True,
-        #                 output_scores=True,
-        #             )
-        #         logits = torch.stack(outputs.scores).permute(1, 0, 2) # (batch, l, bocab)
-        #         obs_batch["generated_instruction"] = logits
+            if self.foundation_model is not None and self.xgenerator_type == "video_llama2":
+                generated_instructions = obs_batch["generated_instruction"].half() # (b, f, c, h, w)
+                batch_size = generated_instructions.shape[0]
+                with torch.inference_mode():
+                    outputs = self.foundation_model.generate(
+                        self.input_ids.repeat(batch_size, 1),
+                        images_or_videos=generated_instructions,
+                        modal_list=['video' for _ in range(batch_size)],
+                        do_sample=True,
+                        temperature=0.2,
+                        # max_new_tokens=1024,
+                        max_new_tokens=40,
+                        use_cache=True,
+                        return_dict_in_generate=True,
+                        output_scores=True,
+                    )
+                logits = torch.stack(outputs.scores).permute(1, 0, 2) # (batch, l, bocab)
+                obs_batch["generated_instruction"] = logits
+            
+            elif self.foundation_model is not None and self.xgenerator_type == "qwen25vl":
+                generated_instructions = obs_batch["generated_instruction"] # (b, l, h, w, c)
+                batch_size = generated_instructions.shape[0]
+                generated_instructions = (generated_instructions.to('cpu').detach().numpy().copy()*255).astype(np.uint8)
 
-        #     for e in range(self.ppo_epoch):
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "video",
+                                "video": [Image.fromarray(frame) for frame in generated_instructions[i]],
+                                # "max_pixels": 360 * 420,
+                                # "fps": 5.0,
+                            },
+                        ],
+                    } for i in range(batch_size)
+                ]
+                image_inputs, video_inputs, video_kwargs = process_vision_info(messages, return_video_kwargs=True)
+                inputs = self.processor(
+                    text=[self.text for _ in range(batch_size)],
+                    images=image_inputs,
+                    videos=video_inputs,
+                    # fps=1.0,
+                    padding=True,
+                    return_tensors="pt",
+                    **video_kwargs,
+                )
+                inputs = inputs.to(self.device)
+                with torch.inference_mode():
+                    outputs = self.foundation_model.generate(
+                        **inputs,
+                        # do_sample=True,
+                        # temperature=0.2,
+                        max_new_tokens=40,
+                        return_dict_in_generate=True,
+                        output_scores=True,
+                    )
+                logits = torch.stack(outputs.scores).permute(1, 0, 2) # (batch, l, vocab)
+                obs_batch["generated_instruction"] = logits
 
-        for e in range(self.ppo_epoch):
-            data_generator = rollouts.recurrent_generator(
-                advantages, self.num_mini_batch
-            )
+            for e in range(self.ppo_epoch):
 
-            for sample in data_generator:
-                (
-                    obs_batch,
-                    recurrent_hidden_states_batch,
-                    prev_direct_map_batch,
-                    actions_batch,
-                    prev_actions_batch,
-                    value_preds_batch,
-                    return_batch,
-                    masks_batch,
-                    old_action_log_probs_batch,
-                    adv_targ,
-                    external_memory,
-                    external_memory_masks,
-                ) = sample
+        # for e in range(self.ppo_epoch):
+        #     data_generator = rollouts.recurrent_generator(
+        #         advantages, self.num_mini_batch
+        #     )
 
-                if self.foundation_model is not None:
-                    generated_instructions = obs_batch["generated_instruction"].half() # (b, f, c, h, w)
-                    batch_size = generated_instructions.shape[0]
-                    with torch.inference_mode():
-                        outputs = self.foundation_model.generate(
-                            self.input_ids.repeat(batch_size, 1),
-                            images_or_videos=[generated_instructions[i] for i in range(len(generated_instructions))],
-                            modal_list=['video' for _ in range(batch_size)],
-                            do_sample=True,
-                            temperature=0.2,
-                            # max_new_tokens=1024,
-                            max_new_tokens=40,
-                            use_cache=True,
-                            return_dict_in_generate=True,
-                            output_scores=True,
-                        )
-                    logits = torch.stack(outputs.scores).permute(1, 0, 2) # (batch, l, bocab)
-                    obs_batch["generated_instruction"] = logits
+        #     for sample in data_generator:
+        #         (
+        #             obs_batch,
+        #             recurrent_hidden_states_batch,
+        #             prev_direct_map_batch,
+        #             actions_batch,
+        #             prev_actions_batch,
+        #             value_preds_batch,
+        #             return_batch,
+        #             masks_batch,
+        #             old_action_log_probs_batch,
+        #             adv_targ,
+        #             external_memory,
+        #             external_memory_masks,
+        #         ) = sample
+
+                # if self.foundation_model is not None and self.xgenerator_type == "video_llama2":
+                #     generated_instructions = obs_batch["generated_instruction"].half() # (b, f, c, h, w)
+                #     batch_size = generated_instructions.shape[0]
+                #     with torch.inference_mode():
+                #         outputs = self.foundation_model.generate(
+                #             self.input_ids.repeat(batch_size, 1),
+                #             images_or_videos=[generated_instructions[i] for i in range(len(generated_instructions))],
+                #             modal_list=['video' for _ in range(batch_size)],
+                #             do_sample=True,
+                #             temperature=0.2,
+                #             # max_new_tokens=1024,
+                #             max_new_tokens=40,
+                #             use_cache=True,
+                #             return_dict_in_generate=True,
+                #             output_scores=True,
+                #         )
+                #     logits = torch.stack(outputs.scores).permute(1, 0, 2) # (batch, l, bocab)
+                #     obs_batch["generated_instruction"] = logits
+                # elif self.foundation_model is not None and self.xgenerator_type == "qwen25vl":
+                #     raise NotImplementedError()
                 
                 # Reshape to do in a single forward pass for all steps
                 (
@@ -293,6 +365,31 @@ class PPO(nn.Module):
                                 true_sentence = tokens2sentences(iprl_targets, lang)
                                 logger.info(f"Pred -1: {pred_sentence[-1]}")
                                 logger.info(f"True -1: {true_sentence[-1]}")
+                        elif self.xgenerator_type == "qwen25vl":
+                            if "generated_instruction" in obs_batch.keys():
+                                if self.xgenerator_tokenizer_type == "r2r":
+                                    raise NotImplementedError()
+                                if self.xgenerator_tokenizer_type == "qwen25vl":
+                                    teacher_logits = obs_batch["generated_instruction"]
+                                    pad_token_id = 151643
+                                    teacher_logits_mask = (torch.argmax(teacher_logits, dim=2) == pad_token_id).long()
+                                    loss = self.iprl_loss_fn(
+                                        teacher_logits=teacher_logits.permute(1, 0, 2)[:-1], # (instr_len-1, batch, vocab_size)
+                                        student_logits=iprl_logits, # (instr_len-1, batch, vocab_size)
+                                        teacher_logits_mask=teacher_logits_mask[:, :-1], # (batch, instr_len-1)
+                                    )
+                                    iprl_loss += loss
+                                    if int(os.environ["LOCAL_RANK"]) == 0 and e == 0 and self.update_cnt % 5 == 0:
+                                        _, iprl_tokens = iprl_logits.max(2)
+                                        _, target_tokens = teacher_logits.permute(1, 0, 2)[:-1].max(2)
+                                        pred_sentence = self.processor.batch_decode(iprl_tokens.permute(1, 0), skip_special_tokens=True)[0]
+                                        true_sentence = self.processor.batch_decode(target_tokens.permute(1, 0), skip_special_tokens=True)[0]
+                                        logger.info(f"Pred -1: {pred_sentence}")
+                                        logger.info(f"True -1: {true_sentence}")
+                                else:
+                                    raise Exception(f"xgenerator_tokenizer_type: {self.xgenerator_tokenizer_type}")
+                            else:
+                                raise NotImplementedError()
                         elif self.xgenerator_type == "video_llama2":
                             if "generated_instruction" in obs_batch.keys():
                                 if self.xgenerator_tokenizer_type == "r2r":

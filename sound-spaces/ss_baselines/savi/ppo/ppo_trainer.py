@@ -119,7 +119,7 @@ class PPOTrainer(BaseRLTrainer):
             belief_cfg = ppo_cfg.BELIEF_PREDICTOR
             iprl_cfg = ppo_cfg.INSTRUCTION_PREDICTOR
             if not self.use_iprl:
-                if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf":
+                if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf" or self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "qwen25vl":
                     visual_encoder_output_size=512-4
                 elif self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "video_llama2":
                     visual_encoder_output_size=1024
@@ -148,6 +148,9 @@ class PPOTrainer(BaseRLTrainer):
                 if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf":
                     visual_encoder_output_size=512-4
                     tokenizer_type="r2r"
+                elif self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "qwen25vl":
+                    visual_encoder_output_size=512-4
+                    tokenizer_type = self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.TOKENIZER_TYPE
                 elif self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "video_llama2":
                     visual_encoder_output_size = 1024
                     tokenizer_type = self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.TOKENIZER_TYPE
@@ -274,7 +277,7 @@ class PPOTrainer(BaseRLTrainer):
         Returns:
             dict containing checkpoint info
         """
-        return torch.load(checkpoint_path, *args, **kwargs)
+        return torch.load(checkpoint_path, weights_only=False, *args, **kwargs)
 
     def try_to_resume_checkpoint(self):
         checkpoints = glob.glob(f"{self.config.CHECKPOINT_FOLDER}/*.pth")

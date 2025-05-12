@@ -29,10 +29,11 @@ from ss_baselines.savi.iprl_pretraining.offpolicy.iprl_pretraining_lmdb_dataset 
 from habitat_baselines.config.default import get_config as habitat_get_config
 from ss_baselines.savi.config.default import get_config as ss_get_config
 from ss_baselines.savi.iprl_pretraining.common.videollama2_kd_loss import VideoLLaMA2KDLoss, R2RTokenizerVideoLLaMA2KDLoss
+from ss_baselines.savi.iprl_pretraining.common.qwen25vl_kd_loss import Qwen25VLKDLoss
 
 sys.path.append("/home/4/ud02274/navigation/myss")
 from xgenerator.common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
-from xgenerator.common.lang import tokens2sentences, sentence2token, R2RLang, VIDEO_LLAMA2_TOKENIZER
+from xgenerator.common.lang import tokens2sentences, sentence2token, R2RLang, VIDEO_LLAMA2_TOKENIZER, QWEN_25_VL_PROCESSOR
 
 
 def setup_instruction_predictor(
@@ -221,7 +222,7 @@ class OffPolicyEPRLPreTrainer():
         self.train_fm_lmdb_path = self.config.FOUNDATION_MODEL.train_fm_lmdb_path
         self.val_fm_lmdb_path = self.config.FOUNDATION_MODEL.val_fm_lmdb_path
         self.tokenizer_type = self.config.TOKENIZER_TYPE
-        if self.foundation_model_type == None:
+        if self.foundation_model_type == None or self.foundation_model_type == "qwen25vl":
             self.visual_encoder_output_size = 512-4
         elif self.foundation_model_type == "video_llama2":
             self.visual_encoder_output_size = self.config.FOUNDATION_MODEL.visual_encoder_output_size
@@ -265,6 +266,10 @@ class OffPolicyEPRLPreTrainer():
                 visual_feature_coef=self.config.FOUNDATION_MODEL.visual_feature_coef,
                 logits_coef=self.config.FOUNDATION_MODEL.logits_coef,
             )
+        elif self.foundation_model_type == "qwen25vl" and self.tokenizer_type == "qwen25vl":
+            self.loss_fn = Qwen25VLKDLoss()
+        elif self.foundation_model_type == "qwen25vl" and self.tokenizer_type == "r2r":
+            raise NotImplementedError()
         
         # prepare datasets
         self.use_lmdb_dataset = use_lmdb_dataset
@@ -330,7 +335,7 @@ class OffPolicyEPRLPreTrainer():
             rank=self.gpu_id,
         )
         my_collate_fn = CollateFn(
-            use_foundation_model=self.config.FOUNDATION_MODEL.model_type == "video_llama2",
+            foundation_model_type=self.foundation_model_type,
             max_instr_len=self.config.FOUNDATION_MODEL.max_instr_len,
             environment_type=self.environment_type,
         )
@@ -377,6 +382,22 @@ class OffPolicyEPRLPreTrainer():
         else:
             if self.foundation_model_type is None:
                 inputs["target"] = targets # (batch, instr_len)
+            elif self.foundation_model_type == "qwen25vl":
+                if self.tokenizer_type == "r2r":
+                    raise NotImplementedError()
+                elif self.tokenizer_type == "qwen25vl":
+                    instructions = torch.argmax(targets["logits"], dim=2).permute(1,0) # (batch, instr_len)
+                    bos_idx = 1 # 実際はQwen2.5-VLのvocabの中にbosは存在しない
+                    batch_size = np.shape(instructions)[0]
+                    instructions = torch.cat(
+                        [torch.full((batch_size, 1), bos_idx).cuda(), instructions],
+                        dim=1,
+                    )[:, :-1] # (batch, instr_len)
+                else:
+                    raise Exception()
+                
+                inputs["target"] = instructions
+                
             elif self.foundation_model_type == "video_llama2":
                 # teahcer forcingなので、instructionsが必要
                 if self.tokenizer_type == "r2r":
@@ -428,6 +449,10 @@ class OffPolicyEPRLPreTrainer():
                 _, iprl_tokens = logits.max(2)
                 pred_sentence = tokens2sentences(iprl_tokens, lang)[0]
                 true_sentence = tokens2sentences(target_tokens, lang)[0]
+            elif self.tokenizer_type == "qwen25vl":
+                _, iprl_tokens = logits.max(2) # iprl_tokens: (instr_len, batch)
+                pred_sentence = QWEN_25_VL_PROCESSOR.batch_decode(iprl_tokens.permute(1, 0), skip_special_tokens=True)[0]
+                true_sentence = QWEN_25_VL_PROCESSOR.batch_decode(target_tokens.permute(1, 0), skip_special_tokens=True)[0]
             elif self.tokenizer_type == "video_llama2":
                 _, iprl_tokens = logits.max(2) # iprl_tokens: (instr_len, batch)
                 pred_sentence = VIDEO_LLAMA2_TOKENIZER.batch_decode(iprl_tokens.permute(1, 0), skip_special_tokens=True)[0]
@@ -442,6 +467,16 @@ class OffPolicyEPRLPreTrainer():
             targets = targets[:, 1:].permute(1, 0) # (instr_len-1, batch) BOSを除去
             loss = self.loss_fn(logits.reshape(-1, logits.shape[-1]), targets.reshape(-1))
             info = None
+        
+        elif self.foundation_model_type == "qwen25vl" and self.tokenizer_type == "qwen25vl":
+            loss = self.loss_fn(
+                teacher_logits=targets["logits"][:-1],
+                student_logits=logits,
+                teacher_logits_mask=targets["logits_mask"][:, :-1],
+            )
+            info = None
+        elif self.foundation_model_type == "qwen25vl" and self.tokenizer_type == "r2r":
+            raise NotImplementedError()
         elif self.foundation_model_type == "video_llama2" and self.tokenizer_type == "video_llama2":
             loss, info = self.loss_fn(
                 teacher_logits=targets["logits"][:-1],

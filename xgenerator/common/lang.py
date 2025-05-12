@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import torch
 from videollama2.model.builder import load_pretrained_model
 from videollama2.mm_utils import get_model_name_from_path
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor, AutoTokenizer
 
 sys.path.append("/home/4/ud02274/navigation/myss/xgenerator")
 
@@ -147,6 +148,7 @@ rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
 model_path = "DAMO-NLP-SG/VideoLLaMA2-7B-Base"
 world_size = torch.cuda.device_count()
 gpu_id = rank % world_size
+print(f"GPU ID in lang.py: {gpu_id}")
 VIDEO_LLAMA2_TOKENIZER, VIDEO_LLAMA2_MODEL, _, _ = load_pretrained_model(
     model_path,
     None,
@@ -172,4 +174,35 @@ class VideoLLaMA2Lang:
         self.index2word = {v: k for k, v in self.word2index.items()}
         self.vocab_size = 32000
         self.glove_vec = VIDEO_LLAMA2_EMBS
+        self.word_embed_size = self.glove_vec.shape[1]
+
+
+model_path = "Qwen/Qwen2.5-VL-7B-Instruct"
+# rank = int(os.environ["LOCAL_RANK"])
+rank = int(os.getenv("OMPI_COMM_WORLD_RANK", "0"))
+world_size = torch.cuda.device_count()
+n_proc = int(os.environ["NP"])
+gpu_id = rank % world_size
+print(f"GPU ID in lang.py: {gpu_id}")
+QWEN_25_VL_MODEL = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    model_path,
+    torch_dtype=torch.bfloat16,
+    # attn_implementation="flash_attention_2", # TODO installにめちゃ時間かかる...
+    device_map=torch.device('cuda', gpu_id),
+)
+QWEN_25_VL_PROCESSOR = AutoProcessor.from_pretrained(model_path)
+QWEN_25_VL_TOKENIZER = AutoTokenizer.from_pretrained(model_path)
+QWEN_25_VL_VOCAB = QWEN_25_VL_TOKENIZER.get_vocab()
+QWEN_25_VL_EMBS = QWEN_25_VL_MODEL.get_input_embeddings().float().weight.cpu().detach().numpy().copy()
+del QWEN_25_VL_MODEL
+gc.collect()
+torch.cuda.empty_cache()
+class Qwen25VLLang:
+    def __init__(self, name: str = "qwen25vl"):
+        self.name = name
+
+        self.word2index = QWEN_25_VL_VOCAB
+        self.index2word = {v: k for k, v in self.word2index.items()}
+        self.vocab_size = np.shape(QWEN_25_VL_EMBS)[0]
+        self.glove_vec = QWEN_25_VL_EMBS
         self.word_embed_size = self.glove_vec.shape[1]

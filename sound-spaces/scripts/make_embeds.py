@@ -19,6 +19,6 @@ def main(num_vec, embed_dim, file_path):
 if __name__=="__main__":
     main(
         num_vec=21,
-        embed_dim=4094,
-        file_path="/home/4/ud02274/navigation/myss/sound-spaces/data/category_embed/savi_21_categorys_4094.json.gz",
+        embed_dim=3582,
+        file_path="/home/4/ud02274/navigation/myss/sound-spaces/data/category_embed/savi_21_categorys_3582.json.gz",
     )

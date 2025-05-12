@@ -14,7 +14,7 @@ from ss_baselines.savi.models.instruction_predictor import InstructionPredictor
 from ss_baselines.savi.models.belief_predictor import BeliefPredictor
 
 sys.path.append("/home/4/ud02274/navigation/myss")
-from xgenerator.common.lang import R2RLang, VideoLLaMA2Lang
+from xgenerator.common.lang import R2RLang, VideoLLaMA2Lang, Qwen25VLLang
 from xgenerator.common.model import VisualImageEncoder
 
 
@@ -174,6 +174,8 @@ class AudioNavSMTInstructionPredictor(nn.Module):
             lang = R2RLang()
         elif tokenizer_type == "video_llama2":
             lang = VideoLLaMA2Lang()
+        elif tokenizer_type == "qwen25vl":
+            lang = Qwen25VLLang()
         else:
             raise Exception(f"tokenizer_type: {tokenizer_type}")
         self.instruction_predictor = InstructionPredictor(

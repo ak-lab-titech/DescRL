@@ -22,6 +22,7 @@ import librosa
 import librosa.display
 from gym import spaces
 from skimage.measure import block_reduce
+from PIL import Image
 
 from habitat.config import Config
 from habitat.core.dataset import Episode
@@ -426,6 +427,9 @@ class GeneratedInstruction(Sensor):
             )
             self.instruction_generator = self.instruction_generator.to(self.device)
             self.instruction_generator.eval()
+        elif self.xgenerator_type == "qwen25vl":
+            self.vocab_size = 152064
+            self.num_frames = 20
         elif self.xgenerator_type == "video_llama2":
             self.vocab_size = 32000
             _, _, self.processor, _ = load_pretrained_model(
@@ -456,7 +460,16 @@ class GeneratedInstruction(Sensor):
     def _get_observation_space(self, *args: Any, **kwargs: Any):
         if self.xgenerator_type == "cnn_tf":
             return spaces.MultiDiscrete([self.vocab_size for _ in range(self.max_instr_len)])
+        elif self.xgenerator_type == "qwen25vl":
+            return spaces.Box(
+                low=np.finfo(np.float32).min,
+                high=np.finfo(np.float32).max,
+                shape=(self.num_frames, 128, 128, 3),
+                dtype=np.float32,
+            )
         elif self.xgenerator_type == "video_llama2":
+            # It takes too long time to calculate logits here.
+            # So, logits are not caluculated here yet.
             return spaces.Box(
                 low=np.finfo(np.float32).min,
                 high=np.finfo(np.float32).max,
@@ -485,6 +498,8 @@ class GeneratedInstruction(Sensor):
             
             if self.xgenerator_type == "cnn_tf":
                 generated_instruction = self.generate_instruction_cnntf(image_seqs, action_seqs, batch_size)
+            elif self.xgenerator_type == "qwen25vl":
+                generated_instruction = self.generate_instruction_qwen25vl(image_seqs)
             elif self.xgenerator_type == "video_llama2":
                 generated_instruction = self.generate_instruction_videollama2(image_seqs)
             else:
@@ -652,11 +667,19 @@ class GeneratedInstruction(Sensor):
         past_tokens = past_tokens.view(self.max_instr_len)
         return past_tokens
 
+    def generate_instruction_qwen25vl(self, image_seq):
+        assert self.future_or_past == "past"
+        frames = image_seq[:, 0, :, :, :3]
+        frame_length = len(frames)
+        indices = np.arange(0, frame_length, frame_length / self.num_frames).astype(int)
+        frames = frames[indices]
+        return frames
+
     def generate_instruction_videollama2(self, image_seq):
-        tmp_image_seq = (image_seq.to('cpu').detach().numpy().copy().squeeze(1)[:, :, :, :3] * 256).astype(np.uint8)
+        tmp_image_seq = (image_seq.to('cpu').detach().numpy().copy().squeeze(1)[:, :, :, :3] * 255).astype(np.uint8)
 
         image_seq_len = len(tmp_image_seq)
-        indices = np.arange(0, image_seq_len,  image_seq_len / self.num_frames).astype(int)
+        indices = np.arange(0, image_seq_len, image_seq_len / self.num_frames).astype(int)
         visual_tensor = process_video(
             tmp_image_seq[indices],
             self.processor,

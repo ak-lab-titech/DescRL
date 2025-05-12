@@ -106,7 +106,7 @@ class DDPPOTrainer(PPOTrainer):
                 self.belief_predictor.freeze_encoders() # classifierをfreezeさせる。online_trainingでなければpredictorも
 
         elif ppo_cfg.policy_type == 'smt':
-            if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf":
+            if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf" or self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "qwen25vl":
                 visual_encoder_output_size=512-4
             elif self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "video_llama2":
                 visual_encoder_output_size=1024
@@ -144,6 +144,9 @@ class DDPPOTrainer(PPOTrainer):
                 if self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "cnn_tf":
                     visual_encoder_output_size=512-4
                     tokenizer_type="r2r"
+                elif self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "qwen25vl":
+                    visual_encoder_output_size=512-4
+                    tokenizer_type=self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.TOKENIZER_TYPE
                 elif self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.MODEL_TYPE == "video_llama2":
                     visual_encoder_output_size=1024
                     tokenizer_type = self.config.TASK_CONFIG.TASK.GENERATED_INSTRUCTION.TOKENIZER_TYPE

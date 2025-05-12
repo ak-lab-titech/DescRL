@@ -56,7 +56,7 @@ class IPRLPretrainingLMDBDataset(Dataset):
         self.foundation_model_type = foundation_model_type
         if foundation_model_type is None:
             self.fm_env = None
-        elif foundation_model_type == "video_llama2":
+        elif foundation_model_type == "video_llama2" or foundation_model_type == "qwen25vl":
             self.fm_env = lmdb.open(fm_lmdb_dataset_path, readonly=True, lock=False, map_size=5 * 1.1e12)
         else:
             raise Exception(f"foundation_model_type: {foundation_model_type}")
@@ -92,6 +92,11 @@ class IPRLPretrainingLMDBDataset(Dataset):
                 fm_value = txn.get(str(index).encode('latin-1'))
             fm_value = msgpack_numpy.unpackb(fm_value, object_hook=msgpack_numpy.decode)
             visual_features, logits = torch.from_numpy(fm_value[0]), torch.from_numpy(fm_value[1])
+        elif self.foundation_model_type == "qwen25vl":
+            with self.fm_env.begin() as txn:
+                fm_value = txn.get(str(index).encode('latin-1'))
+            fm_value = msgpack_numpy.unpackb(fm_value, object_hook=msgpack_numpy.decode)
+            logits = torch.from_numpy(fm_value[0])
         else:
             raise Exception(f"foundation_model_type: {self.foundation_model_type}")
         
@@ -106,8 +111,12 @@ class IPRLPretrainingLMDBDataset(Dataset):
         }
         if self.foundation_model_type is None:
             return x, instruction
-        else:
+        elif self.foundation_model_type == "qwen25vl":
+            return x, logits
+        elif self.foundation_model_type == "video_llama2":
             return x, visual_features, logits
+        else:
+            raise Exception()
 
     def get_value(self, index):
         with self.env.begin() as txn:
@@ -126,6 +135,8 @@ class IPRLPretrainingLMDBDataset(Dataset):
             x, _, logits = self[index]
             instruction = torch.argmax(logits, dim=1) # (instr_len,)
             words = tokens2sentences(instruction.view(-1, 1), VideoLLaMA2Lang("videollama2"))
+        elif self.foundation_model_type == "qwen25vl":
+            raise NotImplementedError()
         else:
             raise Exception(f"self.foundation_model_type: {self.foundation_model_type}")
         

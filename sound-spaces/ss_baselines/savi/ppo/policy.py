@@ -39,7 +39,7 @@ from ss_baselines.savi.models.auxiliary_module import (
 )
 
 sys.path.append("/home/4/ud02274/navigation/myss")
-from xgenerator.common.lang import R2RLang, VideoLLaMA2Lang, VIDEO_LLAMA2_TOKENIZER, sentence2token
+from xgenerator.common.lang import R2RLang, VideoLLaMA2Lang, VIDEO_LLAMA2_TOKENIZER, sentence2token, Qwen25VLLang
 from xgenerator.common.load_lmdb import PAD_IDX, BOS_IDX, EOS_IDX
 from xgenerator.common.model import VisualImageEncoder
 
@@ -658,6 +658,9 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         elif tokenizer_type == "video_llama2":
             lang = VideoLLaMA2Lang()
             iprl_vocab_emb_size = 4096
+        elif tokenizer_type == "qwen25vl":
+            lang = Qwen25VLLang()
+            iprl_vocab_emb_size = 3584
         else:
             raise Exception(f"tokenizer_type: {tokenizer_type}")
 
@@ -761,6 +764,7 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
         state_dict = torch.load(
             path,
             map_location=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'),
+            weights_only=False,
         )
         if "xgenerator" in path:
             cleaned_state_dict = {}
@@ -897,12 +901,20 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
             if self.feedback == "teacher":
                 if "generated_instruction" in observations.keys():
                     target = observations["generated_instruction"] # (batch, instr_len)
-                    if len(np.shape(target)) == 3:
+                    if len(np.shape(target)) == 3: # If the length of the shape is 3, it is logit, so the foundation model is used as XGen.
                         if self.xgenerator_tokenizer_type == "video_llama2":
                             target = torch.argmax(target, dim=2) # (batch, instr_len)
                             bos_idx = 1
                             batch_size = np.shape(target)[0]
                             target = torch.cat(
+                                [torch.full((batch_size, 1), bos_idx).to(x.device), target],
+                                dim=1,
+                            )[:, :-1] # (batch, instr_len)
+                        elif self.xgenerator_tokenizer_type == "qwen25vl":
+                            target = torch.argmax(target, dim=2) # (batch, instr_len)
+                            bos_idx = 1 # Actually, BOS does not exit in vocab of Qwen2.5-VL.
+                            batch_size = np.shape(target)[0]
+                            instructions = torch.cat(
                                 [torch.full((batch_size, 1), bos_idx).to(x.device), target],
                                 dim=1,
                             )[:, :-1] # (batch, instr_len)
@@ -1094,6 +1106,8 @@ class IPRLAudioNavSMTNet(AudioNavSMTNet):
                                 [torch.full((batch_size, 1), bos_idx).to(x.device), target],
                                 dim=1,
                             )[:, :-1] # (batch, instr_len)
+                        elif self.xgenerator_tokenizer_type == "qwen25vl":
+                            raise NotImplementedError()
                         elif self.xgenerator_tokenizer_type == "r2r":
                             # まず、logitsを元にvideollama2のtokenierでsentenceに変換する
                             output_ids = torch.argmax(target, dim=2).permute(1, 0) # (instr_len, batch)

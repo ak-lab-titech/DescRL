@@ -175,8 +175,8 @@ def compute_pointgoal_with_gps_compass(agent_state, episode):
 
 
 class CollateFn:
-    def __init__(self, use_foundation_model, max_instr_len, environment_type):
-        self.use_foundation_model = use_foundation_model
+    def __init__(self, foundation_model_type, max_instr_len, environment_type):
+        self.foundation_model_type = foundation_model_type
         self.max_instr_length = max_instr_len
         self.environment_type = environment_type
     
@@ -184,7 +184,7 @@ class CollateFn:
 
         batch_size = len(batch)
         max_path_length = 0
-        if self.use_foundation_model:
+        if self.foundation_model_type == "video_llama2":
             for x, _, _ in batch:
                 if max_path_length < len(x["action_seq"]):
                     max_path_length = len(x["action_seq"])
@@ -211,7 +211,7 @@ class CollateFn:
         
         seq_lengths = []
 
-        if self.use_foundation_model:
+        if self.foundation_model_type == "video_llama2":
             vocab_size = len(batch[0][2][0])
             feature_dim = len(batch[0][1][0])
             logits_mask = np.full((batch_size, self.max_instr_length), True)
@@ -238,6 +238,30 @@ class CollateFn:
                 logits_mask[i, :logits_len] = False
                 batched_logits[:logits_len, i] = logit.cpu().numpy()
                 batched_visual_features[:seq_len, i] = visual_feature.cpu().numpy()
+        elif self.foundation_model_type == "qwen25vl":
+            vocab_size = len(batch[0][1][0])
+            logits_mask = np.full((batch_size, self.max_instr_length), True)
+            batched_logits = np.zeros((self.max_instr_length, batch_size, vocab_size), np.float32)
+            for i, (x, logit) in enumerate(batch):
+                seq_len = len(x["action_seq"])
+                path_masks[i, :seq_len] = False
+                batched_image_seqs[:seq_len, i] = x["image_seq"][:, 0]
+                batched_pose_seqs[:seq_len, i] = x["pose_seq"][:, 0]
+                batched_action_seqs[:seq_len, i] = x["action_seq"]
+                if self.environment_type == "ss1-savi":
+                    batched_audio_seqs[:seq_len, i] = x["audio_seq"][:, 0]
+                    batched_category[i] = x["category"]
+                    batched_location[i] = x["location"]
+                elif self.environment_type == "habitat-objnav":
+                    batched_objectgoal[i] = x["objectgoal"]
+                else:
+                    raise Exception(f"environment_type: {self.environment_type}")
+                
+                seq_lengths.append(seq_len)
+
+                logits_len = len(logit)
+                logits_mask[i, :logits_len] = False
+                batched_logits[:logits_len, i] = logit.cpu().numpy()
         else:
             targets = []
             for i, (x, y) in enumerate(batch):
@@ -283,9 +307,14 @@ class CollateFn:
         else:
             raise Exception(f"environment_type: {self.environment_type}")
 
-        if self.use_foundation_model:
+        if self.foundation_model_type == "video_llama2":
             targets = {
                 "visual_features": torch.from_numpy(batched_visual_features).cuda(),
+                "logits": torch.from_numpy(batched_logits).cuda(),
+                "logits_mask": torch.from_numpy(logits_mask).cuda(),
+            }
+        elif self.foundation_model_type == "qwen25vl":
+            targets = {
                 "logits": torch.from_numpy(batched_logits).cuda(),
                 "logits_mask": torch.from_numpy(logits_mask).cuda(),
             }
