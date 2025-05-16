@@ -236,8 +236,8 @@ class OffPolicyEPRLPreTrainer():
                 self.val_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val_size336"
                 self.val_data_num = 500
             else:
-                self.train_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train"
-                self.train_data_num = 502103
+                self.train_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/train" # _cr02"
+                self.train_data_num = 502103 # 100398
                 self.val_lmdb_dataset_path = "./data/lmdb_dataset/iprl_pretrain/val"
                 self.val_data_num = 500
         elif self.environment_type == "habitat-objnav":
