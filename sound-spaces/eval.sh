@@ -3,7 +3,7 @@
 pwd
 cd ~/navigation/myss/sound-spaces
 
-source /gs/fs/tga-aklab/hkondo/anaconda3/etc/profile.d/conda.sh
+source ~/.bashrc
 conda activate av-nav
 
 ENV="ss1-savi" # ss1-avnav, ss2-avnav, ss1-savi, ss2-savi

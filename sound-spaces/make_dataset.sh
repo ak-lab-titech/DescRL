@@ -21,7 +21,7 @@ DATASET_NAME="val_unseen"
 pwd
 cd ~/navigation/myss/sound-spaces
 
-source /gs/fs/tga-aklab/hkondo/anaconda3/etc/profile.d/conda.sh
+source ~/.bashrc
 conda activate av-nav
 
 echo CMD=$CMD
