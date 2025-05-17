@@ -197,6 +197,13 @@ QWEN_25_VL_EMBS = QWEN_25_VL_MODEL.get_input_embeddings().float().weight.cpu().d
 del QWEN_25_VL_MODEL
 gc.collect()
 torch.cuda.empty_cache()
+
+# QWEN_25_VL_MODEL = None
+# QWEN_25_VL_PROCESSOR = None
+# QWEN_25_VL_TOKENIZER = None
+# QWEN_25_VL_VOCAB = None
+# QWEN_25_VL_EMBS = None
+
 class Qwen25VLLang:
     def __init__(self, name: str = "qwen25vl"):
         self.name = name
