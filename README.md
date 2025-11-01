@@ -4,10 +4,11 @@
 
 
 ## Setup
-1. setup python env
+1. setup python env & clone this repo
    ```
    conda create -n descrl python=3.9 cmake=3.14.0 -y
    conda activate descrl
+   git clone https://github.com/ak-lab-titech/DescRL
    ```
 3. setup [habitat-lab](https://github.com/facebookresearch/habitat-lab)
    ```
